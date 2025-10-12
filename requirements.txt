@@ -1,0 +1,46 @@
+# Core Django
+Django>=5.2.0
+djangorestframework>=3.16.0
+django-cors-headers>=4.9.0
+
+# Database
+psycopg2-binary>=2.9.0  # PostgreSQL adapter
+
+# Environment and Configuration
+python-decouple>=3.8
+
+# Task Queue and Cache
+celery>=5.5.0
+redis>=6.4.0
+
+# HTTP Requests
+requests>=2.32.0
+
+# Date and Time utilities
+python-dateutil>=2.9.0
+
+# Authentication and Security
+PyJWT>=2.8.0
+cryptography>=41.0.0
+
+# File Processing
+PyPDF2>=3.0.0
+python-docx>=1.1.0
+
+# Development and Testing (optional)
+pytest>=7.4.0
+pytest-django>=4.8.0
+black>=23.0.0
+flake8>=6.0.0
+
+# Monitoring and Logging
+sentry-sdk>=1.32.0
+
+# API Documentation
+drf-spectacular>=0.27.0
+
+# Additional utilities that may be needed
+lxml>=4.9.0  # XML processing for OAI-PMH
+beautifulsoup4>=4.12.0  # HTML/XML parsing
+openpyxl>=3.1.0  # Excel file processing
+Pillow>=10.0.0  # Image processing
