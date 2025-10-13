@@ -21,7 +21,9 @@ python-dateutil>=2.9.0
 
 # Authentication and Security
 PyJWT>=2.8.0
+djangorestframework-simplejwt>=5.3.0
 cryptography>=46.0.0
+django-ratelimit>=4.1.0
 
 # File Processing
 PyPDF2>=3.0.0
