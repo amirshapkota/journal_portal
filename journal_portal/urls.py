@@ -19,14 +19,15 @@ urlpatterns = [
     path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
     
     # API endpoints
-    path('api/v1/', include('users.urls')),
-    path('api/v1/journals/', include('journals.urls')),
-    path('api/v1/submissions/', include('submissions.urls')),
-    path('api/v1/reviews/', include('reviews.urls')),
-    path('api/v1/precheck/', include('precheck.urls')),
-    path('api/v1/integrations/', include('integrations.urls')),
-    path('api/v1/ml/', include('ml.urls')),
-    path('api/v1/analytics/', include('analytics.urls')),
+    path('api/v1/', include('apps.users.urls')),
+    path('api/v1/journals/', include('apps.journals.urls')),
+    path('api/v1/submissions/', include('apps.submissions.urls')),
+    path('api/v1/reviews/', include('apps.reviews.urls')),
+    path('api/v1/precheck/', include('apps.precheck.urls')),
+    path('api/v1/integrations/', include('apps.integrations.urls')),
+    path('api/v1/ml/', include('apps.ml.urls')),
+    path('api/v1/analytics/', include('apps.analytics.urls')),
+    path('api/v1/', include('apps.common.urls')),
     
     # DRF Browsable API (in development)
     path('api-auth/', include('rest_framework.urls')),

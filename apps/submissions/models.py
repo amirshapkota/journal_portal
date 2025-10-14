@@ -53,7 +53,7 @@ class Submission(models.Model):
     
     # Submission status and workflow
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='DRAFT')
-    submission_number = models.CharField(max_length=50, blank=True, unique=True)
+    submission_number = models.CharField(max_length=50, blank=True, null=True, unique=True)
     
     # Metadata and content
     metadata_json = models.JSONField(

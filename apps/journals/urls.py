@@ -4,16 +4,13 @@ Handles journal models and settings.
 """
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-
-# from .views import JournalViewSet, JournalSettingsViewSet
+from .views import JournalViewSet
 
 router = DefaultRouter()
-# router.register(r'journals', JournalViewSet)
-# router.register(r'settings', JournalSettingsViewSet)
+router.register(r'', JournalViewSet, basename='journal')
+
+app_name = 'journals'
 
 urlpatterns = [
     path('', include(router.urls)),
-    # Add custom journal endpoints here
-    # path('<int:journal_id>/settings/', JournalSettingsView.as_view(), name='journal_settings'),
-    # path('<int:journal_id>/staff/', JournalStaffView.as_view(), name='journal_staff'),
 ]

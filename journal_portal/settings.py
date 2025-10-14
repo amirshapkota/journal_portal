@@ -50,15 +50,15 @@ THIRD_PARTY_APPS = [
 ]
 
 LOCAL_APPS = [
-    'users',
-    'journals',
-    'submissions',
-    'reviews',
-    'precheck',
-    'integrations',
-    'ml',
-    'analytics',
-    'common',
+    'apps.users',
+    'apps.journals',
+    'apps.submissions',
+    'apps.reviews',
+    'apps.precheck',
+    'apps.integrations',
+    'apps.ml',
+    'apps.analytics',
+    'apps.common',
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -334,6 +334,24 @@ ITHENTICATE_API_KEY = config('ITHENTICATE_API_KEY', default='')
 FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10MB
 DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10MB
 
+# AWS S3 Settings (for production)
+AWS_ACCESS_KEY_ID = config('AWS_ACCESS_KEY_ID', default='')
+AWS_SECRET_ACCESS_KEY = config('AWS_SECRET_ACCESS_KEY', default='')
+AWS_STORAGE_BUCKET_NAME = config('AWS_STORAGE_BUCKET_NAME', default='')
+AWS_S3_REGION_NAME = config('AWS_S3_REGION_NAME', default='us-east-1')
+AWS_S3_FILE_OVERWRITE = False
+AWS_DEFAULT_ACL = 'private'
+AWS_S3_CUSTOM_DOMAIN = config('AWS_S3_CUSTOM_DOMAIN', default='')
+
+# Use S3 storage in production if configured
+USE_S3 = bool(AWS_STORAGE_BUCKET_NAME)
+if USE_S3:
+    DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
+    STATICFILES_STORAGE = 'storages.backends.s3boto3.S3StaticStorage'
+    AWS_S3_OBJECT_PARAMETERS = {
+        'CacheControl': 'max-age=86400',
+    }
+
 # Journal Portal Specific Settings
 JOURNAL_PORTAL = {
     'SUBMISSION_FILE_TYPES': ['.pdf', '.doc', '.docx', '.tex'],
@@ -341,4 +359,22 @@ JOURNAL_PORTAL = {
     'PLAGIARISM_THRESHOLD': 15,  # percentage
     'REVIEW_DEADLINE_DAYS': 30,
     'REVISION_DEADLINE_DAYS': 60,
+    
+    # File Management Settings
+    'FILE_STORAGE': {
+        'MAX_FILE_SIZE': 100 * 1024 * 1024,  # 100MB
+        'ALLOWED_EXTENSIONS': ['.pdf', '.doc', '.docx', '.txt', '.rtf', '.zip', '.jpg', '.png', '.csv', '.xlsx'],
+        'VIRUS_SCANNING': config('ENABLE_VIRUS_SCANNING', default=False, cast=bool),
+        'FILE_RETENTION_DAYS': config('FILE_RETENTION_DAYS', default=365, cast=int),
+        'ENABLE_VERSIONING': True,
+        'MAX_VERSIONS_PER_DOCUMENT': 50,
+    },
+    
+    # Security Settings
+    'SECURITY': {
+        'ENABLE_FILE_ENCRYPTION': config('ENABLE_FILE_ENCRYPTION', default=False, cast=bool),
+        'DOWNLOAD_URL_EXPIRY_HOURS': 24,
+        'PREVIEW_URL_EXPIRY_HOURS': 1,
+        'ALLOWED_DOWNLOAD_IPS': config('ALLOWED_DOWNLOAD_IPS', default='', cast=str).split(',') if config('ALLOWED_DOWNLOAD_IPS', default='') else [],
+    }
 }
