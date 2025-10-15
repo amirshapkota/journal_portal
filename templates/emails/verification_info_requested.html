@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .header {
+            background-color: #FF9800;
+            color: white;
+            padding: 20px;
+            text-align: center;
+            border-radius: 5px 5px 0 0;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+        }
+        .content {
+            background-color: #f9f9f9;
+            padding: 30px;
+            border-radius: 0 0 5px 5px;
+        }
+        .info-box {
+            background-color: #fff;
+            border-left: 4px solid #FF9800;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .request-box {
+            background-color: #fff3e0;
+            border: 2px solid #FF9800;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+        .request-box h3 {
+            color: #FF9800;
+            margin-top: 0;
+        }
+        .important {
+            background-color: #fff;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+        }
+        .footer {
+            text-align: center;
+            color: #666;
+            font-size: 12px;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #ddd;
+        }
+        .button {
+            display: inline-block;
+            background-color: #FF9800;
+            color: white;
+            padding: 12px 30px;
+            text-decoration: none;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .button:hover {
+            background-color: #F57C00;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📋 Additional Information Required</h1>
+    </div>
+    <div class="content">
+        <p>Hello {{ user_name }},</p>
+        
+        <p>Thank you for your verification request for the <strong>{{ requested_role }}</strong> role.</p>
+        
+        <p>Our team has reviewed your application and needs some additional information to complete the verification process.</p>
+        
+        <div class="info-box">
+            <h3>Request Details</h3>
+            <p><strong>Request ID:</strong> {{ request_id }}</p>
+            <p><strong>Role Requested:</strong> {{ requested_role }}</p>
+            <p><strong>Status:</strong> Pending Additional Information</p>
+        </div>
+        
+        <div class="request-box">
+            <h3>What We Need From You</h3>
+            <p>{{ additional_info_requested }}</p>
+        </div>
+        
+        <div class="important">
+            <h3>⏱️ Please Respond Promptly</h3>
+            <p>To avoid delays in your verification process, please provide the requested information at your earliest convenience.</p>
+            <p>You can submit your response directly through your dashboard by clicking the button below.</p>
+        </div>
+        
+        <div style="text-align: center;">
+            <a href="{{ site_url }}/verification/respond/{{ request_id }}" class="button">Submit Response</a>
+        </div>
+        
+        <p><strong>Need Help?</strong> If you have questions about what's needed, please don't hesitate to contact our support team.</p>
+        
+        <p>Thank you for your cooperation!</p>
+        
+        <p>Best regards,<br>
+        The Journal Portal Team</p>
+    </div>
+    <div class="footer">
+        <p>This is an automated message from Journal Portal.</p>
+        <p>Your verification is on hold until we receive the requested information.</p>
+    </div>
+</body>
+</html>

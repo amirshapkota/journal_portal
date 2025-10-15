@@ -9,12 +9,15 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenRefreshView
 from . import views
+from . import verification_views
 
 # Create router for ViewSets
 router = DefaultRouter()
 router.register(r'users', views.UserViewSet)
 router.register(r'profiles', views.ProfileViewSet)
 router.register(r'roles', views.RoleViewSet)
+router.register(r'verification-requests', verification_views.VerificationRequestViewSet, basename='verification-request')
+router.register(r'admin/verifications', verification_views.AdminVerificationViewSet, basename='admin-verification')
 
 app_name = 'users'
 
@@ -38,6 +41,9 @@ urlpatterns = [
     
     # Health check
     path('health/', views.health_check, name='health_check'),
+    
+    # Verification status
+    path('verification/status/', verification_views.VerificationStatusView.as_view(), name='verification_status'),
     
     # Include router URLs
     path('', include(router.urls)),

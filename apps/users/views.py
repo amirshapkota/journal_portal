@@ -91,30 +91,38 @@ class UserRegistrationView(generics.CreateAPIView):
         return response
     
     def send_verification_email(self, user):
-        """Send email verification link."""
+        """Send email verification link using new EmailTemplate system."""
+        from apps.notifications.tasks import send_email_verification_email
+        
         token = default_token_generator.make_token(user)
         uid = urlsafe_base64_encode(force_bytes(user.pk))
         
         verification_url = f"{settings.FRONTEND_URL}/verify-email/{uid}/{token}/"
         
-        context = {
-            'user': user,
-            'verification_url': verification_url,
-            'site_name': 'Journal Publication Portal'
-        }
-        
-        subject = 'Verify your email address'
-        message = render_to_string('emails/email_verification.txt', context)
-        html_message = render_to_string('emails/email_verification.html', context)
-        
-        send_mail(
-            subject,
-            message,
-            settings.DEFAULT_FROM_EMAIL,
-            [user.email],
-            html_message=html_message,
-            fail_silently=False,
-        )
+        # Use new email system with Celery task and tracking
+        # Call synchronously since Redis/Celery might not be running
+        try:
+            send_email_verification_email(str(user.id), verification_url)
+        except Exception as exc:
+            logger.error(f"Error queueing verification email: {exc}")
+            # Fallback to direct send if Celery fails
+            from django.core.mail import send_mail
+            context = {
+                'user': user,
+                'verification_url': verification_url,
+                'site_name': 'Journal Publication Portal'
+            }
+            subject = 'Verify your email address'
+            message = render_to_string('emails/email_verification.txt', context)
+            html_message = render_to_string('emails/email_verification.html', context)
+            send_mail(
+                subject,
+                message,
+                settings.DEFAULT_FROM_EMAIL,
+                [user.email],
+                html_message=html_message,
+                fail_silently=False,
+            )
 
 
 @extend_schema_view(
@@ -256,30 +264,38 @@ class PasswordResetRequestView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
     def send_reset_email(self, user):
-        """Send password reset email."""
+        """Send password reset email using new EmailTemplate system."""
+        from apps.notifications.tasks import send_password_reset_email
+        
         token = default_token_generator.make_token(user)
         uid = urlsafe_base64_encode(force_bytes(user.pk))
         
         reset_url = f"{settings.FRONTEND_URL}/reset-password/{uid}/{token}/"
         
-        context = {
-            'user': user,
-            'reset_url': reset_url,
-            'site_name': 'Journal Publication Portal'
-        }
-        
-        subject = 'Password Reset Request'
-        message = render_to_string('emails/password_reset.txt', context)
-        html_message = render_to_string('emails/password_reset.html', context)
-        
-        send_mail(
-            subject,
-            message,
-            settings.DEFAULT_FROM_EMAIL,
-            [user.email],
-            html_message=html_message,
-            fail_silently=False,
-        )
+        # Use new email system with Celery task and tracking
+        # Call synchronously since Redis/Celery might not be running
+        try:
+            send_password_reset_email(str(user.id), reset_url)
+        except Exception as exc:
+            logger.error(f"Error queueing password reset email: {exc}")
+            # Fallback to direct send if Celery fails
+            from django.core.mail import send_mail
+            context = {
+                'user': user,
+                'reset_url': reset_url,
+                'site_name': 'Journal Publication Portal'
+            }
+            subject = 'Password Reset Request'
+            message = render_to_string('emails/password_reset.txt', context)
+            html_message = render_to_string('emails/password_reset.html', context)
+            send_mail(
+                subject,
+                message,
+                settings.DEFAULT_FROM_EMAIL,
+                [user.email],
+                html_message=html_message,
+                fail_silently=False,
+            )
 
 
 @extend_schema_view(

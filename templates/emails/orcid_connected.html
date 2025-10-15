@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .header {
+            background-color: #4CAF50;
+            color: white;
+            padding: 20px;
+            text-align: center;
+            border-radius: 5px 5px 0 0;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+        }
+        .content {
+            background-color: #f9f9f9;
+            padding: 30px;
+            border-radius: 0 0 5px 5px;
+        }
+        .orcid-badge {
+            background-color: #A6CE39;
+            color: white;
+            padding: 15px 30px;
+            border-radius: 30px;
+            display: inline-block;
+            font-weight: bold;
+            font-size: 18px;
+            margin: 20px 0;
+        }
+        .info-box {
+            background-color: #fff;
+            border-left: 4px solid #A6CE39;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .benefits {
+            background-color: #fff;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+        .benefits ul {
+            list-style-type: none;
+            padding-left: 0;
+        }
+        .benefits li {
+            padding: 8px 0;
+            padding-left: 25px;
+            position: relative;
+        }
+        .benefits li:before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #A6CE39;
+            font-weight: bold;
+        }
+        .orcid-logo {
+            text-align: center;
+            margin: 20px 0;
+        }
+        .footer {
+            text-align: center;
+            color: #666;
+            font-size: 12px;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #ddd;
+        }
+        .button {
+            display: inline-block;
+            background-color: #A6CE39;
+            color: white;
+            padding: 12px 30px;
+            text-decoration: none;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .button:hover {
+            background-color: #94b831;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🎉 ORCID Successfully Connected!</h1>
+    </div>
+    <div class="content">
+        <p>Hello {{ user_name }},</p>
+        
+        <p>Great news! Your ORCID iD has been successfully connected to your Journal Portal account.</p>
+        
+        <div style="text-align: center;">
+            <span class="orcid-badge">iD Connected</span>
+        </div>
+        
+        <div class="info-box">
+            <h3>Your ORCID Information</h3>
+            <p><strong>ORCID iD:</strong> <a href="{{ orcid_url }}" style="color: #A6CE39; text-decoration: none;">{{ orcid_id }}</a></p>
+            <p><strong>Status:</strong> Connected and Active</p>
+        </div>
+        
+        <div class="benefits">
+            <h3>Benefits of ORCID Integration</h3>
+            <ul>
+                <li>Enhanced credibility and trust in your profile</li>
+                <li>Easier verification process for role requests</li>
+                <li>Automatic profile synchronization with ORCID</li>
+                <li>Distinguished researcher recognition</li>
+                <li>Simplified manuscript submission process</li>
+                <li>Better visibility in academic community</li>
+            </ul>
+        </div>
+        
+        <p><strong>What's Next?</strong></p>
+        <p>Your ORCID connection will be used to:</p>
+        <ul>
+            <li>Verify your identity for role requests</li>
+            <li>Keep your profile information up-to-date</li>
+            <li>Link your publications and contributions</li>
+        </ul>
+        
+        <p>You can view your ORCID profile at any time by visiting <a href="{{ orcid_url }}" style="color: #A6CE39;">{{ orcid_url }}</a></p>
+        
+        <div style="text-align: center;">
+            <a href="{{ site_url }}/profile" class="button">View Your Profile</a>
+        </div>
+        
+        <p><strong>Need to Disconnect?</strong> You can manage your ORCID connection settings from your profile page at any time.</p>
+        
+        <p>Thank you for strengthening your Journal Portal profile!</p>
+        
+        <p>Best regards,<br>
+        The Journal Portal Team</p>
+    </div>
+    <div class="footer">
+        <p>This is an automated message from Journal Portal.</p>
+        <p>Your ORCID data is stored securely and used only for verification purposes.</p>
+        <p>Learn more about ORCID at <a href="https://orcid.org" style="color: #666;">orcid.org</a></p>
+    </div>
+</body>
+</html>

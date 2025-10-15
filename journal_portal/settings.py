@@ -56,6 +56,7 @@ LOCAL_APPS = [
     'apps.reviews',
     'apps.precheck',
     'apps.integrations',
+    'apps.notifications',
     'apps.ml',
     'apps.analytics',
     'apps.common',

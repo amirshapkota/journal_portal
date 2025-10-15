@@ -233,3 +233,202 @@ class Profile(models.Model):
     def is_verified(self):
         """Check if the profile is verified as genuine."""
         return self.verification_status == 'GENUINE'
+
+
+class VerificationRequest(models.Model):
+    """
+    Identity verification request model for authors and reviewers.
+    Tracks verification requests with ORCID integration and admin review.
+    """
+    STATUS_CHOICES = [
+        ('PENDING', 'Pending Review'),
+        ('APPROVED', 'Approved'),
+        ('REJECTED', 'Rejected'),
+        ('INFO_REQUESTED', 'Additional Information Requested'),
+        ('WITHDRAWN', 'Withdrawn by User'),
+    ]
+    
+    ROLE_CHOICES = [
+        ('AUTHOR', 'Author'),
+        ('REVIEWER', 'Reviewer'),
+        ('BOTH', 'Author and Reviewer'),
+    ]
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
+    # User reference
+    profile = models.ForeignKey(
+        Profile,
+        on_delete=models.CASCADE,
+        related_name='verification_requests',
+        help_text="User profile requesting verification"
+    )
+    
+    # Request details
+    requested_role = models.CharField(
+        max_length=20,
+        choices=ROLE_CHOICES,
+        help_text="Role being requested for verification"
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='PENDING',
+        help_text="Current status of verification request"
+    )
+    
+    # User-provided information
+    affiliation = models.CharField(
+        max_length=255,
+        help_text="Current institutional affiliation"
+    )
+    affiliation_email = models.EmailField(
+        validators=[EmailValidator()],
+        help_text="Institutional email address"
+    )
+    research_interests = models.TextField(
+        blank=True,
+        help_text="Research interests and expertise areas"
+    )
+    academic_position = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Current academic position (e.g., Professor, PhD Student)"
+    )
+    
+    # Supporting documents (URLs or file references)
+    supporting_documents = models.JSONField(
+        default=list,
+        help_text="List of supporting document references"
+    )
+    
+    # ORCID integration
+    orcid_verified = models.BooleanField(
+        default=False,
+        help_text="Whether ORCID is connected and verified"
+    )
+    orcid_id = models.CharField(
+        max_length=19,
+        blank=True,
+        help_text="ORCID iD at time of request"
+    )
+    
+    # Automated scoring (rule-based heuristics)
+    auto_score = models.IntegerField(
+        default=0,
+        help_text="Automated verification score (0-100)"
+    )
+    score_details = models.JSONField(
+        default=dict,
+        help_text="Breakdown of scoring factors"
+    )
+    
+    # Admin review
+    reviewed_by = models.ForeignKey(
+        CustomUser,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='reviewed_verifications',
+        help_text="Admin who reviewed this request"
+    )
+    reviewed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the request was reviewed"
+    )
+    admin_notes = models.TextField(
+        blank=True,
+        help_text="Internal notes from admin review"
+    )
+    rejection_reason = models.TextField(
+        blank=True,
+        help_text="Reason for rejection (shown to user)"
+    )
+    additional_info_requested = models.TextField(
+        blank=True,
+        help_text="Additional information requested from user"
+    )
+    
+    # User response to info request
+    user_response = models.TextField(
+        blank=True,
+        help_text="User's response to additional info request"
+    )
+    user_response_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When user responded to info request"
+    )
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['profile', 'status']),
+            models.Index(fields=['status', 'created_at']),
+            models.Index(fields=['reviewed_by', 'status']),
+            models.Index(fields=['auto_score']),
+        ]
+    
+    def __str__(self):
+        return f"Verification request for {self.profile.user.email} - {self.get_requested_role_display()} ({self.status})"
+    
+    def calculate_auto_score(self):
+        """
+        Calculate automated verification score based on heuristics.
+        No ML - just rule-based scoring.
+        """
+        score = 0
+        details = {}
+        
+        # ORCID verification (30 points)
+        if self.orcid_verified and self.orcid_id:
+            score += 30
+            details['orcid'] = 30
+        else:
+            details['orcid'] = 0
+        
+        # Institutional email (25 points)
+        email_domain = self.affiliation_email.split('@')[-1].lower()
+        institutional_domains = ['edu', 'ac.uk', 'ac.in', 'edu.au', 'ac.jp', 'edu.cn']
+        if any(domain in email_domain for domain in institutional_domains):
+            score += 25
+            details['institutional_email'] = 25
+        else:
+            details['institutional_email'] = 0
+        
+        # Email domain matches affiliation (15 points)
+        if self.affiliation and email_domain in self.affiliation.lower().replace(' ', ''):
+            score += 15
+            details['email_affiliation_match'] = 15
+        else:
+            details['email_affiliation_match'] = 0
+        
+        # Research interests provided (10 points)
+        if self.research_interests and len(self.research_interests) > 50:
+            score += 10
+            details['research_interests'] = 10
+        else:
+            details['research_interests'] = 0
+        
+        # Academic position provided (10 points)
+        if self.academic_position:
+            score += 10
+            details['academic_position'] = 10
+        else:
+            details['academic_position'] = 0
+        
+        # Supporting documents (10 points)
+        if self.supporting_documents and len(self.supporting_documents) > 0:
+            score += 10
+            details['supporting_documents'] = 10
+        else:
+            details['supporting_documents'] = 0
+        
+        self.auto_score = score
+        self.score_details = details
+        return score
