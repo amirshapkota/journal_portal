@@ -175,6 +175,48 @@ class ORCIDIntegration(models.Model):
         return f"ORCID integration for {self.profile} ({self.orcid_id})"
 
 
+class ORCIDOAuthState(models.Model):
+    """
+    Temporary storage for ORCID OAuth state tokens.
+    Allows OAuth flow to work across different sessions (API -> Browser redirect).
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
+    # State token for OAuth security
+    state_token = models.CharField(
+        max_length=100,
+        unique=True,
+        db_index=True,
+        help_text="Unique state token for OAuth flow"
+    )
+    
+    # User reference
+    user = models.ForeignKey(
+        'users.CustomUser',
+        on_delete=models.CASCADE,
+        related_name='orcid_oauth_states'
+    )
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField(
+        help_text="State token expiration time (usually 10 minutes)"
+    )
+    used = models.BooleanField(
+        default=False,
+        help_text="Whether this state token has been used"
+    )
+    
+    class Meta:
+        indexes = [
+            models.Index(fields=['state_token', 'used']),
+            models.Index(fields=['expires_at', 'used']),
+        ]
+    
+    def __str__(self):
+        return f"OAuth state for {self.user.email} - {self.state_token[:10]}..."
+
+
 class ExternalServiceIntegration(models.Model):
     """
     Generic external service integration model.

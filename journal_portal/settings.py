@@ -190,8 +190,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
 ]
-
-CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_ALL_ORIGINS = True
 
 # JWT Configuration
 from datetime import timedelta
@@ -321,7 +320,9 @@ X_FRAME_OPTIONS = 'DENY'
 # Integration Settings
 ORCID_CLIENT_ID = config('ORCID_CLIENT_ID', default='')
 ORCID_CLIENT_SECRET = config('ORCID_CLIENT_SECRET', default='')
-ORCID_API_BASE_URL = config('ORCID_API_BASE_URL', default='https://api.sandbox.orcid.org')
+ORCID_API_BASE_URL = config('ORCID_API_BASE_URL', default='https://api.orcid.org')
+ORCID_AUTH_URL = config('ORCID_AUTH_URL', default='https://orcid.org/oauth/authorize')
+ORCID_TOKEN_URL = config('ORCID_TOKEN_URL', default='https://orcid.org/oauth/token')
 
 OJS_API_BASE_URL = config('OJS_API_BASE_URL', default='')
 OJS_API_KEY = config('OJS_API_KEY', default='')

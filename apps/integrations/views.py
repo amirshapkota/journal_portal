@@ -1,3 +1,381 @@
-from django.shortcuts import render
+from urllib.parse import urlencode
+from datetime import datetime, timedelta
 
-# Create your views here.
+from django.conf import settings
+from django.utils import timezone
+from django.shortcuts import redirect
+from django.contrib.sites.shortcuts import get_current_site
+from django.views import View
+
+from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.response import Response
+from rest_framework import status
+
+import json
+import base64
+import secrets
+import requests
+
+from apps.users.models import Profile
+from .models import ORCIDIntegration, ORCIDOAuthState
+
+
+def _fernet():
+	# Derive fernet key from SECRET_KEY (for demo). In production, use KMS.
+	from cryptography.fernet import Fernet
+	key = base64.urlsafe_b64encode(settings.SECRET_KEY[:32].encode().ljust(32, b'0')[:32])
+	return Fernet(key)
+
+
+def encrypt_blob(s: str) -> bytes:
+	return _fernet().encrypt(s.encode())
+
+
+def decrypt_blob(b: bytes) -> str:
+	return _fernet().decrypt(b).decode()
+
+
+def build_orcid_authorize_url(request):
+	client_id = settings.ORCID_CLIENT_ID
+	base_auth_url = getattr(settings, 'ORCID_AUTH_URL', 'https://sandbox.orcid.org/oauth/authorize')
+	redirect_uri = request.build_absolute_uri('/api/v1/integrations/orcid/callback/')
+	# Use openid for Public API (free tier)
+	# Member API would use: /read-limited /activities/update /person/update
+	scope = 'openid'
+	params = {
+		'client_id': client_id,
+		'response_type': 'code',
+		'scope': scope,
+		'redirect_uri': redirect_uri,
+	}
+	return f"{base_auth_url}?{urlencode(params)}"
+
+
+def exchange_code_for_token(code: str, redirect_uri: str):
+	token_url = getattr(settings, 'ORCID_TOKEN_URL', f"{settings.ORCID_API_BASE_URL}/oauth/token")
+	auth = (settings.ORCID_CLIENT_ID, settings.ORCID_CLIENT_SECRET)
+	headers = {'Accept': 'application/json'}
+	data = {
+		'client_id': settings.ORCID_CLIENT_ID,
+		'client_secret': settings.ORCID_CLIENT_SECRET,
+		'grant_type': 'authorization_code',
+		'code': code,
+		'redirect_uri': redirect_uri,
+	}
+	resp = requests.post(token_url, data=data, headers=headers, auth=None, timeout=20)
+	resp.raise_for_status()
+	return resp.json()
+
+
+def fetch_orcid_record(orcid_id: str, access_token: str):
+	api = settings.ORCID_API_BASE_URL.rstrip('/')
+	url = f"{api}/v3.0/{orcid_id}/record"
+	headers = {
+		'Accept': 'application/json',
+		'Authorization': f'Bearer {access_token}',
+	}
+	r = requests.get(url, headers=headers, timeout=20)
+	r.raise_for_status()
+	return r.json()
+
+
+class ORCIDAuthorizeView(APIView):
+	permission_classes = [IsAuthenticated]
+
+	def get(self, request):
+		if not settings.ORCID_CLIENT_ID:
+			return Response({'detail': 'ORCID is not configured.'}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+		
+		# Generate state token and store in database (not session)
+		# This allows the OAuth flow to work across different sessions
+		state = secrets.token_urlsafe(32)
+		
+		# Clean up any expired or old state tokens for this user
+		ORCIDOAuthState.objects.filter(
+			user=request.user,
+			expires_at__lt=timezone.now()
+		).delete()
+		
+		# Create new state token with 10 minute expiry
+		ORCIDOAuthState.objects.create(
+			state_token=state,
+			user=request.user,
+			expires_at=timezone.now() + timedelta(minutes=10)
+		)
+		
+		authorize_url = build_orcid_authorize_url(request)
+		# Add state parameter
+		authorize_url += f"&state={state}"
+		
+		# Log for debugging
+		import logging
+		logger = logging.getLogger(__name__)
+		logger.info(f"Generated ORCID authorize URL: {authorize_url}")
+		
+		# Return URL or redirect directly
+		if request.query_params.get('redirect') == 'true':
+			return redirect(authorize_url)
+		return Response({'authorize_url': authorize_url})
+
+
+class ORCIDCallbackView(APIView):
+	permission_classes = [AllowAny]  # Changed to AllowAny since ORCID redirects here
+
+	def get(self, request):
+		# EXTENSIVE DEBUG INFO
+		import logging
+		logger = logging.getLogger(__name__)
+		
+		# Log everything about the request
+		logger.info(f"=" * 80)
+		logger.info(f"ORCID Callback Hit!")
+		logger.info(f"Request method: {request.method}")
+		logger.info(f"Request path: {request.path}")
+		logger.info(f"Request GET: {dict(request.GET)}")
+		logger.info(f"Request query_params: {dict(request.query_params)}")
+		logger.info(f"Request full path: {request.get_full_path()}")
+		logger.info(f"Request META keys: {list(request.META.keys())}")
+		logger.info(f"Query string: {request.META.get('QUERY_STRING', '')}")
+		logger.info(f"=" * 80)
+		
+		code = request.query_params.get('code')
+		error = request.query_params.get('error')
+		state = request.query_params.get('state')
+		
+		# Return detailed debug info if no params
+		if not code and not error and not state:
+			return Response({
+				'detail': 'Missing authorization code from ORCID',
+				'debug': {
+					'received_GET_params': dict(request.GET),
+					'received_query_params': dict(request.query_params),
+					'full_path': request.get_full_path(),
+					'query_string': request.META.get('QUERY_STRING', ''),
+					'request_method': request.method,
+					'content_type': request.content_type,
+				},
+				'help': 'Make sure your ORCID application redirect URI is exactly: http://127.0.0.1:8000/api/v1/integrations/orcid/callback/'
+			}, status=status.HTTP_400_BAD_REQUEST)
+		
+		if error:
+			return Response({
+				'detail': 'ORCID authorization denied', 
+				'error': error,
+				'error_description': request.query_params.get('error_description', '')
+			}, status=status.HTTP_400_BAD_REQUEST)
+		
+		if not code:
+			return Response({
+				'detail': 'Missing authorization code from ORCID',
+				'received_params': list(request.query_params.keys()),
+				'state_present': bool(state),
+				'help': 'Make sure your ORCID application redirect URI is exactly: http://127.0.0.1:8000/api/v1/integrations/orcid/callback/'
+			}, status=status.HTTP_400_BAD_REQUEST)
+		
+		if not state:
+			return Response({
+				'detail': 'Missing state parameter',
+				'help': 'State parameter is required for security'
+			}, status=status.HTTP_400_BAD_REQUEST)
+		
+		# Look up state token in database (not session)
+		try:
+			oauth_state = ORCIDOAuthState.objects.get(
+				state_token=state,
+				used=False,
+				expires_at__gt=timezone.now()
+			)
+		except ORCIDOAuthState.DoesNotExist:
+			return Response({
+				'detail': 'Invalid or expired state parameter',
+				'help': 'Please start the authorization process again'
+			}, status=status.HTTP_400_BAD_REQUEST)
+		
+		# Mark state as used
+		oauth_state.used = True
+		oauth_state.save(update_fields=['used'])
+		
+		# Get user from state token
+		user = oauth_state.user
+
+		redirect_uri = request.build_absolute_uri('/api/v1/integrations/orcid/callback/')
+		try:
+			token_data = exchange_code_for_token(code, redirect_uri)
+		except requests.HTTPError as e:
+			return Response({'detail': 'Token exchange failed', 'error': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
+
+		orcid_id = token_data.get('orcid') or token_data.get('orcid_id')
+		access_token = token_data.get('access_token')
+		refresh_token = token_data.get('refresh_token')
+		scope = token_data.get('scope', '')
+		expires_in = token_data.get('expires_in')
+
+		if not orcid_id or not access_token:
+			return Response({'detail': 'Invalid token response from ORCID'}, status=status.HTTP_502_BAD_GATEWAY)
+
+		# Create or update integration record
+		profile: Profile = user.profile
+		integ, _ = ORCIDIntegration.objects.get_or_create(profile=profile, defaults={
+			'orcid_id': orcid_id,
+			'access_token_encrypted': encrypt_blob(access_token),
+			'refresh_token_encrypted': encrypt_blob(refresh_token) if refresh_token else None,
+			'token_scope': scope,
+			'status': 'CONNECTED',
+		})
+
+		# Update existing if needed
+		integ.orcid_id = orcid_id
+		integ.access_token_encrypted = encrypt_blob(access_token)
+		integ.refresh_token_encrypted = encrypt_blob(refresh_token) if refresh_token else None
+		integ.token_scope = scope or ''
+		if expires_in:
+			integ.token_expires_at = timezone.now() + timedelta(seconds=int(expires_in))
+		integ.status = 'CONNECTED'
+
+		# Fetch profile summary (only if we have appropriate scope)
+		# openid scope only provides authentication, not profile read access
+		if '/read-limited' in scope or '/person/read' in scope:
+			try:
+				record = fetch_orcid_record(orcid_id, access_token)
+				integ.orcid_data = record
+			except requests.HTTPError as e:
+				integ.sync_errors = f"Fetch ORCID record failed: {e}"
+				logger.warning(f"Failed to fetch ORCID record: {e}")
+				# Don't set ERROR status if it's just profile fetch failing
+		else:
+			# openid scope - authentication only
+			integ.orcid_data = {
+				'orcid-identifier': {
+					'uri': f'https://orcid.org/{orcid_id}',
+					'path': orcid_id,
+					'host': 'orcid.org'
+				},
+				'note': 'Limited data available with openid scope. Apply for Member API for full profile access.'
+			}
+		
+		integ.last_sync_at = timezone.now()
+		integ.save()
+
+		# Optionally set profile.orcid_id
+		if not profile.orcid_id:
+			profile.orcid_id = orcid_id
+			profile.encrypt_orcid_token(access_token)
+			profile.save(update_fields=['orcid_id', 'orcid_token_encrypted'])
+
+		# Clean up old state tokens for this user
+		ORCIDOAuthState.objects.filter(user=user).delete()
+
+		# Return success page or JSON
+		return Response({
+			'detail': 'ORCID connected successfully!', 
+			'orcid_id': orcid_id,
+			'user_email': user.email,
+			'message': 'You can now close this window and check your profile.'
+		})
+
+
+class ORCIDStatusView(APIView):
+	permission_classes = [IsAuthenticated]
+
+	def get(self, request):
+		profile: Profile = request.user.profile
+		try:
+			integ = profile.orcid_integration
+		except ORCIDIntegration.DoesNotExist:
+			return Response({'connected': False})
+		expires_at = integ.token_expires_at.isoformat() if integ.token_expires_at else None
+		return Response({
+			'connected': integ.status == 'CONNECTED',
+			'status': integ.status,
+			'orcid_id': integ.orcid_id,
+			'token_scope': integ.token_scope,
+			'expires_at': expires_at,
+			'last_sync_at': integ.last_sync_at.isoformat() if integ.last_sync_at else None,
+		})
+
+
+class ORCIDDisconnectView(APIView):
+	permission_classes = [IsAuthenticated]
+
+	def post(self, request):
+		profile: Profile = request.user.profile
+		try:
+			integ = profile.orcid_integration
+		except ORCIDIntegration.DoesNotExist:
+			return Response({'detail': 'Not connected'}, status=status.HTTP_404_NOT_FOUND)
+		# Remove tokens and mark disconnected
+		integ.access_token_encrypted = b''
+		integ.refresh_token_encrypted = None
+		integ.status = 'DISCONNECTED'
+		integ.save(update_fields=['access_token_encrypted', 'refresh_token_encrypted', 'status'])
+		# Also clear profile fields
+		profile.orcid_id = None
+		profile.orcid_token_encrypted = None
+		profile.save(update_fields=['orcid_id', 'orcid_token_encrypted'])
+		return Response({'detail': 'ORCID disconnected'})
+
+
+class ORCIDSyncProfileView(APIView):
+	permission_classes = [IsAuthenticated]
+
+	def post(self, request):
+		profile: Profile = request.user.profile
+		try:
+			integ = profile.orcid_integration
+		except ORCIDIntegration.DoesNotExist:
+			return Response({'detail': 'Not connected'}, status=status.HTTP_404_NOT_FOUND)
+
+		# Check if we have appropriate scope for reading profile
+		scope = integ.token_scope or ''
+		if 'openid' in scope and '/read-limited' not in scope and '/person/read' not in scope:
+			return Response({
+				'detail': 'Profile sync not available',
+				'reason': 'Current scope (openid) only provides authentication. Apply for ORCID Member API to sync profile data.',
+				'orcid_id': integ.orcid_id,
+				'scope': scope
+			}, status=status.HTTP_400_BAD_REQUEST)
+
+		try:
+			access_token = decrypt_blob(integ.access_token_encrypted)
+		except Exception:
+			return Response({'detail': 'Invalid or missing token'}, status=status.HTTP_400_BAD_REQUEST)
+
+		try:
+			record = fetch_orcid_record(integ.orcid_id, access_token)
+		except requests.HTTPError as e:
+			return Response({
+				'detail': 'Fetch failed', 
+				'error': str(e),
+				'help': 'You may need Member API access to read ORCID profiles. Contact ORCID for institutional membership.'
+			}, status=status.HTTP_502_BAD_GATEWAY)
+
+		# Basic profile sync: display_name and affiliation if present
+		try:
+			name_parts = record.get('person', {}).get('name', {})
+			given = (name_parts.get('given-names') or {}).get('value')
+			family = (name_parts.get('family-name') or {}).get('value')
+			display = ' '.join(p for p in [given, family] if p)
+			if display:
+				profile.display_name = display
+		except Exception:
+			pass
+
+		try:
+			employments = record.get('activities-summary', {}).get('employments', {}).get('employment-summary', [])
+			if employments:
+				last_emp = employments[0]
+				org = (last_emp.get('organization') or {}).get('name')
+				if org:
+					profile.affiliation_name = org
+		except Exception:
+			pass
+
+		profile.save(update_fields=['display_name', 'affiliation_name'])
+
+		integ.orcid_data = record
+		integ.last_sync_at = timezone.now()
+		integ.status = 'CONNECTED'
+		integ.save(update_fields=['orcid_data', 'last_sync_at', 'status'])
+
+		return Response({'detail': 'Profile synced', 'display_name': profile.display_name, 'affiliation_name': profile.affiliation_name})

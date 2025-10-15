@@ -5,20 +5,22 @@ Handles ORCID/OJS connectors and external services.
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 
-# from .views import ORCIDViewSet, OJSViewSet, ExternalServiceViewSet
+from .views import (
+    ORCIDAuthorizeView,
+    ORCIDCallbackView,
+    ORCIDStatusView,
+    ORCIDDisconnectView,
+    ORCIDSyncProfileView,
+)
 
 router = DefaultRouter()
-# router.register(r'orcid', ORCIDViewSet)
-# router.register(r'ojs', OJSViewSet)
-# router.register(r'services', ExternalServiceViewSet)
 
 urlpatterns = [
     path('', include(router.urls)),
-    # Add custom integration endpoints here
-    # path('orcid/connect/', ORCIDConnectView.as_view(), name='orcid_connect'),
-    # path('orcid/sync/', ORCIDSyncView.as_view(), name='orcid_sync'),
-    # path('ojs/sync/', OJSSyncView.as_view(), name='ojs_sync'),
-    # path('ojs/export/', OJSExportView.as_view(), name='ojs_export'),
-    # path('ror/search/', RORSearchView.as_view(), name='ror_search'),
-    # path('openalex/search/', OpenAlexSearchView.as_view(), name='openalex_search'),
+    # ORCID OAuth flow
+    path('orcid/authorize/', ORCIDAuthorizeView.as_view(), name='orcid_authorize'),
+    path('orcid/callback/', ORCIDCallbackView.as_view(), name='orcid_callback'),
+    path('orcid/status/', ORCIDStatusView.as_view(), name='orcid_status'),
+    path('orcid/disconnect/', ORCIDDisconnectView.as_view(), name='orcid_disconnect'),
+    path('orcid/sync-profile/', ORCIDSyncProfileView.as_view(), name='orcid_sync_profile'),
 ]

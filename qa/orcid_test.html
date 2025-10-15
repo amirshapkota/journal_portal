@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ORCID Integration Test</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+        .header {
+            background: #2c3e50;
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+        .header p {
+            opacity: 0.9;
+            font-size: 14px;
+        }
+        .content {
+            padding: 30px;
+        }
+        .section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+        .section h2 {
+            font-size: 18px;
+            margin-bottom: 15px;
+            color: #2c3e50;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #555;
+            font-size: 14px;
+        }
+        input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        button:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+        button:active {
+            transform: translateY(0);
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .btn-danger {
+            background: #e74c3c;
+        }
+        .btn-danger:hover {
+            background: #c0392b;
+        }
+        .btn-success {
+            background: #27ae60;
+        }
+        .btn-success:hover {
+            background: #229954;
+        }
+        .status {
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 15px;
+            font-size: 14px;
+        }
+        .status.info {
+            background: #e3f2fd;
+            color: #1976d2;
+            border-left: 4px solid #1976d2;
+        }
+        .status.success {
+            background: #e8f5e9;
+            color: #2e7d32;
+            border-left: 4px solid #2e7d32;
+        }
+        .status.error {
+            background: #ffebee;
+            color: #c62828;
+            border-left: 4px solid #c62828;
+        }
+        .status.warning {
+            background: #fff3e0;
+            color: #ef6c00;
+            border-left: 4px solid #ef6c00;
+        }
+        pre {
+            background: #2c3e50;
+            color: #ecf0f1;
+            padding: 15px;
+            border-radius: 6px;
+            overflow-x: auto;
+            font-size: 12px;
+            line-height: 1.5;
+            margin-top: 10px;
+        }
+        .badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-left: 10px;
+        }
+        .badge.connected {
+            background: #27ae60;
+            color: white;
+        }
+        .badge.disconnected {
+            background: #95a5a6;
+            color: white;
+        }
+        .steps {
+            counter-reset: step;
+            list-style: none;
+        }
+        .steps li {
+            counter-increment: step;
+            margin-bottom: 10px;
+            padding-left: 35px;
+            position: relative;
+            line-height: 1.6;
+        }
+        .steps li::before {
+            content: counter(step);
+            position: absolute;
+            left: 0;
+            top: 0;
+            background: #667eea;
+            color: white;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔬 ORCID Integration Test</h1>
+            <p>Complete OAuth flow testing for Journal Portal</p>
+        </div>
+        
+        <div class="content">
+            <!-- Step 1: Login -->
+            <div class="section">
+                <h2>Step 1: Login</h2>
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" value="admin@journal-portal.com" placeholder="Enter your email">
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" value="admin123456" placeholder="Enter your password">
+                </div>
+                <button onclick="login()">Login</button>
+                <div id="login-status"></div>
+            </div>
+
+            <!-- Step 2: Check Status -->
+            <div class="section">
+                <h2>Step 2: Check ORCID Connection Status</h2>
+                <button onclick="checkStatus()" id="btn-status" disabled>Check Status</button>
+                <div id="status-result"></div>
+            </div>
+
+            <!-- Step 3: Connect ORCID -->
+            <div class="section">
+                <h2>Step 3: Connect ORCID</h2>
+                <ol class="steps">
+                    <li>Click "Get Authorization URL" button</li>
+                    <li>Click "Open ORCID Login" to open ORCID in a new tab</li>
+                    <li>Login to ORCID and authorize access</li>
+                    <li>You'll be redirected back automatically</li>
+                </ol>
+                <button onclick="getAuthorizeUrl()" id="btn-authorize" disabled>Get Authorization URL</button>
+                <button onclick="openOrcidLogin()" id="btn-open-orcid" disabled style="display:none;">Open ORCID Login</button>
+                <div id="authorize-result"></div>
+            </div>
+
+            <!-- Step 4: Sync Profile -->
+            <div class="section">
+                <h2>Step 4: Sync Profile from ORCID</h2>
+                <button onclick="syncProfile()" id="btn-sync" disabled>Sync Profile</button>
+                <div id="sync-result"></div>
+            </div>
+
+            <!-- Step 5: Disconnect -->
+            <div class="section">
+                <h2>Step 5: Disconnect ORCID</h2>
+                <button onclick="disconnect()" id="btn-disconnect" disabled class="btn-danger">Disconnect ORCID</button>
+                <div id="disconnect-result"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://127.0.0.1:8000/api/v1';
+        let accessToken = localStorage.getItem('access_token');
+        let authorizeUrl = '';
+
+        // Initialize
+        window.onload = function() {
+            if (accessToken) {
+                updateLoginStatus(true);
+                enableButtons();
+            }
+            
+            // Check if we're returning from ORCID
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.has('code')) {
+                handleOrcidCallback();
+            } else if (urlParams.has('error')) {
+                showStatus('authorize-result', 'ORCID authorization denied: ' + urlParams.get('error_description'), 'error');
+            }
+        };
+
+        async function login() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            
+            try {
+                const response = await fetch(`${API_BASE}/auth/login/`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    accessToken = data.access;
+                    localStorage.setItem('access_token', accessToken);
+                    localStorage.setItem('refresh_token', data.refresh);
+                    updateLoginStatus(true, data);
+                    enableButtons();
+                } else {
+                    showStatus('login-status', 'Login failed: ' + (data.detail || JSON.stringify(data)), 'error');
+                }
+            } catch (error) {
+                showStatus('login-status', 'Error: ' + error.message, 'error');
+            }
+        }
+
+        function updateLoginStatus(loggedIn, data = null) {
+            const statusDiv = document.getElementById('login-status');
+            if (loggedIn) {
+                const info = data ? `<br>User: ${data.user?.email || 'logged in'}` : '';
+                showStatus('login-status', '✅ Logged in successfully!' + info, 'success');
+            }
+        }
+
+        function enableButtons() {
+            document.getElementById('btn-status').disabled = false;
+            document.getElementById('btn-authorize').disabled = false;
+            document.getElementById('btn-sync').disabled = false;
+            document.getElementById('btn-disconnect').disabled = false;
+        }
+
+        async function checkStatus() {
+            try {
+                const response = await fetch(`${API_BASE}/integrations/orcid/status/`, {
+                    headers: { 'Authorization': `Bearer ${accessToken}` }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    if (data.connected) {
+                        const badge = '<span class="badge connected">Connected</span>';
+                        let html = `${badge}<br><br>`;
+                        html += `<strong>ORCID ID:</strong> ${data.orcid_id}<br>`;
+                        html += `<strong>Status:</strong> ${data.status}<br>`;
+                        html += `<strong>Scope:</strong> ${data.token_scope}<br>`;
+                        html += `<strong>Expires:</strong> ${data.expires_at || 'N/A'}<br>`;
+                        html += `<strong>Last Sync:</strong> ${data.last_sync_at || 'Never'}<br>`;
+                        showStatus('status-result', html, 'success');
+                    } else {
+                        const badge = '<span class="badge disconnected">Not Connected</span>';
+                        showStatus('status-result', badge + '<br><br>No ORCID account connected', 'info');
+                    }
+                } else {
+                    showStatus('status-result', 'Error: ' + JSON.stringify(data), 'error');
+                }
+            } catch (error) {
+                showStatus('status-result', 'Error: ' + error.message, 'error');
+            }
+        }
+
+        async function getAuthorizeUrl() {
+            try {
+                const response = await fetch(`${API_BASE}/integrations/orcid/authorize/`, {
+                    headers: { 'Authorization': `Bearer ${accessToken}` }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    authorizeUrl = data.authorize_url;
+                    document.getElementById('btn-open-orcid').style.display = 'inline-block';
+                    document.getElementById('btn-open-orcid').disabled = false;
+                    showStatus('authorize-result', 
+                        '✅ Authorization URL generated!<br><br>Click "Open ORCID Login" button to continue.<br><br>' +
+                        '<small>URL: ' + authorizeUrl + '</small>', 
+                        'success');
+                } else {
+                    showStatus('authorize-result', 'Error: ' + JSON.stringify(data), 'error');
+                }
+            } catch (error) {
+                showStatus('authorize-result', 'Error: ' + error.message, 'error');
+            }
+        }
+
+        function openOrcidLogin() {
+            if (!authorizeUrl) {
+                showStatus('authorize-result', 'Please get authorization URL first', 'warning');
+                return;
+            }
+            
+            showStatus('authorize-result', 
+                '🔄 Opening ORCID login...<br><br>' +
+                'After you approve access, you will be redirected back to this page.', 
+                'info');
+            
+            // Open ORCID in the same window (so we get redirected back here)
+            window.location.href = authorizeUrl;
+        }
+
+        function handleOrcidCallback() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const code = urlParams.get('code');
+            const state = urlParams.get('state');
+            
+            showStatus('authorize-result', 
+                '✅ Authorization code received from ORCID!<br><br>' +
+                'Code: ' + code.substring(0, 20) + '...<br>' +
+                'State: ' + state.substring(0, 20) + '...<br><br>' +
+                '🔄 Processing callback...', 
+                'success');
+            
+            // The callback is handled automatically by Django
+            // Check status after a short delay
+            setTimeout(() => {
+                checkStatus();
+                showStatus('authorize-result', 
+                    '✅ ORCID connection completed!<br><br>' +
+                    'Check the status section above to see your connection details.', 
+                    'success');
+                
+                // Clean URL
+                window.history.replaceState({}, document.title, window.location.pathname);
+            }, 1000);
+        }
+
+        async function syncProfile() {
+            try {
+                const response = await fetch(`${API_BASE}/integrations/orcid/sync-profile/`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${accessToken}` }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    let html = '✅ Profile synced successfully!<br><br>';
+                    html += `<strong>Display Name:</strong> ${data.display_name || 'N/A'}<br>`;
+                    html += `<strong>Affiliation:</strong> ${data.affiliation_name || 'N/A'}<br>`;
+                    showStatus('sync-result', html, 'success');
+                } else if (response.status === 404) {
+                    showStatus('sync-result', '⚠️ Not connected to ORCID. Please connect first.', 'warning');
+                } else {
+                    showStatus('sync-result', 'Error: ' + JSON.stringify(data), 'error');
+                }
+            } catch (error) {
+                showStatus('sync-result', 'Error: ' + error.message, 'error');
+            }
+        }
+
+        async function disconnect() {
+            if (!confirm('Are you sure you want to disconnect your ORCID account?')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE}/integrations/orcid/disconnect/`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${accessToken}` }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showStatus('disconnect-result', '✅ ORCID disconnected successfully!', 'success');
+                    setTimeout(() => checkStatus(), 500);
+                } else if (response.status === 404) {
+                    showStatus('disconnect-result', '⚠️ Not connected to ORCID.', 'warning');
+                } else {
+                    showStatus('disconnect-result', 'Error: ' + JSON.stringify(data), 'error');
+                }
+            } catch (error) {
+                showStatus('disconnect-result', 'Error: ' + error.message, 'error');
+            }
+        }
+
+        function showStatus(elementId, message, type = 'info') {
+            const div = document.getElementById(elementId);
+            div.innerHTML = `<div class="status ${type}">${message}</div>`;
+        }
+    </script>
+</body>
+</html>
