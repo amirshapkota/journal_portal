@@ -28,6 +28,13 @@ class EmailTemplate(models.Model):
         ('REVIEW_ASSIGNED', 'Review Assigned'),
         ('REVIEW_COMPLETED', 'Review Completed'),
         ('DECISION_MADE', 'Editorial Decision'),
+        # Phase 4: Review System Templates
+        ('REVIEW_INVITATION', 'Review Invitation'),
+        ('REVIEW_REMINDER', 'Review Deadline Reminder'),
+        ('REVIEW_SUBMITTED', 'Review Submitted Confirmation'),
+        ('EDITORIAL_DECISION_ACCEPT', 'Manuscript Accepted'),
+        ('EDITORIAL_DECISION_REJECT', 'Manuscript Rejected'),
+        ('REVISION_REQUESTED', 'Revisions Requested'),
     ]
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

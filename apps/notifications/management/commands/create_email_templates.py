@@ -62,6 +62,49 @@ class Command(BaseCommand):
                 'description': 'Sent when user connects their ORCID iD',
                 'html_file': 'orcid_connected.html',
             },
+            # Phase 4: Review System Templates
+            {
+                'template_type': 'REVIEW_INVITATION',
+                'name': 'Review Invitation',
+                'subject': 'Invitation to Review Manuscript - {{ submission_title }}',
+                'description': 'Sent when a reviewer is invited to review a manuscript',
+                'html_file': 'review_invitation.html',
+            },
+            {
+                'template_type': 'REVIEW_REMINDER',
+                'name': 'Review Deadline Reminder',
+                'subject': 'Reminder: Review Due Soon - {{ submission_title }}',
+                'description': 'Sent to remind reviewers of approaching deadlines',
+                'html_file': 'review_reminder.html',
+            },
+            {
+                'template_type': 'REVIEW_SUBMITTED',
+                'name': 'Review Submitted Confirmation',
+                'subject': 'Review Successfully Submitted - {{ submission_title }}',
+                'description': 'Sent when a reviewer submits their review',
+                'html_file': 'review_submitted.html',
+            },
+            {
+                'template_type': 'EDITORIAL_DECISION_ACCEPT',
+                'name': 'Manuscript Accepted',
+                'subject': 'Congratulations! Your Manuscript Has Been Accepted',
+                'description': 'Sent when a manuscript is accepted for publication',
+                'html_file': 'editorial_decision_accept.html',
+            },
+            {
+                'template_type': 'EDITORIAL_DECISION_REJECT',
+                'name': 'Manuscript Not Accepted',
+                'subject': 'Decision on Your Manuscript - {{ submission_title }}',
+                'description': 'Sent when a manuscript is rejected',
+                'html_file': 'editorial_decision_reject.html',
+            },
+            {
+                'template_type': 'REVISION_REQUESTED',
+                'name': 'Revisions Requested',
+                'subject': 'Revisions Required - {{ submission_title }}',
+                'description': 'Sent when revisions are requested for a manuscript',
+                'html_file': 'revision_requested.html',
+            },
         ]
 
         templates_dir = os.path.join(settings.BASE_DIR, 'templates', 'emails')

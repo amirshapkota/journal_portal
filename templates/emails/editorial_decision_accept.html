@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manuscript Accepted</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            background-color: #ffffff;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 600;
+        }
+        .content {
+            padding: 30px;
+        }
+        .success-box {
+            background-color: #d4edda;
+            border-left: 4px solid #28a745;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .success-box h3 {
+            margin-top: 0;
+            color: #155724;
+            font-size: 16px;
+        }
+        .success-box p {
+            margin: 5px 0;
+            color: #155724;
+        }
+        .info-box {
+            background-color: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .info-box h3 {
+            margin-top: 0;
+            color: #667eea;
+            font-size: 16px;
+        }
+        .info-box p {
+            margin: 5px 0;
+            color: #555;
+        }
+        .button-container {
+            text-align: center;
+            margin: 30px 0;
+        }
+        .button {
+            display: inline-block;
+            padding: 14px 30px;
+            text-decoration: none;
+            background-color: #28a745;
+            color: white;
+            border-radius: 5px;
+            font-weight: 600;
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+        .button:hover {
+            background-color: #218838;
+        }
+        .footer {
+            background-color: #f8f9fa;
+            padding: 20px;
+            text-align: center;
+            color: #6c757d;
+            font-size: 14px;
+            border-top: 1px solid #dee2e6;
+        }
+        .celebration {
+            text-align: center;
+            font-size: 48px;
+            margin: 20px 0;
+        }
+        ul {
+            padding-left: 20px;
+        }
+        li {
+            margin: 8px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎉 Manuscript Accepted for Publication</h1>
+        </div>
+        
+        <div class="content">
+            <div class="celebration">🎊 🎉 🎊</div>
+            
+            <p>Dear {{ author_name }},</p>
+            
+            <p>Congratulations! We are pleased to inform you that your manuscript has been <strong>accepted for publication</strong> in <strong>{{ journal_name }}</strong>.</p>
+            
+            <div class="success-box">
+                <h3>✓ Decision: ACCEPTED</h3>
+                <p><strong>Manuscript Title:</strong> {{ submission_title }}</p>
+                <p><strong>Decision Date:</strong> {{ decision_date }}</p>
+                <p><strong>Editor:</strong> {{ editor_name }}</p>
+            </div>
+            
+            <div class="info-box">
+                <h3>📝 Editor's Comments</h3>
+                <p style="font-style: italic;">{{ editor_comments }}</p>
+            </div>
+            
+            <p><strong>Next Steps:</strong></p>
+            <ul>
+                <li>Your manuscript will proceed to the production stage</li>
+                <li>You will receive a copyright transfer agreement to sign</li>
+                <li>You may be asked to provide final revisions or corrections</li>
+                <li>The production team will contact you regarding proofs and publication timeline</li>
+                <li>Your article will be published online and indexed in relevant databases</li>
+            </ul>
+            
+            <div class="button-container">
+                <a href="{{ manuscript_url }}" class="button">View Manuscript Details</a>
+            </div>
+            
+            <div class="info-box">
+                <h3>📊 Review Summary</h3>
+                <p><strong>Submission Date:</strong> {{ submission_date }}</p>
+                <p><strong>Review Duration:</strong> {{ review_duration }} days</p>
+                <p><strong>Number of Reviews:</strong> {{ review_count }}</p>
+            </div>
+            
+            <p><strong>Publication Timeline:</strong></p>
+            <ul>
+                <li>Copyright transfer: 1-2 weeks</li>
+                <li>Copyediting and formatting: 2-3 weeks</li>
+                <li>Author proof review: 1 week</li>
+                <li>Expected online publication: {{ expected_publication_date }}</li>
+            </ul>
+            
+            <div class="success-box">
+                <p><strong>🎓 Congratulations!</strong> Thank you for choosing {{ journal_name }} for your research. We look forward to publishing your work and contributing to the advancement of knowledge in your field.</p>
+            </div>
+            
+            <p>If you have any questions about the publication process, please don't hesitate to contact us.</p>
+            
+            <p>Best regards,<br>
+            <strong>{{ editor_name }}</strong><br>
+            Editor<br>
+            {{ journal_name }}</p>
+        </div>
+        
+        <div class="footer">
+            <p>This decision notification was sent to {{ author_email }}</p>
+            <p>{{ journal_name }} - Publishing Excellence in Research</p>
+        </div>
+    </div>
+</body>
+</html>

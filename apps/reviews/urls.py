@@ -1,21 +1,27 @@
 """
 URL configuration for reviews app.
-Handles review management and assignments.
 """
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
+from apps.reviews.views import (
+    ReviewAssignmentViewSet,
+    ReviewViewSet,
+    ReviewerRecommendationViewSet,
+    ReviewerSearchViewSet,
+    ReviewStatisticsViewSet,
+    ReviewFormTemplateViewSet,
+)
 
-# from .views import ReviewViewSet, ReviewAssignmentViewSet, ReviewerViewSet
+app_name = 'reviews'
 
 router = DefaultRouter()
-# router.register(r'reviews', ReviewViewSet)
-# router.register(r'assignments', ReviewAssignmentViewSet)
-# router.register(r'reviewers', ReviewerViewSet)
+router.register(r'assignments', ReviewAssignmentViewSet, basename='assignment')
+router.register(r'reviews', ReviewViewSet, basename='review')
+router.register(r'recommendations', ReviewerRecommendationViewSet, basename='recommendation')
+router.register(r'search', ReviewerSearchViewSet, basename='search')
+router.register(r'statistics', ReviewStatisticsViewSet, basename='statistics')
+router.register(r'forms', ReviewFormTemplateViewSet, basename='form')
 
 urlpatterns = [
     path('', include(router.urls)),
-    # Add custom review endpoints here
-    # path('<int:submission_id>/assign/', AssignReviewerView.as_view(), name='assign_reviewer'),
-    # path('<int:review_id>/decision/', ReviewDecisionView.as_view(), name='review_decision'),
-    # path('recommendations/', ReviewerRecommendationsView.as_view(), name='reviewer_recommendations'),
 ]

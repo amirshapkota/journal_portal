@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Revision Requested</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            background-color: #ffffff;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #17a2b8 0%, #138496 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 600;
+        }
+        .content {
+            padding: 30px;
+        }
+        .decision-box {
+            background-color: #d1ecf1;
+            border-left: 4px solid #17a2b8;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .decision-box h3 {
+            margin-top: 0;
+            color: #0c5460;
+            font-size: 16px;
+        }
+        .decision-box p {
+            margin: 5px 0;
+            color: #0c5460;
+        }
+        .info-box {
+            background-color: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .info-box h3 {
+            margin-top: 0;
+            color: #667eea;
+            font-size: 16px;
+        }
+        .info-box p {
+            margin: 5px 0;
+            color: #555;
+        }
+        .warning-box {
+            background-color: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .warning-box h3 {
+            margin-top: 0;
+            color: #856404;
+            font-size: 16px;
+        }
+        .warning-box p {
+            margin: 5px 0;
+            color: #856404;
+        }
+        .button-container {
+            text-align: center;
+            margin: 30px 0;
+        }
+        .button {
+            display: inline-block;
+            padding: 14px 30px;
+            margin: 0 5px;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: 600;
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+        .button-primary {
+            background-color: #17a2b8;
+            color: white;
+        }
+        .button-primary:hover {
+            background-color: #138496;
+        }
+        .button-secondary {
+            background-color: #667eea;
+            color: white;
+        }
+        .button-secondary:hover {
+            background-color: #5568d3;
+        }
+        .revision-badge {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 15px;
+            font-weight: 600;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+        .badge-minor {
+            background-color: #d1ecf1;
+            color: #0c5460;
+        }
+        .badge-major {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        .footer {
+            background-color: #f8f9fa;
+            padding: 20px;
+            text-align: center;
+            color: #6c757d;
+            font-size: 14px;
+            border-top: 1px solid #dee2e6;
+        }
+        ul {
+            padding-left: 20px;
+        }
+        li {
+            margin: 8px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📝 Revisions Requested</h1>
+        </div>
+        
+        <div class="content">
+            <p>Dear {{ author_name }},</p>
+            
+            <p>Thank you for submitting your manuscript to <strong>{{ journal_name }}</strong>. After careful peer review, we are pleased to inform you that your manuscript shows promise for publication, but requires revisions before a final decision can be made.</p>
+            
+            <div class="decision-box">
+                <h3>↻ Decision: REVISIONS REQUIRED</h3>
+                <p><strong>Manuscript Title:</strong> {{ submission_title }}</p>
+                <p><strong>Decision Date:</strong> {{ decision_date }}</p>
+                <p><strong>Editor:</strong> {{ editor_name }}</p>
+                <p><strong>Revision Type:</strong> 
+                    <span class="revision-badge badge-{{ revision_type_class }}">{{ revision_type }}</span>
+                </p>
+            </div>
+            
+            <div class="info-box">
+                <h3>📝 Editor's Summary</h3>
+                <p style="font-style: italic;">{{ editor_comments }}</p>
+            </div>
+            
+            <p><strong>Key Areas Requiring Revision:</strong></p>
+            <ul>
+                {{ required_changes }}
+            </ul>
+            
+            <div class="warning-box">
+                <h3>⏰ Revision Deadline</h3>
+                <p><strong>Please submit your revised manuscript by:</strong> {{ revision_deadline }}</p>
+                <p>If you need additional time, please contact us as soon as possible to request an extension.</p>
+            </div>
+            
+            <p><strong>What to Include in Your Revision:</strong></p>
+            <ul>
+                <li><strong>Revised manuscript:</strong> Updated document with all changes incorporated</li>
+                <li><strong>Response to reviewers:</strong> Point-by-point response addressing each comment</li>
+                <li><strong>Track changes document:</strong> Version showing all modifications (optional but recommended)</li>
+                <li><strong>Cover letter:</strong> Brief summary of major changes made</li>
+            </ul>
+            
+            <div class="button-container">
+                <a href="{{ reviews_url }}" class="button button-primary">📄 View Full Reviews</a>
+                <a href="{{ submit_revision_url }}" class="button button-secondary">📤 Submit Revision</a>
+            </div>
+            
+            <div class="info-box">
+                <h3>📊 Review Summary</h3>
+                <p><strong>Submission Date:</strong> {{ submission_date }}</p>
+                <p><strong>Review Duration:</strong> {{ review_duration }} days</p>
+                <p><strong>Number of Reviews:</strong> {{ review_count }}</p>
+                <p><strong>Overall Assessment:</strong> {{ overall_assessment }}</p>
+            </div>
+            
+            <div class="decision-box">
+                <h3>💡 Tips for Revision</h3>
+                <p><strong>Be thorough:</strong> Address every reviewer comment, even if you disagree (explain your reasoning).</p>
+                <p><strong>Be clear:</strong> Make your changes easy to identify and understand.</p>
+                <p><strong>Be prompt:</strong> Submit before the deadline to expedite the re-review process.</p>
+            </div>
+            
+            <p>We look forward to receiving your revised manuscript. The reviewers found merit in your work, and we are optimistic that with these revisions, your manuscript will be suitable for publication.</p>
+            
+            <p>If you have any questions about the revision process or reviewer comments, please don't hesitate to contact us.</p>
+            
+            <p>Best regards,<br>
+            <strong>{{ editor_name }}</strong><br>
+            Editor<br>
+            {{ journal_name }}</p>
+        </div>
+        
+        <div class="footer">
+            <p>This decision notification was sent to {{ author_email }}</p>
+            <p>{{ journal_name }} - Supporting Your Research Journey</p>
+        </div>
+    </div>
+</body>
+</html>

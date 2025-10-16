@@ -96,6 +96,59 @@ class ReviewAssignment(models.Model):
         return None
 
 
+class ReviewFormTemplate(models.Model):
+    """
+    Configurable review form templates for journals.
+    Allows journals to customize review criteria and scoring.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
+    # Template identification
+    name = models.CharField(max_length=200, help_text="Template name")
+    description = models.TextField(blank=True, help_text="Template description")
+    
+    # Journal relationship (null = system default template)
+    journal = models.ForeignKey(
+        'journals.Journal',
+        on_delete=models.CASCADE,
+        related_name='review_templates',
+        null=True,
+        blank=True,
+        help_text="Journal using this template (null for system default)"
+    )
+    
+    # Form configuration (JSON structure defining fields and criteria)
+    form_schema = models.JSONField(
+        default=dict,
+        help_text="JSON schema defining review form fields and validation rules"
+    )
+    
+    # Scoring criteria configuration
+    scoring_criteria = models.JSONField(
+        default=dict,
+        help_text="Scoring criteria configuration (names, weights, ranges)"
+    )
+    
+    # Template status
+    is_active = models.BooleanField(default=True)
+    is_default = models.BooleanField(default=False)
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['journal', 'is_active']),
+            models.Index(fields=['is_default']),
+        ]
+    
+    def __str__(self):
+        journal_name = self.journal.title if self.journal else "System Default"
+        return f"{self.name} ({journal_name})"
+
+
 class Review(models.Model):
     """
     Review model representing completed reviews.
@@ -113,6 +166,12 @@ class Review(models.Model):
         (3, 'Medium'),
         (4, 'High'),
         (5, 'Very High'),
+    ]
+    
+    REVIEW_TYPE_CHOICES = [
+        ('SINGLE_BLIND', 'Single Blind'),  # Reviewer knows author
+        ('DOUBLE_BLIND', 'Double Blind'),  # Both anonymous
+        ('OPEN', 'Open Review'),  # Both identities known
     ]
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -140,6 +199,22 @@ class Review(models.Model):
     assigned_at = models.DateTimeField()
     due_date = models.DateTimeField()
     submitted_at = models.DateTimeField(auto_now_add=True)
+    
+    # Review type and form template
+    review_type = models.CharField(
+        max_length=20,
+        choices=REVIEW_TYPE_CHOICES,
+        default='SINGLE_BLIND',
+        help_text="Type of review (affects anonymity)"
+    )
+    form_template = models.ForeignKey(
+        ReviewFormTemplate,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='reviews',
+        help_text="Review form template used"
+    )
     
     # Review recommendation and confidence
     recommendation = models.CharField(max_length=20, choices=RECOMMENDATION_CHOICES)
@@ -232,6 +307,106 @@ class Review(models.Model):
             delta = self.submitted_at - self.assigned_at
             return delta.days
         return None
+
+
+class ReviewAttachment(models.Model):
+    """
+    File attachments for reviews (reviewer can attach supporting documents).
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
+    # Review relationship
+    review = models.ForeignKey(
+        Review,
+        on_delete=models.CASCADE,
+        related_name='attachments'
+    )
+    
+    # File details
+    file = models.FileField(
+        upload_to='review_attachments/%Y/%m/%d/',
+        help_text="Attached file (PDF, DOC, DOCX, TXT only)"
+    )
+    original_filename = models.CharField(max_length=255)
+    file_size = models.BigIntegerField(help_text="File size in bytes")
+    mime_type = models.CharField(max_length=100)
+    
+    # Attachment metadata
+    description = models.TextField(
+        blank=True,
+        help_text="Description of the attachment"
+    )
+    
+    # Upload tracking
+    uploaded_by = models.ForeignKey(
+        'users.Profile',
+        on_delete=models.CASCADE,
+        related_name='review_attachments'
+    )
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-uploaded_at']
+        indexes = [
+            models.Index(fields=['review']),
+            models.Index(fields=['uploaded_by']),
+        ]
+    
+    def __str__(self):
+        return f"{self.original_filename} for review {self.review.id}"
+    
+    def get_file_extension(self):
+        """Get file extension."""
+        import os
+        return os.path.splitext(self.original_filename)[1].lower()
+
+
+class ReviewVersion(models.Model):
+    """
+    Tracks review history and changes (for audit trail).
+    Captures snapshots of review content when modified.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
+    # Review relationship
+    review = models.ForeignKey(
+        Review,
+        on_delete=models.CASCADE,
+        related_name='versions'
+    )
+    
+    # Version details
+    version_number = models.PositiveIntegerField()
+    
+    # Snapshot of review content
+    content_snapshot = models.JSONField(
+        help_text="JSON snapshot of review content at this version"
+    )
+    
+    # Change tracking
+    changes_made = models.TextField(
+        blank=True,
+        help_text="Description of changes made in this version"
+    )
+    changed_by = models.ForeignKey(
+        'users.Profile',
+        on_delete=models.CASCADE,
+        related_name='review_versions'
+    )
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-version_number', '-created_at']
+        unique_together = ['review', 'version_number']
+        indexes = [
+            models.Index(fields=['review', 'version_number']),
+            models.Index(fields=['created_at']),
+        ]
+    
+    def __str__(self):
+        return f"Review {self.review.id} - Version {self.version_number}"
 
 
 class ReviewerRecommendation(models.Model):

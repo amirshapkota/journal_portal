@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manuscript Rejected</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            background-color: #ffffff;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 600;
+        }
+        .content {
+            padding: 30px;
+        }
+        .decision-box {
+            background-color: #f8f9fa;
+            border-left: 4px solid #6c757d;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .decision-box h3 {
+            margin-top: 0;
+            color: #495057;
+            font-size: 16px;
+        }
+        .decision-box p {
+            margin: 5px 0;
+            color: #495057;
+        }
+        .info-box {
+            background-color: #d1ecf1;
+            border-left: 4px solid #17a2b8;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .info-box h3 {
+            margin-top: 0;
+            color: #0c5460;
+            font-size: 16px;
+        }
+        .info-box p {
+            margin: 5px 0;
+            color: #0c5460;
+        }
+        .button-container {
+            text-align: center;
+            margin: 30px 0;
+        }
+        .button {
+            display: inline-block;
+            padding: 14px 30px;
+            text-decoration: none;
+            background-color: #667eea;
+            color: white;
+            border-radius: 5px;
+            font-weight: 600;
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+        .button:hover {
+            background-color: #5568d3;
+        }
+        .footer {
+            background-color: #f8f9fa;
+            padding: 20px;
+            text-align: center;
+            color: #6c757d;
+            font-size: 14px;
+            border-top: 1px solid #dee2e6;
+        }
+        ul {
+            padding-left: 20px;
+        }
+        li {
+            margin: 8px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📋 Editorial Decision</h1>
+        </div>
+        
+        <div class="content">
+            <p>Dear {{ author_name }},</p>
+            
+            <p>Thank you for submitting your manuscript to <strong>{{ journal_name }}</strong>. After careful consideration and peer review, we regret to inform you that we are unable to accept your manuscript for publication at this time.</p>
+            
+            <div class="decision-box">
+                <h3>✕ Decision: NOT ACCEPTED</h3>
+                <p><strong>Manuscript Title:</strong> {{ submission_title }}</p>
+                <p><strong>Decision Date:</strong> {{ decision_date }}</p>
+                <p><strong>Editor:</strong> {{ editor_name }}</p>
+            </div>
+            
+            <div class="info-box">
+                <h3>📝 Editor's Comments</h3>
+                <p style="font-style: italic;">{{ editor_comments }}</p>
+            </div>
+            
+            <p><strong>Reasons for Decision:</strong></p>
+            <ul>
+                {{ rejection_reasons }}
+            </ul>
+            
+            <div class="info-box">
+                <h3>💡 What You Can Do Next</h3>
+                <p><strong>Consider the feedback:</strong> The reviewers' comments can help you improve your manuscript for submission elsewhere or for future research.</p>
+                <p><strong>Submit to another journal:</strong> Your work may be a better fit for a different publication or audience.</p>
+                <p><strong>Resubmit after major revisions:</strong> If substantial improvements are made, you may consider resubmission as a new manuscript (contact the editor first).</p>
+            </div>
+            
+            <div class="button-container">
+                <a href="{{ manuscript_url }}" class="button">View Full Reviews</a>
+            </div>
+            
+            <div class="decision-box">
+                <h3>📊 Review Summary</h3>
+                <p><strong>Submission Date:</strong> {{ submission_date }}</p>
+                <p><strong>Review Duration:</strong> {{ review_duration }} days</p>
+                <p><strong>Number of Reviews:</strong> {{ review_count }}</p>
+            </div>
+            
+            <p>We appreciate your interest in {{ journal_name }} and encourage you to consider us for future submissions. While this particular manuscript was not selected for publication, we value your contribution to the research community.</p>
+            
+            <p>We wish you success with your research and future publications.</p>
+            
+            <p>Best regards,<br>
+            <strong>{{ editor_name }}</strong><br>
+            Editor<br>
+            {{ journal_name }}</p>
+        </div>
+        
+        <div class="footer">
+            <p>This decision notification was sent to {{ author_email }}</p>
+            <p>{{ journal_name }} - Committed to Research Excellence</p>
+        </div>
+    </div>
+</body>
+</html>

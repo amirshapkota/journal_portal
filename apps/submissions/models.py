@@ -55,6 +55,19 @@ class Submission(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='DRAFT')
     submission_number = models.CharField(max_length=50, blank=True, null=True, unique=True)
     
+    # Review type configuration
+    REVIEW_TYPE_CHOICES = [
+        ('SINGLE_BLIND', 'Single Blind'),  # Reviewer knows author, author doesn't know reviewer
+        ('DOUBLE_BLIND', 'Double Blind'),  # Both identities hidden
+        ('OPEN', 'Open Review'),  # Both identities known
+    ]
+    review_type = models.CharField(
+        max_length=20,
+        choices=REVIEW_TYPE_CHOICES,
+        default='SINGLE_BLIND',
+        help_text="Type of peer review for this submission"
+    )
+    
     # Metadata and content
     metadata_json = models.JSONField(
         default=dict,

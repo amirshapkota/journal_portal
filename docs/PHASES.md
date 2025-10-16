@@ -65,12 +65,12 @@ Review Forms: Structured review input
 File Attachments: Reviewer can attach files
 Score System: Configurable scoring criteria
 Review History: Track all reviews for a submission
+Review type: single blind, double blind open
 4.3 Editorial Decision Making
 Decision Workflow: Accept/Reject/Revision required
 Decision Letters: Automated decision notifications
 Revision Management: Track revision rounds
 Final Decision: Publication preparation
-
 
 Phase 5: Advanced Features (Weeks 12-15)
 5.1 ML & AI Features

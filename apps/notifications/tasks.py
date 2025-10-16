@@ -421,3 +421,216 @@ def send_password_reset_email(user_id, reset_url):
     except Exception as exc:
         logger.error(f"Error sending password reset email: {exc}")
         return {'status': 'error', 'message': str(exc)}
+
+
+# Phase 4: Review System Email Tasks
+
+@shared_task
+def send_review_invitation_email(assignment_id):
+    """Send review invitation email to reviewer."""
+    from apps.reviews.models import ReviewAssignment
+    
+    try:
+        assignment = ReviewAssignment.objects.select_related(
+            'reviewer__user', 'submission', 'assigned_by'
+        ).get(id=assignment_id)
+        
+        reviewer = assignment.reviewer.user
+        submission = assignment.submission
+        
+        # Format author list
+        authors = [submission.corresponding_author.user.get_full_name()]
+        authors += [co.user.get_full_name() for co in submission.coauthors.all()]
+        submission_authors = ', '.join(authors)
+        
+        context = {
+            'reviewer_name': reviewer.get_full_name() or reviewer.email,
+            'journal_name': 'Journal Publication Portal',
+            'submission_title': submission.title,
+            'submission_authors': submission_authors,
+            'submission_keywords': '',  # Keywords not stored in Submission model
+            'submission_abstract': submission.abstract[:300] + '...' if len(submission.abstract) > 300 else submission.abstract,
+            'due_date': assignment.due_date.strftime('%B %d, %Y') if assignment.due_date else 'TBD',
+            'accept_url': f"{settings.SITE_URL if hasattr(settings, 'SITE_URL') else 'http://127.0.0.1:8000'}/api/v1/reviews/assignments/{assignment.id}/accept/",
+            'decline_url': f"{settings.SITE_URL if hasattr(settings, 'SITE_URL') else 'http://127.0.0.1:8000'}/api/v1/reviews/assignments/{assignment.id}/decline/",
+            'editor_name': assignment.assigned_by.get_full_name() if assignment.assigned_by else 'Editorial Team',
+        }
+        
+        return send_template_email(
+            recipient=reviewer.email,
+            template_type='REVIEW_INVITATION',
+            context=context,
+            user_id=str(reviewer.id)
+        )
+    
+    except Exception as exc:
+        logger.error(f"Error sending review invitation email: {exc}")
+        return {'status': 'error', 'message': str(exc)}
+
+
+@shared_task
+def send_review_reminder_email(assignment_id):
+    """Send review deadline reminder email."""
+    from apps.reviews.models import ReviewAssignment
+    from django.utils import timezone
+    
+    try:
+        assignment = ReviewAssignment.objects.select_related(
+            'reviewer__user', 'submission', 'assigned_by'
+        ).get(id=assignment_id)
+        
+        reviewer = assignment.reviewer.user
+        submission = assignment.submission
+        
+        # Calculate days remaining
+        days_remaining = (assignment.due_date - timezone.now().date()).days if assignment.due_date else 0
+        
+        context = {
+            'reviewer_name': reviewer.get_full_name() or reviewer.email,
+            'journal_name': 'Journal Publication Portal',
+            'submission_title': submission.title,
+            'due_date': assignment.due_date.strftime('%B %d, %Y') if assignment.due_date else 'TBD',
+            'days_remaining': max(0, days_remaining),
+            'assigned_date': assignment.invited_at.strftime('%B %d, %Y'),
+            'review_url': f"{settings.SITE_URL if hasattr(settings, 'SITE_URL') else 'http://127.0.0.1:8000'}/api/v1/reviews/reviews/?assignment_id={assignment.id}",
+            'editor_name': assignment.assigned_by.get_full_name() if assignment.assigned_by else 'Editorial Team',
+            'editor_email': assignment.assigned_by.email if assignment.assigned_by else settings.DEFAULT_FROM_EMAIL,
+        }
+        
+        return send_template_email(
+            recipient=reviewer.email,
+            template_type='REVIEW_REMINDER',
+            context=context,
+            user_id=str(reviewer.id)
+        )
+    
+    except Exception as exc:
+        logger.error(f"Error sending review reminder email: {exc}")
+        return {'status': 'error', 'message': str(exc)}
+
+
+@shared_task
+def send_review_submitted_email(review_id):
+    """Send review submission confirmation email."""
+    from apps.reviews.models import Review
+    from django.utils import timezone
+    
+    try:
+        review = Review.objects.select_related(
+            'reviewer__user', 'submission', 'assignment'
+        ).get(id=review_id)
+        
+        reviewer = review.reviewer.user
+        submission = review.submission
+        
+        # Calculate completion time
+        if review.assigned_at and review.submitted_at:
+            completion_days = (review.submitted_at.date() - review.assigned_at.date()).days
+        else:
+            completion_days = 0
+        
+        # Calculate average score
+        scores = review.scores if hasattr(review, 'scores') and review.scores else {}
+        avg_score = sum(scores.values()) / len(scores) if scores else 0
+        
+        # Map recommendation to CSS class
+        recommendation_classes = {
+            'ACCEPT': 'accept',
+            'MINOR_REVISION': 'minor',
+            'MAJOR_REVISION': 'major',
+            'REJECT': 'reject'
+        }
+        
+        context = {
+            'reviewer_name': reviewer.get_full_name() or reviewer.email,
+            'reviewer_email': reviewer.email,
+            'journal_name': 'Journal Publication Portal',
+            'submission_title': submission.title,
+            'submitted_at': review.submitted_at.strftime('%B %d, %Y at %I:%M %p'),
+            'recommendation': review.get_recommendation_display(),
+            'recommendation_class': recommendation_classes.get(review.recommendation, 'minor'),
+            'confidence_level': review.get_confidence_display(),
+            'completion_days': completion_days,
+            'average_score': f"{avg_score:.1f}",
+            'dashboard_url': f"{settings.SITE_URL if hasattr(settings, 'SITE_URL') else 'http://127.0.0.1:8000'}/api/v1/reviews/reviews/my_reviews/",
+        }
+        
+        return send_template_email(
+            recipient=reviewer.email,
+            template_type='REVIEW_SUBMITTED',
+            context=context,
+            user_id=str(reviewer.id)
+        )
+    
+    except Exception as exc:
+        logger.error(f"Error sending review submitted email: {exc}")
+        return {'status': 'error', 'message': str(exc)}
+
+
+@shared_task
+def send_editorial_decision_email(submission_id, decision_type, editor_comments, additional_context=None):
+    """
+    Send editorial decision email to author.
+    
+    Args:
+        submission_id: UUID of the submission
+        decision_type: 'ACCEPT', 'REJECT', or 'REVISION'
+        editor_comments: Editor's comments
+        additional_context: Additional context variables (dict)
+    """
+    from apps.submissions.models import Submission
+    
+    try:
+        submission = Submission.objects.select_related('author__user').get(id=submission_id)
+        author = submission.author.user
+        
+        # Map decision type to template
+        template_map = {
+            'ACCEPT': 'EDITORIAL_DECISION_ACCEPT',
+            'REJECT': 'EDITORIAL_DECISION_REJECT',
+            'REVISION': 'REVISION_REQUESTED',
+        }
+        
+        template_type = template_map.get(decision_type)
+        if not template_type:
+            raise ValueError(f"Invalid decision type: {decision_type}")
+        
+        # Base context
+        context = {
+            'author_name': author.get_full_name() or author.email,
+            'author_email': author.email,
+            'journal_name': 'Journal Publication Portal',
+            'submission_title': submission.title,
+            'submission_date': submission.created_at.strftime('%B %d, %Y'),
+            'decision_date': timezone.now().strftime('%B %d, %Y'),
+            'editor_comments': editor_comments,
+            'editor_name': 'Editorial Team',  # TODO: Get from submission or editor
+            'manuscript_url': f"{settings.SITE_URL if hasattr(settings, 'SITE_URL') else 'http://127.0.0.1:8000'}/api/v1/submissions/{submission.id}/",
+        }
+        
+        # Add review statistics
+        from apps.reviews.models import Review
+        reviews = Review.objects.filter(submission=submission)
+        context['review_count'] = reviews.count()
+        
+        if reviews.exists():
+            first_review = reviews.order_by('submitted_at').first()
+            review_duration = (timezone.now() - submission.created_at).days
+            context['review_duration'] = review_duration
+        else:
+            context['review_duration'] = 0
+        
+        # Merge additional context
+        if additional_context:
+            context.update(additional_context)
+        
+        return send_template_email(
+            recipient=author.email,
+            template_type=template_type,
+            context=context,
+            user_id=str(author.id)
+        )
+    
+    except Exception as exc:
+        logger.error(f"Error sending editorial decision email: {exc}")
+        return {'status': 'error', 'message': str(exc)}
