@@ -240,6 +240,6 @@ Best regards,
                         created_count += 1
                         self.stdout.write(self.style.SUCCESS(f'  ✓ Created: {template.name}'))
         
-        self.stdout.write(self.style.SUCCESS(f'\n✅ Successfully created {created_count} decision letter template(s)'))
+        self.stdout.write(self.style.SUCCESS(f'\n Successfully created {created_count} decision letter template(s)'))
         total_templates = DecisionLetterTemplate.objects.count()
-        self.stdout.write(self.style.SUCCESS(f'📊 Total templates in database: {total_templates}'))
+        self.stdout.write(self.style.SUCCESS(f' Total templates in database: {total_templates}'))
