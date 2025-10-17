@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Decision: Major Revisions Required</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            background-color: #ffffff;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #fd7e14 0%, #dc6502 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 600;
+        }
+        .content {
+            padding: 30px;
+        }
+        .decision-box {
+            background-color: #fff3cd;
+            border-left: 4px solid #fd7e14;
+            padding: 20px;
+            margin: 25px 0;
+            border-radius: 4px;
+        }
+        .decision-box h2 {
+            margin-top: 0;
+            color: #856404;
+            font-size: 20px;
+        }
+        .decision-box .label {
+            font-weight: 600;
+            color: #856404;
+            margin-top: 10px;
+        }
+        .decision-letter {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 20px;
+            margin: 25px 0;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            font-style: italic;
+        }
+        .deadline-box {
+            background-color: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 25px 0;
+            border-radius: 4px;
+        }
+        .deadline-box h3 {
+            margin-top: 0;
+            color: #856404;
+            font-size: 16px;
+        }
+        .deadline-box p {
+            margin: 5px 0;
+            color: #856404;
+        }
+        .stats-box {
+            background-color: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .stats-box h3 {
+            margin-top: 0;
+            color: #667eea;
+            font-size: 16px;
+        }
+        .stats-box p {
+            margin: 5px 0;
+            color: #555;
+        }
+        .info-box {
+            background-color: #d1ecf1;
+            border-left: 4px solid #17a2b8;
+            padding: 15px;
+            margin: 25px 0;
+            border-radius: 4px;
+        }
+        .button-container {
+            text-align: center;
+            margin: 30px 0;
+        }
+        .button {
+            display: inline-block;
+            padding: 14px 30px;
+            text-decoration: none;
+            background-color: #fd7e14;
+            color: white;
+            border-radius: 5px;
+            font-weight: 600;
+            font-size: 16px;
+        }
+        .footer {
+            background-color: #f8f9fa;
+            padding: 20px;
+            text-align: center;
+            color: #6c757d;
+            font-size: 14px;
+            border-top: 1px solid #dee2e6;
+        }
+        ul {
+            padding-left: 20px;
+        }
+        li {
+            margin: 8px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📋 Editorial Decision: Major Revisions Required</h1>
+        </div>
+        
+        <div class="content">
+            <p>Dear {{ author_name }},</p>
+            
+            <div class="decision-box">
+                <h2>🔨 Major Revisions Required</h2>
+                <p class="label">Manuscript Title:</p>
+                <p>{{ submission_title }}</p>
+                <p class="label">Decision Date:</p>
+                <p>{{ decision_date }}</p>
+                <p class="label">Editor:</p>
+                <p>{{ editor_name }}</p>
+            </div>
+            
+            <p>After careful review of your manuscript, we have determined that significant revisions are required before we can consider it for publication. While the work shows potential, substantial improvements are needed.</p>
+            
+            <div class="decision-letter">
+                <strong>Editorial Decision Letter:</strong><br><br>
+                {{ decision_letter }}
+            </div>
+            
+            {% if revision_deadline %}
+            <div class="deadline-box">
+                <h3>⏰ Revision Deadline</h3>
+                <p><strong>Deadline:</strong> {{ revision_deadline }}</p>
+                <p><strong>Days Remaining:</strong> {{ revision_deadline_days }} days</p>
+                <p>Please submit your revised manuscript by the deadline above. Given the extent of revisions, if you need additional time, please contact us to discuss an extension.</p>
+            </div>
+            {% endif %}
+            
+            {% if reviews_summary_text %}
+            <div class="stats-box">
+                <h3>📊 Review Summary</h3>
+                <p><strong>Total Reviews:</strong> {{ review_count }}</p>
+                <p><strong>Reviewer Recommendations:</strong></p>
+                <p style="white-space: pre-line;">{{ reviews_summary_text }}</p>
+            </div>
+            {% endif %}
+            
+            <p><strong>What are Major Revisions?</strong></p>
+            <p>Major revisions typically involve:</p>
+            <ul>
+                <li>Significant additions to methodology or analysis</li>
+                <li>Additional experiments or data collection</li>
+                <li>Substantial rewriting of sections</li>
+                <li>Major restructuring of the manuscript</li>
+                <li>Comprehensive literature review updates</li>
+                <li>New figures, tables, or supplementary materials</li>
+            </ul>
+            
+            <div class="info-box">
+                <p><strong>💡 Important Note:</strong> Major revisions may require additional peer review. Your revised manuscript may be sent back to reviewers to ensure that all concerns have been adequately addressed.</p>
+            </div>
+            
+            <p><strong>Next Steps:</strong></p>
+            <ul>
+                <li>Carefully review all detailed feedback from reviewers and the editor</li>
+                <li>Plan your revision strategy and timeline</li>
+                <li>Make all requested major changes to your manuscript</li>
+                <li>Prepare a detailed point-by-point response document</li>
+                <li>Highlight all changes in your revised manuscript</li>
+                <li>Submit the revised version with a comprehensive cover letter</li>
+            </ul>
+            
+            <div class="button-container">
+                <a href="{{ dashboard_url }}" class="button">Go to Revisions Dashboard</a>
+            </div>
+            
+            <p>We believe your work has merit and look forward to seeing how you address the reviewers' concerns in your revision.</p>
+            
+            <p>Best regards,<br>
+            <strong>{{ editor_name }}</strong><br>
+            {{ editor_email }}</p>
+        </div>
+        
+        <div class="footer">
+            <p>Decision ID: {{ submission_id }}</p>
+            <p>This is an automated notification from the Journal Publication Portal</p>
+        </div>
+    </div>
+</body>
+</html>

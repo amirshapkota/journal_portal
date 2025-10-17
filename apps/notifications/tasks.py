@@ -634,3 +634,275 @@ def send_editorial_decision_email(submission_id, decision_type, editor_comments,
     except Exception as exc:
         logger.error(f"Error sending editorial decision email: {exc}")
         return {'status': 'error', 'message': str(exc)}
+
+
+# Phase 4.3: Editorial Decision Making Email Tasks
+
+@shared_task
+def send_decision_letter_email(decision_id):
+    """
+    Send editorial decision letter to author.
+    Uses the rendered decision letter from the decision record.
+    """
+    from apps.reviews.models import EditorialDecision
+    
+    try:
+        decision = EditorialDecision.objects.select_related(
+            'submission__corresponding_author__user',
+            'decided_by__user',
+            'letter_template'
+        ).get(id=decision_id)
+        
+        author = decision.submission.corresponding_author.user
+        
+        # Map decision type to template type
+        template_map = {
+            'ACCEPT': 'DECISION_ACCEPT',
+            'REJECT': 'DECISION_REJECT',
+            'MINOR_REVISION': 'DECISION_MINOR_REVISION',
+            'MAJOR_REVISION': 'DECISION_MAJOR_REVISION',
+        }
+        
+        template_type = template_map.get(decision.decision_type)
+        if not template_type:
+            logger.error(f"Unknown decision type: {decision.decision_type}")
+            return {'status': 'error', 'message': 'Unknown decision type'}
+        
+        # Calculate review statistics
+        from apps.reviews.models import Review
+        reviews = Review.objects.filter(submission=decision.submission, is_published=True)
+        
+        recommendation_counts = {}
+        for review in reviews:
+            rec = review.get_recommendation_display()
+            recommendation_counts[rec] = recommendation_counts.get(rec, 0) + 1
+        
+        # Format reviews summary
+        reviews_summary_text = []
+        for rec, count in recommendation_counts.items():
+            reviews_summary_text.append(f"{count} reviewer(s) recommended: {rec}")
+        
+        context = {
+            'author_name': author.get_full_name() or author.email,
+            'submission_title': decision.submission.title,
+            'submission_id': str(decision.submission.id),
+            'decision_type': decision.get_decision_type_display(),
+            'decision_date': decision.decision_date.strftime('%B %d, %Y'),
+            'decision_letter': decision.decision_letter,
+            'editor_name': decision.decided_by.user.get_full_name() if decision.decided_by else 'Editorial Team',
+            'editor_email': decision.decided_by.user.email if decision.decided_by else settings.DEFAULT_FROM_EMAIL,
+            'review_count': reviews.count(),
+            'reviews_summary': decision.reviews_summary or {},
+            'reviews_summary_text': '\n'.join(reviews_summary_text),
+            'revision_deadline': decision.revision_deadline.strftime('%B %d, %Y') if decision.revision_deadline else None,
+            'revision_deadline_days': (decision.revision_deadline.date() - timezone.now().date()).days if decision.revision_deadline else 0,
+            'dashboard_url': f"{settings.SITE_URL if hasattr(settings, 'SITE_URL') else 'http://127.0.0.1:8000'}/dashboard/submissions/",
+            'submission_url': f"{settings.SITE_URL if hasattr(settings, 'SITE_URL') else 'http://127.0.0.1:8000'}/api/v1/submissions/{decision.submission.id}/",
+        }
+        
+        return send_template_email(
+            recipient=author.email,
+            template_type=template_type,
+            context=context,
+            user_id=str(author.id)
+        )
+    
+    except Exception as exc:
+        logger.error(f"Error sending decision letter email: {exc}")
+        return {'status': 'error', 'message': str(exc)}
+
+
+@shared_task
+def send_revision_request_email(revision_round_id):
+    """
+    Send revision request email to author.
+    Notifies author that revisions are required.
+    """
+    from apps.reviews.models import RevisionRound
+    
+    try:
+        revision = RevisionRound.objects.select_related(
+            'submission__corresponding_author__user',
+            'editorial_decision__decided_by__user',
+            'editorial_decision__letter_template'
+        ).prefetch_related('reassigned_reviewers__user').get(id=revision_round_id)
+        
+        author = revision.submission.corresponding_author.user
+        decision = revision.editorial_decision
+        
+        # Determine revision type
+        revision_type = 'Major' if decision.decision_type == 'MAJOR_REVISION' else 'Minor'
+        
+        # Format reassigned reviewers if any
+        reassigned_reviewers_list = []
+        if revision.reassigned_reviewers.exists():
+            for reviewer_profile in revision.reassigned_reviewers.all():
+                reassigned_reviewers_list.append(reviewer_profile.user.get_full_name() or reviewer_profile.user.email)
+        
+        context = {
+            'author_name': author.get_full_name() or author.email,
+            'submission_title': revision.submission.title,
+            'submission_id': str(revision.submission.id),
+            'revision_type': revision_type,
+            'round_number': revision.round_number,
+            'revision_requirements': revision.revision_requirements,
+            'deadline': revision.deadline.strftime('%B %d, %Y') if revision.deadline else 'TBD',
+            'days_to_deadline': revision.days_remaining() if revision.deadline else 0,
+            'editor_name': decision.decided_by.user.get_full_name() if decision.decided_by else 'Editorial Team',
+            'editor_email': decision.decided_by.user.email if decision.decided_by else settings.DEFAULT_FROM_EMAIL,
+            'decision_letter': decision.decision_letter,
+            'reassigned_reviewers': ', '.join(reassigned_reviewers_list) if reassigned_reviewers_list else None,
+            'reviewer_comments_included': revision.reviewer_comments_included,
+            'revision_url': f"{settings.SITE_URL if hasattr(settings, 'SITE_URL') else 'http://127.0.0.1:8000'}/api/v1/reviews/revisions/{revision.id}/",
+            'dashboard_url': f"{settings.SITE_URL if hasattr(settings, 'SITE_URL') else 'http://127.0.0.1:8000'}/dashboard/revisions/",
+        }
+        
+        return send_template_email(
+            recipient=author.email,
+            template_type='REVISION_REQUEST',
+            context=context,
+            user_id=str(author.id)
+        )
+    
+    except Exception as exc:
+        logger.error(f"Error sending revision request email: {exc}")
+        return {'status': 'error', 'message': str(exc)}
+
+
+@shared_task
+def send_revision_submitted_notification(revision_round_id):
+    """
+    Send notification to editor when author submits revised manuscript.
+    """
+    from apps.reviews.models import RevisionRound
+    
+    try:
+        revision = RevisionRound.objects.select_related(
+            'submission__corresponding_author__user',
+            'editorial_decision__decided_by__user',
+            'revised_manuscript',
+            'response_letter'
+        ).get(id=revision_round_id)
+        
+        # Get editor email
+        editor = revision.editorial_decision.decided_by
+        if not editor:
+            logger.warning(f"No editor assigned for revision {revision_round_id}")
+            return {'status': 'skipped', 'reason': 'no_editor'}
+        
+        author = revision.submission.corresponding_author.user
+        
+        # Calculate submission time
+        if revision.requested_at and revision.submitted_at:
+            submission_days = (revision.submitted_at.date() - revision.requested_at.date()).days
+        else:
+            submission_days = 0
+        
+        context = {
+            'editor_name': editor.user.get_full_name() or editor.user.email,
+            'author_name': author.get_full_name() or author.email,
+            'author_email': author.email,
+            'submission_title': revision.submission.title,
+            'submission_id': str(revision.submission.id),
+            'round_number': revision.round_number,
+            'submitted_at': revision.submitted_at.strftime('%B %d, %Y at %I:%M %p') if revision.submitted_at else 'recently',
+            'deadline': revision.deadline.strftime('%B %d, %Y') if revision.deadline else 'TBD',
+            'submitted_on_time': not revision.is_overdue() if revision.deadline else True,
+            'submission_days': submission_days,
+            'author_notes': revision.author_notes or 'No notes provided',
+            'has_revised_manuscript': revision.revised_manuscript is not None,
+            'has_response_letter': revision.response_letter is not None,
+            'revision_url': f"{settings.SITE_URL if hasattr(settings, 'SITE_URL') else 'http://127.0.0.1:8000'}/api/v1/reviews/revisions/{revision.id}/",
+            'dashboard_url': f"{settings.SITE_URL if hasattr(settings, 'SITE_URL') else 'http://127.0.0.1:8000'}/dashboard/editorial/",
+        }
+        
+        return send_template_email(
+            recipient=editor.user.email,
+            template_type='REVISION_SUBMITTED',
+            context=context,
+            user_id=str(editor.user.id)
+        )
+    
+    except Exception as exc:
+        logger.error(f"Error sending revision submitted notification: {exc}")
+        return {'status': 'error', 'message': str(exc)}
+
+
+@shared_task
+def send_revision_approved_email(revision_round_id):
+    """
+    Send notification to author when revised manuscript is approved.
+    """
+    from apps.reviews.models import RevisionRound
+    
+    try:
+        revision = RevisionRound.objects.select_related(
+            'submission__corresponding_author__user',
+            'editorial_decision__decided_by__user'
+        ).get(id=revision_round_id)
+        
+        author = revision.submission.corresponding_author.user
+        editor = revision.editorial_decision.decided_by
+        
+        context = {
+            'author_name': author.get_full_name() or author.email,
+            'submission_title': revision.submission.title,
+            'submission_id': str(revision.submission.id),
+            'round_number': revision.round_number,
+            'approved_at': timezone.now().strftime('%B %d, %Y'),
+            'editor_name': editor.user.get_full_name() if editor else 'Editorial Team',
+            'editor_email': editor.user.email if editor else settings.DEFAULT_FROM_EMAIL,
+            'next_steps': 'Your revised manuscript will now proceed to the next stage of editorial review.',
+            'dashboard_url': f"{settings.SITE_URL if hasattr(settings, 'SITE_URL') else 'http://127.0.0.1:8000'}/dashboard/submissions/",
+        }
+        
+        return send_template_email(
+            recipient=author.email,
+            template_type='REVISION_APPROVED',
+            context=context,
+            user_id=str(author.id)
+        )
+    
+    except Exception as exc:
+        logger.error(f"Error sending revision approved email: {exc}")
+        return {'status': 'error', 'message': str(exc)}
+
+
+@shared_task
+def send_revision_rejected_email(revision_round_id):
+    """
+    Send notification to author when revised manuscript is rejected.
+    """
+    from apps.reviews.models import RevisionRound
+    
+    try:
+        revision = RevisionRound.objects.select_related(
+            'submission__corresponding_author__user',
+            'editorial_decision__decided_by__user'
+        ).get(id=revision_round_id)
+        
+        author = revision.submission.corresponding_author.user
+        editor = revision.editorial_decision.decided_by
+        
+        context = {
+            'author_name': author.get_full_name() or author.email,
+            'submission_title': revision.submission.title,
+            'submission_id': str(revision.submission.id),
+            'round_number': revision.round_number,
+            'rejected_at': timezone.now().strftime('%B %d, %Y'),
+            'editor_name': editor.user.get_full_name() if editor else 'Editorial Team',
+            'editor_email': editor.user.email if editor else settings.DEFAULT_FROM_EMAIL,
+            'rejection_reason': 'The revisions did not adequately address the concerns raised during the review process.',
+            'dashboard_url': f"{settings.SITE_URL if hasattr(settings, 'SITE_URL') else 'http://127.0.0.1:8000'}/dashboard/submissions/",
+        }
+        
+        return send_template_email(
+            recipient=author.email,
+            template_type='REVISION_REJECTED',
+            context=context,
+            user_id=str(author.id)
+        )
+    
+    except Exception as exc:
+        logger.error(f"Error sending revision rejected email: {exc}")
+        return {'status': 'error', 'message': str(exc)}

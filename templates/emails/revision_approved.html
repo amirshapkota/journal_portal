@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Revision Approved</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            background-color: #ffffff;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 600;
+        }
+        .content {
+            padding: 30px;
+        }
+        .approval-box {
+            background-color: #d4edda;
+            border-left: 4px solid #28a745;
+            padding: 20px;
+            margin: 25px 0;
+            border-radius: 4px;
+        }
+        .approval-box h2 {
+            margin-top: 0;
+            color: #155724;
+            font-size: 20px;
+        }
+        .approval-box .label {
+            font-weight: 600;
+            color: #155724;
+            margin-top: 10px;
+        }
+        .info-box {
+            background-color: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .info-box p {
+            margin: 5px 0;
+            color: #555;
+        }
+        .button-container {
+            text-align: center;
+            margin: 30px 0;
+        }
+        .button {
+            display: inline-block;
+            padding: 14px 30px;
+            text-decoration: none;
+            background-color: #28a745;
+            color: white;
+            border-radius: 5px;
+            font-weight: 600;
+            font-size: 16px;
+        }
+        .footer {
+            background-color: #f8f9fa;
+            padding: 20px;
+            text-align: center;
+            color: #6c757d;
+            font-size: 14px;
+            border-top: 1px solid #dee2e6;
+        }
+        .celebration {
+            text-align: center;
+            font-size: 48px;
+            margin: 20px 0;
+        }
+        ul {
+            padding-left: 20px;
+        }
+        li {
+            margin: 8px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>✅ Revision Approved</h1>
+        </div>
+        
+        <div class="content">
+            <div class="celebration">🎉 ✓ 🎉</div>
+            
+            <p>Dear {{ author_name }},</p>
+            
+            <div class="approval-box">
+                <h2>✓ Your Revised Manuscript Has Been Approved</h2>
+                <p class="label">Manuscript Title:</p>
+                <p>{{ submission_title }}</p>
+                <p class="label">Revision Round:</p>
+                <p>{{ round_number }}</p>
+                <p class="label">Approved Date:</p>
+                <p>{{ approved_at }}</p>
+                <p class="label">Editor:</p>
+                <p>{{ editor_name }}</p>
+            </div>
+            
+            <p>Congratulations! We are pleased to inform you that your revised manuscript has been approved and will proceed to the next stage of editorial review.</p>
+            
+            <div class="info-box">
+                <p><strong>What This Means:</strong></p>
+                <p>{{ next_steps }}</p>
+            </div>
+            
+            <p><strong>Next Steps:</strong></p>
+            <ul>
+                <li>Your manuscript will proceed through the editorial workflow</li>
+                <li>The editorial team will conduct a final review</li>
+                <li>You will be notified of the final editorial decision</li>
+                <li>If accepted, you will receive production guidelines</li>
+                <li>Continue to monitor your submission dashboard for updates</li>
+            </ul>
+            
+            <div class="button-container">
+                <a href="{{ dashboard_url }}" class="button">View Submission Status</a>
+            </div>
+            
+            <p>Thank you for your patience and dedication in addressing the revision requirements. Your responsiveness to feedback has been greatly appreciated.</p>
+            
+            <p>If you have any questions, please feel free to contact us.</p>
+            
+            <p>Best regards,<br>
+            <strong>{{ editor_name }}</strong><br>
+            {{ editor_email }}</p>
+        </div>
+        
+        <div class="footer">
+            <p>Submission ID: {{ submission_id }}</p>
+            <p>This is an automated notification from the Journal Publication Portal</p>
+        </div>
+    </div>
+</body>
+</html>

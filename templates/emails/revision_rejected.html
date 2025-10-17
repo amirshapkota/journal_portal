@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Revision Not Accepted</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            background-color: #ffffff;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 600;
+        }
+        .content {
+            padding: 30px;
+        }
+        .rejection-box {
+            background-color: #f8d7da;
+            border-left: 4px solid #dc3545;
+            padding: 20px;
+            margin: 25px 0;
+            border-radius: 4px;
+        }
+        .rejection-box h2 {
+            margin-top: 0;
+            color: #721c24;
+            font-size: 20px;
+        }
+        .rejection-box .label {
+            font-weight: 600;
+            color: #721c24;
+            margin-top: 10px;
+        }
+        .reason-box {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 20px;
+            margin: 25px 0;
+            border-radius: 4px;
+            white-space: pre-wrap;
+        }
+        .encouragement-box {
+            background-color: #d1ecf1;
+            border-left: 4px solid #17a2b8;
+            padding: 15px;
+            margin: 25px 0;
+            border-radius: 4px;
+        }
+        .button-container {
+            text-align: center;
+            margin: 30px 0;
+        }
+        .button {
+            display: inline-block;
+            padding: 14px 30px;
+            text-decoration: none;
+            background-color: #6c757d;
+            color: white;
+            border-radius: 5px;
+            font-weight: 600;
+            font-size: 16px;
+        }
+        .footer {
+            background-color: #f8f9fa;
+            padding: 20px;
+            text-align: center;
+            color: #6c757d;
+            font-size: 14px;
+            border-top: 1px solid #dee2e6;
+        }
+        ul {
+            padding-left: 20px;
+        }
+        li {
+            margin: 8px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Revision Not Accepted</h1>
+        </div>
+        
+        <div class="content">
+            <p>Dear {{ author_name }},</p>
+            
+            <div class="rejection-box">
+                <h2>Revision Not Accepted</h2>
+                <p class="label">Manuscript Title:</p>
+                <p>{{ submission_title }}</p>
+                <p class="label">Revision Round:</p>
+                <p>{{ round_number }}</p>
+                <p class="label">Decision Date:</p>
+                <p>{{ rejected_at }}</p>
+                <p class="label">Editor:</p>
+                <p>{{ editor_name }}</p>
+            </div>
+            
+            <p>After careful review of your revised manuscript, we regret to inform you that the revision did not sufficiently address the concerns raised during the review process.</p>
+            
+            <div class="reason-box">
+                <strong>Reason:</strong><br><br>
+                {{ rejection_reason }}
+            </div>
+            
+            <div class="encouragement-box">
+                <p><strong>💡 Please Note:</strong></p>
+                <p>While this particular revision was not accepted, this does not diminish the potential value of your research. Many successful publications undergo multiple rounds of revision before acceptance.</p>
+            </div>
+            
+            <p><strong>Possible Next Steps:</strong></p>
+            <ul>
+                <li>Carefully review the feedback provided</li>
+                <li>Consider if further substantive revisions could address the concerns</li>
+                <li>Evaluate whether another journal might be a better fit for your work</li>
+                <li>Consult with colleagues or mentors about the feedback</li>
+                <li>Reach out to the editor if you need clarification on specific points</li>
+            </ul>
+            
+            <div class="button-container">
+                <a href="{{ dashboard_url }}" class="button">View Submission Details</a>
+            </div>
+            
+            <p>We appreciate your efforts in revising your manuscript and thank you for considering our journal for your research.</p>
+            
+            <p>Best regards,<br>
+            <strong>{{ editor_name }}</strong><br>
+            {{ editor_email }}</p>
+        </div>
+        
+        <div class="footer">
+            <p>Submission ID: {{ submission_id }}</p>
+            <p>This is an automated notification from the Journal Publication Portal</p>
+        </div>
+    </div>
+</body>
+</html>

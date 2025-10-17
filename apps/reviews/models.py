@@ -466,3 +466,340 @@ class ReviewerRecommendation(models.Model):
     
     def __str__(self):
         return f"Recommend {self.recommended_reviewer} for {self.submission.title[:30]}... ({self.confidence_score:.2f})"
+
+
+class EditorialDecision(models.Model):
+    """
+    Editorial decision model for tracking editorial decisions on submissions.
+    Represents the final decision after review process completion.
+    """
+    DECISION_TYPE_CHOICES = [
+        ('ACCEPT', 'Accept'),
+        ('REJECT', 'Reject'),
+        ('MINOR_REVISION', 'Minor Revision Required'),
+        ('MAJOR_REVISION', 'Major Revision Required'),
+    ]
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
+    # Decision details
+    submission = models.ForeignKey(
+        'submissions.Submission',
+        on_delete=models.CASCADE,
+        related_name='editorial_decisions'
+    )
+    decision_type = models.CharField(
+        max_length=20,
+        choices=DECISION_TYPE_CHOICES,
+        help_text="Type of editorial decision"
+    )
+    
+    # Decision maker
+    decided_by = models.ForeignKey(
+        'users.Profile',
+        on_delete=models.CASCADE,
+        related_name='editorial_decisions_made',
+        help_text="Editor who made the decision"
+    )
+    
+    # Decision content
+    decision_letter = models.TextField(
+        help_text="Complete decision letter sent to authors"
+    )
+    confidential_notes = models.TextField(
+        blank=True,
+        help_text="Internal notes not visible to authors"
+    )
+    
+    # Review aggregation
+    reviews_summary = models.JSONField(
+        default=dict,
+        help_text="Summary of all reviews (recommendations, scores, etc.)"
+    )
+    
+    # Decision metadata
+    decision_date = models.DateTimeField(auto_now_add=True)
+    
+    # Revision deadline (if revision required)
+    revision_deadline = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Deadline for submitting revised manuscript"
+    )
+    
+    # Decision letter template used
+    letter_template = models.ForeignKey(
+        'DecisionLetterTemplate',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='decisions_using_template'
+    )
+    
+    # Notification tracking
+    notification_sent = models.BooleanField(default=False)
+    notification_sent_at = models.DateTimeField(null=True, blank=True)
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-decision_date']
+        indexes = [
+            models.Index(fields=['submission', 'decision_type']),
+            models.Index(fields=['decided_by']),
+            models.Index(fields=['decision_date']),
+            models.Index(fields=['decision_type', 'decision_date']),
+        ]
+    
+    def __str__(self):
+        return f"{self.get_decision_type_display()} - {self.submission.title[:30]}..."
+    
+    def save(self, *args, **kwargs):
+        is_new = self._state.adding
+        super().save(*args, **kwargs)
+        
+        # Update submission status based on decision
+        if is_new:
+            status_mapping = {
+                'ACCEPT': 'ACCEPTED',
+                'REJECT': 'REJECTED',
+                'MINOR_REVISION': 'REVISION_REQUIRED',
+                'MAJOR_REVISION': 'REVISION_REQUIRED',
+            }
+            new_status = status_mapping.get(self.decision_type)
+            if new_status:
+                self.submission.status = new_status
+                self.submission.save()
+
+
+class RevisionRound(models.Model):
+    """
+    Tracks revision rounds for manuscripts requiring revisions.
+    Manages the workflow from revision request to resubmission.
+    """
+    STATUS_CHOICES = [
+        ('REQUESTED', 'Revision Requested'),
+        ('IN_PROGRESS', 'In Progress'),
+        ('SUBMITTED', 'Submitted'),
+        ('UNDER_REVIEW', 'Under Review'),
+        ('APPROVED', 'Approved'),
+        ('REJECTED', 'Rejected'),
+    ]
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
+    # Revision details
+    submission = models.ForeignKey(
+        'submissions.Submission',
+        on_delete=models.CASCADE,
+        related_name='revision_rounds'
+    )
+    editorial_decision = models.ForeignKey(
+        EditorialDecision,
+        on_delete=models.CASCADE,
+        related_name='revision_rounds',
+        help_text="The decision that triggered this revision round"
+    )
+    
+    # Round tracking
+    round_number = models.PositiveIntegerField(
+        help_text="Revision round number (1, 2, 3...)"
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='REQUESTED'
+    )
+    
+    # Revision requirements
+    revision_requirements = models.TextField(
+        help_text="Detailed requirements for revision"
+    )
+    reviewer_comments_included = models.BooleanField(
+        default=True,
+        help_text="Whether reviewer comments are shared with authors"
+    )
+    
+    # Deadlines
+    requested_at = models.DateTimeField(auto_now_add=True)
+    deadline = models.DateTimeField(
+        help_text="Deadline for submitting revised manuscript"
+    )
+    submitted_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When revised manuscript was submitted"
+    )
+    
+    # Revised documents
+    revised_manuscript = models.ForeignKey(
+        'submissions.Document',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='revision_rounds_as_manuscript',
+        help_text="Revised manuscript document"
+    )
+    response_letter = models.ForeignKey(
+        'submissions.Document',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='revision_rounds_as_response',
+        help_text="Author's response to reviewer comments"
+    )
+    
+    # Author notes
+    author_notes = models.TextField(
+        blank=True,
+        help_text="Author's notes about the revision"
+    )
+    
+    # Reviewer reassignment
+    reassigned_reviewers = models.ManyToManyField(
+        'users.Profile',
+        blank=True,
+        related_name='reassigned_revision_rounds',
+        help_text="Reviewers reassigned for this revision round"
+    )
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        unique_together = ['submission', 'round_number']
+        ordering = ['-round_number', '-created_at']
+        indexes = [
+            models.Index(fields=['submission', 'round_number']),
+            models.Index(fields=['status']),
+            models.Index(fields=['deadline']),
+            models.Index(fields=['editorial_decision']),
+        ]
+    
+    def __str__(self):
+        return f"Revision Round {self.round_number} - {self.submission.title[:30]}..."
+    
+    def is_overdue(self):
+        """Check if the revision is overdue."""
+        from django.utils import timezone
+        return (
+            self.status in ['REQUESTED', 'IN_PROGRESS'] and
+            timezone.now() > self.deadline
+        )
+    
+    def days_remaining(self):
+        """Calculate days remaining until deadline."""
+        from django.utils import timezone
+        if self.deadline:
+            delta = self.deadline - timezone.now()
+            return delta.days
+        return None
+
+
+class DecisionLetterTemplate(models.Model):
+    """
+    Templates for decision letters sent to authors.
+    Supports variable substitution for personalized letters.
+    """
+    DECISION_TYPE_CHOICES = [
+        ('ACCEPT', 'Accept'),
+        ('REJECT', 'Reject'),
+        ('MINOR_REVISION', 'Minor Revision'),
+        ('MAJOR_REVISION', 'Major Revision'),
+    ]
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
+    # Template identification
+    name = models.CharField(
+        max_length=200,
+        help_text="Template name"
+    )
+    decision_type = models.CharField(
+        max_length=20,
+        choices=DECISION_TYPE_CHOICES,
+        help_text="Type of decision this template is for"
+    )
+    
+    # Journal association (null = system-wide default)
+    journal = models.ForeignKey(
+        'journals.Journal',
+        on_delete=models.CASCADE,
+        related_name='decision_letter_templates',
+        null=True,
+        blank=True,
+        help_text="Journal using this template (null for system default)"
+    )
+    
+    # Template content
+    subject = models.CharField(
+        max_length=200,
+        help_text="Email subject line (supports variables)"
+    )
+    body = models.TextField(
+        help_text="Email body content (HTML supported, supports variables)"
+    )
+    
+    # Template metadata
+    description = models.TextField(
+        blank=True,
+        help_text="Description of this template"
+    )
+    variables_info = models.JSONField(
+        default=dict,
+        help_text="Information about available variables (for documentation)"
+    )
+    
+    # Template status
+    is_active = models.BooleanField(default=True)
+    is_default = models.BooleanField(
+        default=False,
+        help_text="Default template for this decision type"
+    )
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(
+        'users.Profile',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_decision_templates'
+    )
+    
+    class Meta:
+        ordering = ['decision_type', 'name']
+        indexes = [
+            models.Index(fields=['journal', 'decision_type', 'is_active']),
+            models.Index(fields=['is_default', 'decision_type']),
+        ]
+    
+    def __str__(self):
+        journal_name = self.journal.title if self.journal else "System Default"
+        return f"{self.name} ({self.get_decision_type_display()}) - {journal_name}"
+    
+    def render(self, context):
+        """
+        Render template with provided context variables.
+        
+        Args:
+            context (dict): Variables to substitute in template
+            
+        Returns:
+            tuple: (rendered_subject, rendered_body)
+        """
+        from django.template import Template, Context
+        
+        subject_template = Template(self.subject)
+        body_template = Template(self.body)
+        
+        django_context = Context(context)
+        
+        rendered_subject = subject_template.render(django_context)
+        rendered_body = body_template.render(django_context)
+        
+        return rendered_subject, rendered_body

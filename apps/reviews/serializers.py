@@ -580,3 +580,331 @@ class ReviewSubmitSerializer(serializers.ModelSerializer):
         )
         
         return review
+
+
+# ============================================================================
+# PHASE 4.3: EDITORIAL DECISION SERIALIZERS
+# ============================================================================
+"""
+Serializers for Phase 4.3: Editorial Decision Making
+Handles decision letters, editorial decisions, and revision rounds.
+"""
+from rest_framework import serializers
+
+
+
+class DecisionLetterTemplateSerializer(serializers.ModelSerializer):
+    """Serializer for decision letter templates."""
+    journal_name = serializers.SerializerMethodField()
+    created_by_name = serializers.SerializerMethodField()
+    
+    class Meta:
+        from apps.reviews.models import DecisionLetterTemplate
+        model = DecisionLetterTemplate
+        fields = [
+            'id', 'name', 'decision_type', 'journal', 'journal_name',
+            'subject', 'body', 'description', 'variables_info',
+            'is_active', 'is_default', 'created_at', 'updated_at',
+            'created_by', 'created_by_name'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at', 'journal_name', 'created_by_name']
+    
+    def get_journal_name(self, obj):
+        """Get journal name."""
+        return obj.journal.title if obj.journal else "System Default"
+    
+    def get_created_by_name(self, obj):
+        """Get creator name."""
+        if obj.created_by:
+            return f"{obj.created_by.user.first_name} {obj.created_by.user.last_name}"
+        return None
+
+
+class EditorialDecisionListSerializer(serializers.ModelSerializer):
+    """Serializer for listing editorial decisions."""
+    submission_title = serializers.CharField(source='submission.title', read_only=True)
+    decided_by_name = serializers.SerializerMethodField()
+    decision_type_display = serializers.CharField(source='get_decision_type_display', read_only=True)
+    
+    class Meta:
+        from apps.reviews.models import EditorialDecision
+        model = EditorialDecision
+        fields = [
+            'id', 'submission', 'submission_title', 'decision_type',
+            'decision_type_display', 'decided_by', 'decided_by_name',
+            'decision_date', 'revision_deadline', 'notification_sent',
+            'created_at'
+        ]
+        read_only_fields = fields
+    
+    def get_decided_by_name(self, obj):
+        """Get editor name."""
+        return f"{obj.decided_by.user.first_name} {obj.decided_by.user.last_name}"
+
+
+class EditorialDecisionDetailSerializer(serializers.ModelSerializer):
+    """Detailed serializer for editorial decisions."""
+    submission_info = AnonymousSubmissionSerializer(source='submission', read_only=True)
+    decided_by_info = ReviewerProfileSerializer(source='decided_by', read_only=True)
+    decision_type_display = serializers.CharField(source='get_decision_type_display', read_only=True)
+    letter_template_info = DecisionLetterTemplateSerializer(source='letter_template', read_only=True)
+    
+    class Meta:
+        from apps.reviews.models import EditorialDecision
+        model = EditorialDecision
+        fields = [
+            'id', 'submission', 'submission_info', 'decision_type',
+            'decision_type_display', 'decided_by', 'decided_by_info',
+            'decision_letter', 'confidential_notes', 'reviews_summary',
+            'decision_date', 'revision_deadline', 'letter_template',
+            'letter_template_info', 'notification_sent', 'notification_sent_at',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = [
+            'id', 'submission_info', 'decided_by_info', 'decision_type_display',
+            'letter_template_info', 'decision_date', 'notification_sent',
+            'notification_sent_at', 'created_at', 'updated_at'
+        ]
+
+
+class EditorialDecisionCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating editorial decisions."""
+    
+    class Meta:
+        from apps.reviews.models import EditorialDecision
+        model = EditorialDecision
+        fields = [
+            'id', 'submission', 'decision_type', 'decided_by',
+            'decision_letter', 'confidential_notes', 'reviews_summary',
+            'revision_deadline', 'letter_template'
+        ]
+        read_only_fields = ['id']
+    
+    def validate_submission(self, value):
+        """Validate that submission has completed reviews."""
+        from apps.reviews.models import Review
+        
+        # Check if submission has at least one completed review
+        review_count = Review.objects.filter(
+            submission=value,
+            is_published=True
+        ).count()
+        
+        if review_count == 0:
+            raise serializers.ValidationError(
+                "Cannot make decision: submission has no completed reviews."
+            )
+        
+        return value
+    
+    def validate(self, data):
+        """Cross-field validation."""
+        # Require revision deadline for revision decisions
+        if data['decision_type'] in ['MINOR_REVISION', 'MAJOR_REVISION']:
+            if not data.get('revision_deadline'):
+                raise serializers.ValidationError({
+                    'revision_deadline': 'Revision deadline is required for revision decisions.'
+                })
+        
+        return data
+    
+    def create(self, validated_data):
+        """Create editorial decision and aggregate review data."""
+        from apps.reviews.models import Review, EditorialDecision
+        
+        submission = validated_data['submission']
+        
+        # Aggregate review recommendations if not provided
+        if not validated_data.get('reviews_summary'):
+            reviews = Review.objects.filter(
+                submission=submission,
+                is_published=True
+            )
+            
+            recommendations_count = {}
+            total_score = 0
+            review_count = reviews.count()
+            
+            for review in reviews:
+                rec = review.recommendation
+                recommendations_count[rec] = recommendations_count.get(rec, 0) + 1
+                if review.scores:
+                    total_score += sum([v for v in review.scores.values() if isinstance(v, (int, float))])
+            
+            validated_data['reviews_summary'] = {
+                'total_reviews': review_count,
+                'recommendations': recommendations_count,
+                'average_score': total_score / review_count if review_count > 0 else 0,
+            }
+        
+        # Create decision
+        decision = EditorialDecision.objects.create(**validated_data)
+        
+        return decision
+
+
+class RevisionRoundListSerializer(serializers.ModelSerializer):
+    """Serializer for listing revision rounds."""
+    submission_title = serializers.CharField(source='submission.title', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    is_overdue = serializers.SerializerMethodField()
+    days_remaining = serializers.SerializerMethodField()
+    
+    class Meta:
+        from apps.reviews.models import RevisionRound
+        model = RevisionRound
+        fields = [
+            'id', 'submission', 'submission_title', 'round_number',
+            'status', 'status_display', 'requested_at', 'deadline',
+            'submitted_at', 'is_overdue', 'days_remaining', 'created_at'
+        ]
+        read_only_fields = fields
+    
+    def get_is_overdue(self, obj):
+        """Check if revision is overdue."""
+        return obj.is_overdue()
+    
+    def get_days_remaining(self, obj):
+        """Get days remaining."""
+        return obj.days_remaining()
+
+
+class RevisionRoundDetailSerializer(serializers.ModelSerializer):
+    """Detailed serializer for revision rounds."""
+    submission_info = AnonymousSubmissionSerializer(source='submission', read_only=True)
+    editorial_decision_info = EditorialDecisionListSerializer(source='editorial_decision', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    is_overdue = serializers.SerializerMethodField()
+    days_remaining = serializers.SerializerMethodField()
+    reassigned_reviewers_info = ReviewerProfileSerializer(source='reassigned_reviewers', many=True, read_only=True)
+    
+    class Meta:
+        from apps.reviews.models import RevisionRound
+        model = RevisionRound
+        fields = [
+            'id', 'submission', 'submission_info', 'editorial_decision',
+            'editorial_decision_info', 'round_number', 'status', 'status_display',
+            'revision_requirements', 'reviewer_comments_included',
+            'requested_at', 'deadline', 'submitted_at', 'revised_manuscript',
+            'response_letter', 'author_notes', 'reassigned_reviewers',
+            'reassigned_reviewers_info', 'is_overdue', 'days_remaining',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = [
+            'id', 'submission_info', 'editorial_decision_info', 'status_display',
+            'is_overdue', 'days_remaining', 'requested_at', 'created_at', 'updated_at'
+        ]
+    
+    def get_is_overdue(self, obj):
+        """Check if revision is overdue."""
+        return obj.is_overdue()
+    
+    def get_days_remaining(self, obj):
+        """Get days remaining."""
+        return obj.days_remaining()
+
+
+class RevisionRoundCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating revision rounds."""
+    
+    class Meta:
+        from apps.reviews.models import RevisionRound
+        model = RevisionRound
+        fields = [
+            'id', 'submission', 'editorial_decision', 'round_number',
+            'revision_requirements', 'reviewer_comments_included',
+            'deadline', 'reassigned_reviewers'
+        ]
+        read_only_fields = ['id']
+    
+    def validate_submission(self, value):
+        """Validate submission has a revision decision."""
+        from apps.reviews.models import EditorialDecision
+        
+        latest_decision = EditorialDecision.objects.filter(
+            submission=value
+        ).order_by('-decision_date').first()
+        
+        if not latest_decision:
+            raise serializers.ValidationError(
+                "Submission has no editorial decision."
+            )
+        
+        if latest_decision.decision_type not in ['MINOR_REVISION', 'MAJOR_REVISION']:
+            raise serializers.ValidationError(
+                "Latest decision does not require revision."
+            )
+        
+        return value
+    
+    def create(self, validated_data):
+        """Create revision round."""
+        from apps.reviews.models import RevisionRound
+        
+        # Auto-set round number if not provided
+        if 'round_number' not in validated_data:
+            last_round = RevisionRound.objects.filter(
+                submission=validated_data['submission']
+            ).order_by('-round_number').first()
+            validated_data['round_number'] = (last_round.round_number + 1) if last_round else 1
+        
+        # Create revision round
+        reassigned_reviewers = validated_data.pop('reassigned_reviewers', [])
+        revision_round = RevisionRound.objects.create(**validated_data)
+        
+        # Add reassigned reviewers
+        if reassigned_reviewers:
+            revision_round.reassigned_reviewers.set(reassigned_reviewers)
+        
+        return revision_round
+
+
+class RevisionSubmissionSerializer(serializers.Serializer):
+    """Serializer for submitting revised manuscript."""
+    revised_manuscript_id = serializers.UUIDField(
+        help_text="UUID of the revised manuscript document"
+    )
+    response_letter_id = serializers.UUIDField(
+        required=False,
+        allow_null=True,
+        help_text="UUID of the response letter document"
+    )
+    author_notes = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        help_text="Author's notes about the revision"
+    )
+    
+    def validate_revised_manuscript_id(self, value):
+        """Validate revised manuscript exists."""
+        from apps.submissions.models import Document
+        
+        try:
+            document = Document.objects.get(id=value)
+            if document.document_type not in ['REVISED_MANUSCRIPT', 'MANUSCRIPT']:
+                raise serializers.ValidationError(
+                    "Document must be of type REVISED_MANUSCRIPT or MANUSCRIPT."
+                )
+        except Document.DoesNotExist:
+            raise serializers.ValidationError("Document not found.")
+        
+        return value
+    
+    def validate_response_letter_id(self, value):
+        """Validate response letter exists."""
+        if not value:
+            return value
+        
+        from apps.submissions.models import Document
+        
+        try:
+            document = Document.objects.get(id=value)
+            if document.document_type != 'REVIEWER_RESPONSE':
+                raise serializers.ValidationError(
+                    "Document must be of type REVIEWER_RESPONSE."
+                )
+        except Document.DoesNotExist:
+            raise serializers.ValidationError("Document not found.")
+        
+        return value
+

@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Revision Submitted</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            background-color: #ffffff;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 600;
+        }
+        .content {
+            padding: 30px;
+        }
+        .submission-box {
+            background-color: #d4edda;
+            border-left: 4px solid #28a745;
+            padding: 20px;
+            margin: 25px 0;
+            border-radius: 4px;
+        }
+        .submission-box h2 {
+            margin-top: 0;
+            color: #155724;
+            font-size: 20px;
+        }
+        .submission-box .label {
+            font-weight: 600;
+            color: #155724;
+            margin-top: 10px;
+        }
+        .info-box {
+            background-color: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .info-box h3 {
+            margin-top: 0;
+            color: #667eea;
+            font-size: 16px;
+        }
+        .info-box p {
+            margin: 5px 0;
+            color: #555;
+        }
+        .notes-box {
+            background-color: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 25px 0;
+            border-radius: 4px;
+            white-space: pre-wrap;
+        }
+        .button-container {
+            text-align: center;
+            margin: 30px 0;
+        }
+        .button {
+            display: inline-block;
+            padding: 14px 30px;
+            text-decoration: none;
+            background-color: #667eea;
+            color: white;
+            border-radius: 5px;
+            font-weight: 600;
+            font-size: 16px;
+        }
+        .footer {
+            background-color: #f8f9fa;
+            padding: 20px;
+            text-align: center;
+            color: #6c757d;
+            font-size: 14px;
+            border-top: 1px solid #dee2e6;
+        }
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-left: 8px;
+        }
+        .badge-success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .badge-warning {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        ul {
+            padding-left: 20px;
+        }
+        li {
+            margin: 8px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📬 Revised Manuscript Submitted</h1>
+        </div>
+        
+        <div class="content">
+            <p>Dear {{ editor_name }},</p>
+            
+            <div class="submission-box">
+                <h2>✓ Author Has Submitted Revisions</h2>
+                <p class="label">Manuscript Title:</p>
+                <p>{{ submission_title }}</p>
+                <p class="label">Author:</p>
+                <p>{{ author_name }} ({{ author_email }})</p>
+                <p class="label">Submitted At:</p>
+                <p>{{ submitted_at }}
+                    {% if submitted_on_time %}
+                        <span class="badge badge-success">On Time</span>
+                    {% else %}
+                        <span class="badge badge-warning">Late</span>
+                    {% endif %}
+                </p>
+                <p class="label">Revision Round:</p>
+                <p>{{ round_number }}</p>
+            </div>
+            
+            <p>The author has successfully submitted their revised manuscript for editorial review. Please review the changes at your earliest convenience.</p>
+            
+            <div class="info-box">
+                <h3>📊 Submission Details</h3>
+                <p><strong>Original Deadline:</strong> {{ deadline }}</p>
+                <p><strong>Submission Time:</strong> {{ submission_days }} days after request</p>
+                <p><strong>Revised Manuscript:</strong> {% if has_revised_manuscript %}✓ Included{% else %}✗ Not included{% endif %}</p>
+                <p><strong>Response Letter:</strong> {% if has_response_letter %}✓ Included{% else %}✗ Not included{% endif %}</p>
+            </div>
+            
+            {% if author_notes %}
+            <div class="notes-box">
+                <strong>Author's Notes:</strong><br><br>
+                {{ author_notes }}
+            </div>
+            {% endif %}
+            
+            <p><strong>Next Steps:</strong></p>
+            <ul>
+                <li>Review the revised manuscript and response letter</li>
+                <li>Check if all reviewer concerns have been adequately addressed</li>
+                <li>Decide if additional peer review is needed</li>
+                <li>Approve the revision to proceed, or request further changes</li>
+                <li>Make a final editorial decision when ready</li>
+            </ul>
+            
+            <div class="button-container">
+                <a href="{{ revision_url }}" class="button">Review Revision</a>
+            </div>
+            
+            <p>Please review the submission and take appropriate action through the editorial dashboard.</p>
+            
+            <p>Best regards,<br>
+            <strong>Journal Publication Portal</strong><br>
+            Automated Notification System</p>
+        </div>
+        
+        <div class="footer">
+            <p>Submission ID: {{ submission_id }}</p>
+            <p><a href="{{ dashboard_url }}">Editorial Dashboard</a></p>
+        </div>
+    </div>
+</body>
+</html>

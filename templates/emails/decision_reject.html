@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Decision: Manuscript Not Accepted</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            background-color: #ffffff;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 600;
+        }
+        .content {
+            padding: 30px;
+        }
+        .decision-box {
+            background-color: #f8d7da;
+            border-left: 4px solid #dc3545;
+            padding: 20px;
+            margin: 25px 0;
+            border-radius: 4px;
+        }
+        .decision-box h2 {
+            margin-top: 0;
+            color: #721c24;
+            font-size: 20px;
+        }
+        .decision-box .label {
+            font-weight: 600;
+            color: #721c24;
+            margin-top: 10px;
+        }
+        .decision-letter {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 20px;
+            margin: 25px 0;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            font-style: italic;
+        }
+        .stats-box {
+            background-color: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .stats-box h3 {
+            margin-top: 0;
+            color: #667eea;
+            font-size: 16px;
+        }
+        .stats-box p {
+            margin: 5px 0;
+            color: #555;
+        }
+        .encouragement-box {
+            background-color: #d1ecf1;
+            border-left: 4px solid #17a2b8;
+            padding: 15px;
+            margin: 25px 0;
+            border-radius: 4px;
+        }
+        .button-container {
+            text-align: center;
+            margin: 30px 0;
+        }
+        .button {
+            display: inline-block;
+            padding: 14px 30px;
+            text-decoration: none;
+            background-color: #6c757d;
+            color: white;
+            border-radius: 5px;
+            font-weight: 600;
+            font-size: 16px;
+        }
+        .footer {
+            background-color: #f8f9fa;
+            padding: 20px;
+            text-align: center;
+            color: #6c757d;
+            font-size: 14px;
+            border-top: 1px solid #dee2e6;
+        }
+        ul {
+            padding-left: 20px;
+        }
+        li {
+            margin: 8px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Editorial Decision: Not Accepted</h1>
+        </div>
+        
+        <div class="content">
+            <p>Dear {{ author_name }},</p>
+            
+            <div class="decision-box">
+                <h2>Editorial Decision: NOT ACCEPTED</h2>
+                <p class="label">Manuscript Title:</p>
+                <p>{{ submission_title }}</p>
+                <p class="label">Decision Date:</p>
+                <p>{{ decision_date }}</p>
+                <p class="label">Editor:</p>
+                <p>{{ editor_name }}</p>
+            </div>
+            
+            <p>After careful consideration and review, we regret to inform you that we are unable to accept your manuscript for publication at this time.</p>
+            
+            <div class="decision-letter">
+                <strong>Editorial Decision Letter:</strong><br><br>
+                {{ decision_letter }}
+            </div>
+            
+            {% if reviews_summary_text %}
+            <div class="stats-box">
+                <h3>📊 Review Summary</h3>
+                <p><strong>Total Reviews:</strong> {{ review_count }}</p>
+                <p><strong>Reviewer Recommendations:</strong></p>
+                <p style="white-space: pre-line;">{{ reviews_summary_text }}</p>
+            </div>
+            {% endif %}
+            
+            <div class="encouragement-box">
+                <p><strong>💡 Moving Forward</strong></p>
+                <p>While this decision may be disappointing, please remember that:</p>
+                <ul>
+                    <li>Rejection is a common part of the academic publishing process</li>
+                    <li>Many successful publications were initially rejected</li>
+                    <li>Reviewer feedback can strengthen your manuscript</li>
+                    <li>Consider the suggestions for improvement in the decision letter</li>
+                    <li>Your work may be a better fit for another journal</li>
+                </ul>
+            </div>
+            
+            <p><strong>Next Steps You May Consider:</strong></p>
+            <ul>
+                <li>Review the editorial feedback and reviewer comments carefully</li>
+                <li>Consider revising your manuscript based on the feedback</li>
+                <li>Explore other journals that may be a better fit for your work</li>
+                <li>Consult with colleagues about the review feedback</li>
+            </ul>
+            
+            <div class="button-container">
+                <a href="{{ submission_url }}" class="button">View Submission Details</a>
+            </div>
+            
+            <p>We appreciate your interest in our journal and wish you the best of luck with your research endeavors.</p>
+            
+            <p>Best regards,<br>
+            <strong>{{ editor_name }}</strong><br>
+            {{ editor_email }}</p>
+        </div>
+        
+        <div class="footer">
+            <p>Decision ID: {{ submission_id }}</p>
+            <p>This is an automated notification from the Journal Publication Portal</p>
+        </div>
+    </div>
+</body>
+</html>

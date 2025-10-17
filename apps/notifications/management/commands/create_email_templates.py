@@ -105,6 +105,63 @@ class Command(BaseCommand):
                 'description': 'Sent when revisions are requested for a manuscript',
                 'html_file': 'revision_requested.html',
             },
+            # Phase 4.3: Editorial Decision Making Templates
+            {
+                'template_type': 'DECISION_ACCEPT',
+                'name': 'Editorial Decision: Accepted',
+                'subject': '🎉 Manuscript Accepted - {{ submission_title }}',
+                'description': 'Sent when editorial decision is ACCEPT',
+                'html_file': 'decision_accept.html',
+            },
+            {
+                'template_type': 'DECISION_REJECT',
+                'name': 'Editorial Decision: Not Accepted',
+                'subject': 'Editorial Decision - {{ submission_title }}',
+                'description': 'Sent when editorial decision is REJECT',
+                'html_file': 'decision_reject.html',
+            },
+            {
+                'template_type': 'DECISION_MINOR_REVISION',
+                'name': 'Editorial Decision: Minor Revisions',
+                'subject': 'Minor Revisions Required - {{ submission_title }}',
+                'description': 'Sent when editorial decision is MINOR_REVISION',
+                'html_file': 'decision_minor_revision.html',
+            },
+            {
+                'template_type': 'DECISION_MAJOR_REVISION',
+                'name': 'Editorial Decision: Major Revisions',
+                'subject': 'Major Revisions Required - {{ submission_title }}',
+                'description': 'Sent when editorial decision is MAJOR_REVISION',
+                'html_file': 'decision_major_revision.html',
+            },
+            {
+                'template_type': 'REVISION_REQUEST',
+                'name': 'Revision Request Notification',
+                'subject': '{{ revision_type }} Revision Request - {{ submission_title }}',
+                'description': 'Sent when a revision round is created',
+                'html_file': 'revision_request.html',
+            },
+            {
+                'template_type': 'REVISION_SUBMITTED',
+                'name': 'Revision Submitted (Editor)',
+                'subject': 'Author Submitted Revisions - {{ submission_title }}',
+                'description': 'Sent to editor when author submits revised manuscript',
+                'html_file': 'revision_submitted.html',
+            },
+            {
+                'template_type': 'REVISION_APPROVED',
+                'name': 'Revision Approved',
+                'subject': '✅ Your Revision Has Been Approved - {{ submission_title }}',
+                'description': 'Sent when editor approves a revised manuscript',
+                'html_file': 'revision_approved.html',
+            },
+            {
+                'template_type': 'REVISION_REJECTED',
+                'name': 'Revision Not Accepted',
+                'subject': 'Revision Decision - {{ submission_title }}',
+                'description': 'Sent when editor rejects a revised manuscript',
+                'html_file': 'revision_rejected.html',
+            },
         ]
 
         templates_dir = os.path.join(settings.BASE_DIR, 'templates', 'emails')

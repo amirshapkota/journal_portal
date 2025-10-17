@@ -35,6 +35,15 @@ class EmailTemplate(models.Model):
         ('EDITORIAL_DECISION_ACCEPT', 'Manuscript Accepted'),
         ('EDITORIAL_DECISION_REJECT', 'Manuscript Rejected'),
         ('REVISION_REQUESTED', 'Revisions Requested'),
+        # Phase 4.3: Editorial Decision Making Templates
+        ('DECISION_ACCEPT', 'Decision: Accepted'),
+        ('DECISION_REJECT', 'Decision: Rejected'),
+        ('DECISION_MINOR_REVISION', 'Decision: Minor Revision'),
+        ('DECISION_MAJOR_REVISION', 'Decision: Major Revision'),
+        ('REVISION_REQUEST', 'Revision Request'),
+        ('REVISION_SUBMITTED', 'Revision Submitted (Editor Notification)'),
+        ('REVISION_APPROVED', 'Revision Approved'),
+        ('REVISION_REJECTED', 'Revision Rejected'),
     ]
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

@@ -10,7 +10,10 @@ from django.utils import timezone
 from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter
 
-from apps.reviews.models import ReviewAssignment, Review, ReviewerRecommendation
+from apps.reviews.models import (
+    ReviewAssignment, Review, ReviewerRecommendation,
+    EditorialDecision, RevisionRound, DecisionLetterTemplate
+)
 from apps.reviews.serializers import (
     ReviewAssignmentSerializer,
     ReviewAssignmentCreateSerializer,
@@ -20,6 +23,15 @@ from apps.reviews.serializers import (
     ReviewerExpertiseSerializer,
     ReviewInvitationAcceptSerializer,
     ReviewStatisticsSerializer,
+    # Phase 4.3 serializers
+    DecisionLetterTemplateSerializer,
+    EditorialDecisionListSerializer,
+    EditorialDecisionDetailSerializer,
+    EditorialDecisionCreateSerializer,
+    RevisionRoundListSerializer,
+    RevisionRoundDetailSerializer,
+    RevisionRoundCreateSerializer,
+    RevisionSubmissionSerializer,
 )
 from apps.users.models import Profile
 from apps.submissions.models import Submission
@@ -608,3 +620,432 @@ class ReviewFormTemplateViewSet(viewsets.ReadOnlyModelViewSet):
             )
         
         return queryset.order_by('-is_default', 'name')
+
+
+# ============================================================================
+# PHASE 4.3: EDITORIAL DECISION MAKING VIEWSETS
+# ============================================================================
+
+@extend_schema_view(
+    list=extend_schema(
+        summary="List decision letter templates",
+        description="Get all available decision letter templates"
+    ),
+    retrieve=extend_schema(
+        summary="Get decision letter template",
+        description="Get details of a specific decision letter template"
+    ),
+    create=extend_schema(
+        summary="Create decision letter template",
+        description="Create a new decision letter template (admin/editor only)"
+    ),
+)
+class DecisionLetterTemplateViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for decision letter templates.
+    
+    Endpoints:
+    - GET /api/v1/reviews/decision-templates/ - List templates
+    - POST /api/v1/reviews/decision-templates/ - Create template (admin/editor)
+    - GET /api/v1/reviews/decision-templates/{id}/ - Get template details
+    - PATCH /api/v1/reviews/decision-templates/{id}/ - Update template (admin/editor)
+    - DELETE /api/v1/reviews/decision-templates/{id}/ - Delete template (admin/editor)
+    """
+    from apps.reviews.models import DecisionLetterTemplate
+    from apps.reviews.serializers import DecisionLetterTemplateSerializer
+    
+    queryset = DecisionLetterTemplate.objects.filter(is_active=True)
+    serializer_class = DecisionLetterTemplateSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        """Filter templates based on journal if specified."""
+        queryset = self.queryset
+        journal_id = self.request.query_params.get('journal_id')
+        decision_type = self.request.query_params.get('decision_type')
+        
+        if journal_id:
+            # Get templates for specific journal or system-wide defaults
+            queryset = queryset.filter(
+                Q(journal_id=journal_id) | Q(journal__isnull=True)
+            )
+        
+        if decision_type:
+            queryset = queryset.filter(decision_type=decision_type)
+        
+        return queryset.order_by('-is_default', 'name')
+    
+    def perform_create(self, serializer):
+        """Set created_by field."""
+        serializer.save(created_by=self.request.user.profile)
+
+
+@extend_schema_view(
+    list=extend_schema(
+        summary="List editorial decisions",
+        description="List all editorial decisions with filtering options"
+    ),
+    retrieve=extend_schema(
+        summary="Get editorial decision details",
+        description="Get detailed information about a specific editorial decision"
+    ),
+    create=extend_schema(
+        summary="Create editorial decision",
+        description="Make an editorial decision on a submission (editor only)"
+    ),
+)
+class EditorialDecisionViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for editorial decisions.
+    
+    Endpoints:
+    - GET /api/v1/reviews/decisions/ - List decisions
+    - POST /api/v1/reviews/decisions/ - Create decision (editor only)
+    - GET /api/v1/reviews/decisions/{id}/ - Get decision details
+    - PATCH /api/v1/reviews/decisions/{id}/ - Update decision (editor only)
+    - POST /api/v1/reviews/decisions/{id}/send_letter/ - Send decision letter to author
+    - GET /api/v1/reviews/decisions/submission_decisions/ - Get decisions for a submission
+    """
+    from apps.reviews.models import EditorialDecision
+    from apps.reviews.serializers import (
+        EditorialDecisionListSerializer,
+        EditorialDecisionDetailSerializer,
+        EditorialDecisionCreateSerializer,
+    )
+    
+    queryset = EditorialDecision.objects.all()
+    permission_classes = [permissions.IsAuthenticated]
+    http_method_names = ['get', 'post', 'patch', 'head', 'options']  # No delete
+    
+    def get_serializer_class(self):
+        """Return appropriate serializer based on action."""
+        if self.action == 'list':
+            return EditorialDecisionListSerializer
+        elif self.action == 'create':
+            return EditorialDecisionCreateSerializer
+        return EditorialDecisionDetailSerializer
+    
+    def get_queryset(self):
+        """Filter queryset based on user role."""
+        user = self.request.user
+        
+        # Admins and editors can see all decisions
+        if user.is_staff:
+            return EditorialDecision.objects.all().select_related(
+                'submission', 'decided_by', 'letter_template'
+            )
+        
+        # Authors can see decisions for their submissions
+        return EditorialDecision.objects.filter(
+            submission__corresponding_author=user.profile
+        ).select_related('submission', 'decided_by', 'letter_template')
+    
+    def perform_create(self, serializer):
+        """Create editorial decision and trigger email notification."""
+        from apps.notifications.tasks import send_decision_letter_email
+        
+        decision = serializer.save()
+        
+        # Send decision letter email to author
+        try:
+            send_decision_letter_email.delay(str(decision.id))
+        except Exception as e:
+            logger.warning(f"Failed to queue decision letter email: {e}")
+        
+        logger.info(f"Editorial decision created: {decision.id}")
+    
+    @action(detail=True, methods=['post'])
+    def send_letter(self, request, pk=None):
+        """Send decision letter to author via email."""
+        from apps.notifications.tasks import send_decision_letter_email
+        
+        decision = self.get_object()
+        
+        if decision.notification_sent:
+            return Response(
+                {'detail': 'Decision letter already sent.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Send email via Celery task
+        try:
+            send_decision_letter_email.delay(str(decision.id))
+            decision.notification_sent = True
+            decision.notification_sent_at = timezone.now()
+            decision.save()
+        except Exception as e:
+            logger.error(f"Failed to send decision letter: {e}")
+            return Response(
+                {'detail': 'Failed to send decision letter. Please try again.'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        
+        logger.info(f"Decision letter sent for decision: {decision.id}")
+        
+        return Response({
+            'detail': 'Decision letter sent successfully.',
+            'sent_at': decision.notification_sent_at
+        })
+    
+    @action(detail=False, methods=['get'])
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name='submission_id',
+                type=str,
+                location=OpenApiParameter.QUERY,
+                description='UUID of the submission',
+                required=True
+            )
+        ]
+    )
+    def submission_decisions(self, request):
+        """Get all editorial decisions for a specific submission."""
+        submission_id = request.query_params.get('submission_id')
+        
+        if not submission_id:
+            return Response(
+                {'detail': 'submission_id parameter is required.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        submission = get_object_or_404(Submission, id=submission_id)
+        
+        # Check permission to view decisions
+        user = request.user
+        can_view = (
+            user.is_staff or
+            submission.corresponding_author.user == user
+        )
+        
+        if not can_view:
+            return Response(
+                {'detail': 'You do not have permission to view these decisions.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        decisions = EditorialDecision.objects.filter(
+            submission=submission
+        ).select_related('decided_by', 'letter_template').order_by('-decision_date')
+        
+        serializer = EditorialDecisionListSerializer(decisions, many=True)
+        return Response(serializer.data)
+
+
+@extend_schema_view(
+    list=extend_schema(
+        summary="List revision rounds",
+        description="List all revision rounds with filtering options"
+    ),
+    retrieve=extend_schema(
+        summary="Get revision round details",
+        description="Get detailed information about a specific revision round"
+    ),
+    create=extend_schema(
+        summary="Create revision round",
+        description="Create a revision round for a submission (editor only)"
+    ),
+)
+class RevisionRoundViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for revision rounds.
+    
+    Endpoints:
+    - GET /api/v1/reviews/revisions/ - List revision rounds
+    - POST /api/v1/reviews/revisions/ - Create revision round (editor only)
+    - GET /api/v1/reviews/revisions/{id}/ - Get revision round details
+    - PATCH /api/v1/reviews/revisions/{id}/ - Update revision round
+    - POST /api/v1/reviews/revisions/{id}/submit/ - Submit revised manuscript (author)
+    - POST /api/v1/reviews/revisions/{id}/approve/ - Approve revision (editor)
+    - POST /api/v1/reviews/revisions/{id}/reject/ - Reject revision (editor)
+    - GET /api/v1/reviews/revisions/my_revisions/ - Get author's revision rounds
+    """
+    from apps.reviews.models import RevisionRound
+    from apps.reviews.serializers import (
+        RevisionRoundListSerializer,
+        RevisionRoundDetailSerializer,
+        RevisionRoundCreateSerializer,
+        RevisionSubmissionSerializer,
+    )
+    from apps.submissions.models import Document
+    
+    queryset = RevisionRound.objects.all()
+    permission_classes = [permissions.IsAuthenticated]
+    http_method_names = ['get', 'post', 'patch', 'head', 'options']  # No delete
+    
+    def get_serializer_class(self):
+        """Return appropriate serializer based on action."""
+        if self.action == 'list':
+            return RevisionRoundListSerializer
+        elif self.action == 'create':
+            return RevisionRoundCreateSerializer
+        elif self.action == 'submit':
+            return RevisionSubmissionSerializer
+        return RevisionRoundDetailSerializer
+    
+    def get_queryset(self):
+        """Filter queryset based on user role."""
+        user = self.request.user
+        
+        # Admins and editors can see all revision rounds
+        if user.is_staff:
+            return RevisionRound.objects.all().select_related(
+                'submission', 'editorial_decision', 'revised_manuscript', 'response_letter'
+            ).prefetch_related('reassigned_reviewers')
+        
+        # Authors can see revision rounds for their submissions
+        return RevisionRound.objects.filter(
+            submission__corresponding_author=user.profile
+        ).select_related(
+            'submission', 'editorial_decision', 'revised_manuscript', 'response_letter'
+        ).prefetch_related('reassigned_reviewers')
+    
+    def perform_create(self, serializer):
+        """Create revision round and send notification to author."""
+        from apps.notifications.tasks import send_revision_request_email
+        
+        revision_round = serializer.save()
+        
+        # Update submission status
+        revision_round.submission.status = 'REVISION_REQUIRED'
+        revision_round.submission.save()
+        
+        # Send revision request email to author
+        try:
+            send_revision_request_email.delay(str(revision_round.id))
+        except Exception as e:
+            logger.warning(f"Failed to queue revision request email: {e}")
+        
+        logger.info(f"Revision round created: {revision_round.id}")
+    
+    @action(detail=True, methods=['post'])
+    def submit(self, request, pk=None):
+        """Submit revised manuscript (author only)."""
+        revision_round = self.get_object()
+        
+        # Check if user is the corresponding author
+        if revision_round.submission.corresponding_author != request.user.profile:
+            return Response(
+                {'detail': 'Only the corresponding author can submit revisions.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        if revision_round.status not in ['REQUESTED', 'IN_PROGRESS']:
+            return Response(
+                {'detail': 'This revision round is not accepting submissions.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Validate submission data
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        # Update revision round
+        revision_round.status = 'SUBMITTED'
+        revision_round.submitted_at = timezone.now()
+        revision_round.revised_manuscript_id = serializer.validated_data['revised_manuscript_id']
+        revision_round.response_letter_id = serializer.validated_data.get('response_letter_id')
+        revision_round.author_notes = serializer.validated_data.get('author_notes', '')
+        revision_round.save()
+        
+        # Update submission status
+        revision_round.submission.status = 'REVISED'
+        revision_round.submission.save()
+        
+        # Send revision submitted email to editor
+        from apps.notifications.tasks import send_revision_submitted_notification
+        try:
+            send_revision_submitted_notification.delay(str(revision_round.id))
+        except Exception as e:
+            logger.warning(f"Failed to queue revision submitted notification: {e}")
+        
+        logger.info(f"Revision submitted for round: {revision_round.id}")
+        
+        detail_serializer = RevisionRoundDetailSerializer(revision_round)
+        return Response(detail_serializer.data)
+    
+    @action(detail=True, methods=['post'])
+    def approve(self, request, pk=None):
+        """Approve revised manuscript (editor only)."""
+        if not request.user.is_staff:
+            return Response(
+                {'detail': 'Only editors can approve revisions.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        revision_round = self.get_object()
+        
+        if revision_round.status != 'SUBMITTED':
+            return Response(
+                {'detail': 'Only submitted revisions can be approved.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Update status
+        revision_round.status = 'APPROVED'
+        revision_round.save()
+        
+        # Update submission status
+        revision_round.submission.status = 'UNDER_REVIEW'
+        revision_round.submission.save()
+        
+        # Send approval notification to author
+        from apps.notifications.tasks import send_revision_approved_email
+        try:
+            send_revision_approved_email.delay(str(revision_round.id))
+        except Exception as e:
+            logger.warning(f"Failed to queue revision approved email: {e}")
+        
+        logger.info(f"Revision approved for round: {revision_round.id}")
+        
+        serializer = self.get_serializer(revision_round)
+        return Response(serializer.data)
+    
+    @action(detail=True, methods=['post'])
+    def reject(self, request, pk=None):
+        """Reject revised manuscript (editor only)."""
+        if not request.user.is_staff:
+            return Response(
+                {'detail': 'Only editors can reject revisions.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        revision_round = self.get_object()
+        
+        if revision_round.status != 'SUBMITTED':
+            return Response(
+                {'detail': 'Only submitted revisions can be rejected.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Update status
+        revision_round.status = 'REJECTED'
+        revision_round.save()
+        
+        # Update submission status
+        revision_round.submission.status = 'REJECTED'
+        revision_round.submission.save()
+        
+        # Send rejection notification to author
+        from apps.notifications.tasks import send_revision_rejected_email
+        try:
+            send_revision_rejected_email.delay(str(revision_round.id))
+        except Exception as e:
+            logger.warning(f"Failed to queue revision rejected email: {e}")
+        
+        logger.info(f"Revision rejected for round: {revision_round.id}")
+        
+        serializer = self.get_serializer(revision_round)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def my_revisions(self, request):
+        """Get current author's revision rounds."""
+        revisions = RevisionRound.objects.filter(
+            submission__corresponding_author=request.user.profile
+        ).select_related(
+            'submission', 'editorial_decision'
+        ).order_by('-requested_at')
+        
+        serializer = self.get_serializer(revisions, many=True)
+        return Response(serializer.data)

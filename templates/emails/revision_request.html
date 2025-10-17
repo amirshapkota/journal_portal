@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Revision Request</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            background-color: #ffffff;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 600;
+        }
+        .content {
+            padding: 30px;
+        }
+        .revision-box {
+            background-color: #e7e3fc;
+            border-left: 4px solid #667eea;
+            padding: 20px;
+            margin: 25px 0;
+            border-radius: 4px;
+        }
+        .revision-box h2 {
+            margin-top: 0;
+            color: #4c3fa3;
+            font-size: 20px;
+        }
+        .revision-box .label {
+            font-weight: 600;
+            color: #4c3fa3;
+            margin-top: 10px;
+        }
+        .requirements-box {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 20px;
+            margin: 25px 0;
+            border-radius: 4px;
+            white-space: pre-wrap;
+        }
+        .deadline-box {
+            background-color: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 25px 0;
+            border-radius: 4px;
+        }
+        .deadline-box h3 {
+            margin-top: 0;
+            color: #856404;
+            font-size: 16px;
+        }
+        .deadline-box p {
+            margin: 5px 0;
+            color: #856404;
+        }
+        .button-container {
+            text-align: center;
+            margin: 30px 0;
+        }
+        .button {
+            display: inline-block;
+            padding: 14px 30px;
+            text-decoration: none;
+            background-color: #667eea;
+            color: white;
+            border-radius: 5px;
+            font-weight: 600;
+            font-size: 16px;
+        }
+        .footer {
+            background-color: #f8f9fa;
+            padding: 20px;
+            text-align: center;
+            color: #6c757d;
+            font-size: 14px;
+            border-top: 1px solid #dee2e6;
+        }
+        ul {
+            padding-left: 20px;
+        }
+        li {
+            margin: 8px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📝 Revision Request - Round {{ round_number }}</h1>
+        </div>
+        
+        <div class="content">
+            <p>Dear {{ author_name }},</p>
+            
+            <div class="revision-box">
+                <h2>{{ revision_type }} Revision Requested</h2>
+                <p class="label">Manuscript Title:</p>
+                <p>{{ submission_title }}</p>
+                <p class="label">Revision Round:</p>
+                <p>{{ round_number }}</p>
+                <p class="label">Editor:</p>
+                <p>{{ editor_name }}</p>
+            </div>
+            
+            <p>Following the editorial review, we are requesting {{ revision_type|lower }} revisions to your manuscript. Please review the requirements below carefully.</p>
+            
+            <div class="requirements-box">
+                <strong>Revision Requirements:</strong><br><br>
+                {{ revision_requirements }}
+            </div>
+            
+            {% if deadline %}
+            <div class="deadline-box">
+                <h3>⏰ Revision Deadline</h3>
+                <p><strong>Deadline:</strong> {{ deadline }}</p>
+                <p><strong>Days Remaining:</strong> {{ days_to_deadline }} days</p>
+                <p>Please submit your revised manuscript by the deadline. If you need an extension, contact us as soon as possible.</p>
+            </div>
+            {% endif %}
+            
+            {% if reviewer_comments_included %}
+            <p><strong>📋 Reviewer Comments:</strong> Detailed reviewer comments are available in your submission dashboard and should be addressed in your response letter.</p>
+            {% endif %}
+            
+            {% if reassigned_reviewers %}
+            <p><strong>👥 Additional Reviewers:</strong> Your revised manuscript will be reviewed by: {{ reassigned_reviewers }}</p>
+            {% endif %}
+            
+            <p><strong>What to Submit:</strong></p>
+            <ul>
+                <li><strong>Revised Manuscript:</strong> Updated manuscript file with all changes</li>
+                <li><strong>Response Letter:</strong> Point-by-point response to reviewer comments</li>
+                <li><strong>Marked-up Version (Optional):</strong> Manuscript with tracked changes</li>
+                <li><strong>Author Notes:</strong> Any additional information for the editor</li>
+            </ul>
+            
+            <p><strong>Tips for Successful Revision:</strong></p>
+            <ul>
+                <li>Address every comment from reviewers and editors</li>
+                <li>Clearly explain what changes you made and where</li>
+                <li>If you disagree with a comment, provide a respectful justification</li>
+                <li>Highlight changes in your manuscript (use track changes or color)</li>
+                <li>Proofread carefully before resubmission</li>
+            </ul>
+            
+            <div class="button-container">
+                <a href="{{ revision_url }}" class="button">Submit Revised Manuscript</a>
+            </div>
+            
+            <p>We look forward to receiving your revised manuscript. If you have any questions about the revision requirements, please don't hesitate to contact us.</p>
+            
+            <p>Best regards,<br>
+            <strong>{{ editor_name }}</strong><br>
+            {{ editor_email }}</p>
+        </div>
+        
+        <div class="footer">
+            <p>Submission ID: {{ submission_id }}</p>
+            <p>This is an automated notification from the Journal Publication Portal</p>
+        </div>
+    </div>
+</body>
+</html>
