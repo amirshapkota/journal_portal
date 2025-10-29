@@ -11,9 +11,15 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework import status
-
-from .utils import search_ror_organizations, get_ror_organization
-from .serializers import ROROrganizationSerializer
+from .utils import (
+    search_ror_organizations, get_ror_organization,
+	search_openalex_authors, get_openalex_author,
+    search_openalex_institutions, get_openalex_institution,
+    search_openalex_works, get_openalex_work,
+)
+from .serializers import (
+    ROROrganizationSerializer, OpenAlexAuthorSerializer, OpenAlexInstitutionSerializer, OpenAlexWorkSerializer
+)
 
 import json
 import base64
@@ -410,6 +416,99 @@ class ROROrganizationDetailView(APIView):
         try:
             data = get_ror_organization(ror_id)
             serialized = ROROrganizationSerializer.from_ror_result(data)
+            return Response(serialized)
+        except Exception as e:
+            return Response({'detail': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
+
+class OpenAlexAuthorSearchView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        query = request.query_params.get('query')
+        page = int(request.query_params.get('page', 1))
+        per_page = int(request.query_params.get('per_page', 10))
+        if not query:
+            return Response({'detail': 'Missing query parameter.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            data = search_openalex_authors(query, page=page, per_page=per_page)
+            results = data.get('results', [])
+            serialized = [OpenAlexAuthorSerializer.from_openalex_result(r) for r in results]
+            return Response({
+                'count': data.get('meta', {}).get('count', len(results)),
+                'results': serialized
+            })
+        except Exception as e:
+            return Response({'detail': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
+
+class OpenAlexAuthorDetailView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request, author_id):
+        try:
+            data = get_openalex_author(author_id)
+            serialized = OpenAlexAuthorSerializer.from_openalex_result(data)
+            return Response(serialized)
+        except Exception as e:
+            return Response({'detail': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
+
+class OpenAlexInstitutionSearchView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        query = request.query_params.get('query')
+        page = int(request.query_params.get('page', 1))
+        per_page = int(request.query_params.get('per_page', 10))
+        if not query:
+            return Response({'detail': 'Missing query parameter.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            data = search_openalex_institutions(query, page=page, per_page=per_page)
+            results = data.get('results', [])
+            serialized = [OpenAlexInstitutionSerializer.from_openalex_result(r) for r in results]
+            return Response({
+                'count': data.get('meta', {}).get('count', len(results)),
+                'results': serialized
+            })
+        except Exception as e:
+            return Response({'detail': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
+
+class OpenAlexInstitutionDetailView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request, inst_id):
+        try:
+            data = get_openalex_institution(inst_id)
+            serialized = OpenAlexInstitutionSerializer.from_openalex_result(data)
+            return Response(serialized)
+        except Exception as e:
+            return Response({'detail': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
+
+class OpenAlexWorkSearchView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        query = request.query_params.get('query')
+        page = int(request.query_params.get('page', 1))
+        per_page = int(request.query_params.get('per_page', 10))
+        if not query:
+            return Response({'detail': 'Missing query parameter.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            data = search_openalex_works(query, page=page, per_page=per_page)
+            results = data.get('results', [])
+            serialized = [OpenAlexWorkSerializer.from_openalex_result(r) for r in results]
+            return Response({
+                'count': data.get('meta', {}).get('count', len(results)),
+                'results': serialized
+            })
+        except Exception as e:
+            return Response({'detail': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
+
+class OpenAlexWorkDetailView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request, work_id):
+        try:
+            data = get_openalex_work(work_id)
+            serialized = OpenAlexWorkSerializer.from_openalex_result(data)
             return Response(serialized)
         except Exception as e:
             return Response({'detail': str(e)}, status=status.HTTP_502_BAD_GATEWAY)

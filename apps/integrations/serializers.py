@@ -79,3 +79,67 @@ class ROROrganizationSerializer(serializers.Serializer):
             'established': established,
             'status': status,
         }
+
+
+class OpenAlexAuthorSerializer(serializers.Serializer):
+    id = serializers.CharField()
+    display_name = serializers.CharField()
+    orcid = serializers.CharField(allow_null=True, required=False)
+    works_count = serializers.IntegerField(required=False)
+    cited_by_count = serializers.IntegerField(required=False)
+    last_known_institutions = serializers.ListField(child=serializers.CharField(), required=False)
+    # Add more fields as needed
+
+    @staticmethod
+    def from_openalex_result(result):
+        # last_known_institutions is a list of dicts; extract display_names
+        institutions = result.get('last_known_institutions') or []
+        inst_names = [i.get('display_name') for i in institutions if i.get('display_name')]
+        return {
+            'id': result.get('id'),
+            'display_name': result.get('display_name'),
+            'orcid': result.get('orcid'),
+            'works_count': result.get('works_count'),
+            'cited_by_count': result.get('cited_by_count'),
+            'last_known_institutions': inst_names,
+        }
+
+
+class OpenAlexInstitutionSerializer(serializers.Serializer):
+    id = serializers.CharField()
+    display_name = serializers.CharField()
+    ror = serializers.CharField(allow_null=True, required=False)
+    country_code = serializers.CharField(allow_null=True, required=False)
+    type = serializers.CharField(allow_null=True, required=False)
+    # Add more fields as needed
+
+    @staticmethod
+    def from_openalex_result(result):
+        return {
+            'id': result.get('id'),
+            'display_name': result.get('display_name'),
+            'ror': result.get('ror'),
+            'country_code': result.get('country_code'),
+            'type': result.get('type'),
+        }
+
+
+class OpenAlexWorkSerializer(serializers.Serializer):
+    id = serializers.CharField()
+    display_name = serializers.CharField()
+    publication_year = serializers.IntegerField(required=False)
+    doi = serializers.CharField(allow_null=True, required=False)
+    type = serializers.CharField(allow_null=True, required=False)
+    authorships = serializers.ListField(child=serializers.DictField(), required=False)
+    # Add more fields as needed
+
+    @staticmethod
+    def from_openalex_result(result):
+        return {
+            'id': result.get('id'),
+            'display_name': result.get('display_name'),
+            'publication_year': result.get('publication_year'),
+            'doi': result.get('doi'),
+            'type': result.get('type'),
+            'authorships': result.get('authorships', []),
+        }
