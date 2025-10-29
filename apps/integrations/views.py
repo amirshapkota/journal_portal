@@ -12,6 +12,9 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework import status
 
+from .utils import search_ror_organizations, get_ror_organization
+from .serializers import ROROrganizationSerializer
+
 import json
 import base64
 import secrets
@@ -379,3 +382,34 @@ class ORCIDSyncProfileView(APIView):
 		integ.save(update_fields=['orcid_data', 'last_sync_at', 'status'])
 
 		return Response({'detail': 'Profile synced', 'display_name': profile.display_name, 'affiliation_name': profile.affiliation_name})
+
+
+class ROROrganizationSearchView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        query = request.query_params.get('query')
+        page = int(request.query_params.get('page', 1))
+        if not query:
+            return Response({'detail': 'Missing query parameter.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            data = search_ror_organizations(query, page=page)
+            results = data.get('items', [])
+            serialized = [ROROrganizationSerializer.from_ror_result(r) for r in results]
+            return Response({
+                'count': data.get('number_of_results', len(results)),
+                'results': serialized
+            })
+        except Exception as e:
+            return Response({'detail': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
+
+class ROROrganizationDetailView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request, ror_id):
+        try:
+            data = get_ror_organization(ror_id)
+            serialized = ROROrganizationSerializer.from_ror_result(data)
+            return Response(serialized)
+        except Exception as e:
+            return Response({'detail': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
