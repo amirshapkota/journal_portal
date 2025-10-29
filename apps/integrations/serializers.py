@@ -19,42 +19,63 @@ class ROROrganizationSerializer(serializers.Serializer):
     name = serializers.CharField()
     country = serializers.CharField(required=False)
     country_code = serializers.CharField(required=False)
+    city = serializers.CharField(required=False)
     location = serializers.CharField(required=False)
     types = serializers.ListField(child=serializers.CharField(), required=False)
     external_ids = serializers.DictField(required=False)
     acronyms = serializers.ListField(child=serializers.CharField(), required=False)
-    addresses = serializers.ListField(child=serializers.DictField(), required=False)
     links = serializers.ListField(child=serializers.CharField(), required=False)
     established = serializers.CharField(required=False)
     status = serializers.CharField(required=False)
 
     @staticmethod
     def from_ror_result(result):
-        # Map ROR API result to serializer fields
-        # ROR API: name is at result['name'], country at result['country']['country_name'],
-        # location is first address's city/country if available
-        addresses = result.get('addresses', [])
-        location = None
-        if addresses:
-            city = addresses[0].get('city')
-            country = addresses[0].get('country')
-            location = ', '.join([v for v in [city, country] if v])
-        country_name = None
-        country_code = None
-        if addresses:
-            country_name = addresses[0].get('country')
-            country_code = addresses[0].get('country_code')
+        # Name: Prefer ror_display/label, fallback to first name
+        names = result.get('names', [])
+        name = None
+        for n in names:
+            if 'ror_display' in n.get('types', []) or 'label' in n.get('types', []):
+                name = n.get('value')
+                break
+        if not name and names:
+            name = names[0].get('value')
+        # Acronyms: All names with type 'acronym'
+        acronyms = [n['value'] for n in names if 'acronym' in n.get('types', [])]
+        # Links: All link values
+        links = [l['value'] for l in result.get('links', []) if 'value' in l]
+        # Types
+        types = result.get('types', [])
+        # External IDs
+        ext_ids = {}
+        for eid in result.get('external_ids', []):
+            t = eid.get('type')
+            val = eid.get('preferred') or (eid.get('all') or [None])[0]
+            if t and val:
+                ext_ids[t] = val
+        # Locations
+        locations = result.get('locations', [])
+        country = country_code = city = location = None
+        if locations:
+            geo = locations[0].get('geonames_details', {})
+            country = geo.get('country_name')
+            country_code = geo.get('country_code')
+            city = geo.get('name')
+            location = ', '.join([v for v in [city, country] if v]) if city or country else None
+        # Established
+        established = str(result.get('established')) if result.get('established') is not None else None
+        # Status
+        status = result.get('status')
         return {
             'id': result.get('id'),
-            'name': result.get('name'),
-            'country': country_name,
+            'name': name,
+            'country': country,
             'country_code': country_code,
+            'city': city,
             'location': location,
-            'types': result.get('types', []),
-            'external_ids': result.get('external_ids', {}),
-            'acronyms': result.get('acronyms', []),
-            'addresses': addresses,
-            'links': result.get('links', []),
-            'established': result.get('established'),
-            'status': result.get('status'),
+            'types': types,
+            'external_ids': ext_ids,
+            'acronyms': acronyms,
+            'links': links,
+            'established': established,
+            'status': status,
         }
