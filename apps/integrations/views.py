@@ -17,12 +17,19 @@ from .utils import (
     search_openalex_institutions, get_openalex_institution,
     search_openalex_works, get_openalex_work,
 	doaj_search_journals, doaj_search_articles, doaj_check_inclusion,
-	doaj_fetch_journal_metadata, doaj_fetch_article_metadata, doaj_submit_or_update
+	doaj_fetch_journal_metadata, doaj_fetch_article_metadata, doaj_submit_or_update,
+	ojs_list_reviews, ojs_get_review, ojs_create_review, ojs_update_review, ojs_delete_review,
+	ojs_list_comments, ojs_get_comment, ojs_create_comment, ojs_update_comment, ojs_delete_comment,
+	ojs_list_users, ojs_get_user, ojs_create_user, ojs_update_user, ojs_delete_user,
+	ojs_list_articles, ojs_get_article, ojs_create_article, ojs_update_article, ojs_delete_article,
+	ojs_list_journals, ojs_list_submissions, ojs_create_submission, ojs_update_submission
 )
 from .serializers import (
     ROROrganizationSerializer,
 	OpenAlexAuthorSerializer, OpenAlexInstitutionSerializer, OpenAlexWorkSerializer,
-	DOAJJournalSerializer, DOAJArticleSerializer, DOAJInclusionCheckSerializer, DOAJSubmitUpdateSerializer
+	DOAJJournalSerializer, DOAJArticleSerializer, DOAJInclusionCheckSerializer, DOAJSubmitUpdateSerializer,
+	OJSReviewSerializer, OJSCommentSerializer, OJSUserSerializer, OJSArticleSerializer,
+	OJSJournalSerializer, OJSSubmissionSerializer
 )
 from rest_framework.permissions import IsAuthenticatedOrReadOnly
 
@@ -612,5 +619,189 @@ class DOAJSubmitUpdateView(APIView):
 		try:
 			resp = doaj_submit_or_update(data, api_key, endpoint=endpoint, method=method, object_id=object_id)
 			return Response({'status': 'success', 'message': resp})
+		except Exception as e:
+			return Response({'status': 'error', 'message': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
+		
+# --- OJS Review Sync APIViews ---
+class OJSReviewSyncAPIView(APIView):
+	def get(self, request):
+		reviews = ojs_list_reviews()
+		data = [OJSReviewSerializer.from_ojs_result(r) for r in reviews]
+		return Response(data)
+
+	def post(self, request):
+		serializer = OJSReviewSerializer(data=request.data)
+		serializer.is_valid(raise_exception=True)
+		review = ojs_create_review(serializer.validated_data)
+		return Response(OJSReviewSerializer.from_ojs_result(review), status=201)
+
+class OJSReviewDetailSyncAPIView(APIView):
+	def get(self, request, review_id):
+		review = ojs_get_review(review_id)
+		if not review:
+			return Response({'detail': 'Not found.'}, status=404)
+		return Response(OJSReviewSerializer.from_ojs_result(review))
+
+	def put(self, request, review_id):
+		serializer = OJSReviewSerializer(data=request.data)
+		serializer.is_valid(raise_exception=True)
+		review = ojs_update_review(review_id, serializer.validated_data)
+		return Response(OJSReviewSerializer.from_ojs_result(review))
+
+	def delete(self, request, review_id):
+		ojs_delete_review(review_id)
+		return Response(status=204)
+
+# --- OJS Comment Sync APIViews ---
+class OJSCommentSyncAPIView(APIView):
+	def get(self, request):
+		comments = ojs_list_comments()
+		data = [OJSCommentSerializer.from_ojs_result(c) for c in comments]
+		return Response(data)
+
+	def post(self, request):
+		serializer = OJSCommentSerializer(data=request.data)
+		serializer.is_valid(raise_exception=True)
+		comment = ojs_create_comment(serializer.validated_data)
+		return Response(OJSCommentSerializer.from_ojs_result(comment), status=201)
+
+class OJSCommentDetailSyncAPIView(APIView):
+	def get(self, request, comment_id):
+		comment = ojs_get_comment(comment_id)
+		if not comment:
+			return Response({'detail': 'Not found.'}, status=404)
+		return Response(OJSCommentSerializer.from_ojs_result(comment))
+
+	def put(self, request, comment_id):
+		serializer = OJSCommentSerializer(data=request.data)
+		serializer.is_valid(raise_exception=True)
+		comment = ojs_update_comment(comment_id, serializer.validated_data)
+		return Response(OJSCommentSerializer.from_ojs_result(comment))
+
+	def delete(self, request, comment_id):
+		ojs_delete_comment(comment_id)
+		return Response(status=204)
+	
+# --- OJS User Sync APIViews ---
+class OJSUserSyncAPIView(APIView):
+	"""List and create OJS users via sync."""
+	def get(self, request):
+		users = ojs_list_users()
+		data = [OJSUserSerializer.from_ojs_result(u) for u in users]
+		return Response(data)
+
+	def post(self, request):
+		serializer = OJSUserSerializer(data=request.data)
+		serializer.is_valid(raise_exception=True)
+		user = ojs_create_user(serializer.validated_data)
+		return Response(OJSUserSerializer.from_ojs_result(user), status=201)
+
+
+class OJSUserDetailSyncAPIView(APIView):
+	"""Retrieve, update, or delete a single OJS user via sync."""
+	def get(self, request, user_id):
+		user = ojs_get_user(user_id)
+		if not user:
+			return Response({'detail': 'Not found.'}, status=404)
+		return Response(OJSUserSerializer.from_ojs_result(user))
+
+	def put(self, request, user_id):
+		serializer = OJSUserSerializer(data=request.data)
+		serializer.is_valid(raise_exception=True)
+		user = ojs_update_user(user_id, serializer.validated_data)
+		return Response(OJSUserSerializer.from_ojs_result(user))
+
+	def delete(self, request, user_id):
+		ojs_delete_user(user_id)
+		return Response(status=204)
+
+# --- OJS Article Sync API Views ---
+class OJSArticleListView(APIView):
+	permission_classes = [IsAuthenticated]
+
+	def get(self, request):
+		try:
+			data = ojs_list_articles()
+			results = data.get('items', data)
+			serialized = [OJSArticleSerializer.from_ojs_result(a) for a in results]
+			return Response({'results': serialized})
+		except Exception as e:
+			return Response({'detail': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
+
+	def post(self, request):
+		try:
+			resp = ojs_create_article(request.data)
+			return Response({'status': 'success', 'result': resp})
+		except Exception as e:
+			return Response({'status': 'error', 'message': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
+
+
+class OJSArticleDetailView(APIView):
+	permission_classes = [IsAuthenticated]
+
+	def get(self, request, article_id):
+		try:
+			data = ojs_get_article(article_id)
+			serialized = OJSArticleSerializer.from_ojs_result(data)
+			return Response(serialized)
+		except Exception as e:
+			return Response({'detail': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
+
+	def put(self, request, article_id):
+		try:
+			resp = ojs_update_article(article_id, request.data)
+			return Response({'status': 'success', 'result': resp})
+		except Exception as e:
+			return Response({'status': 'error', 'message': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
+
+	def delete(self, request, article_id):
+		try:
+			success = ojs_delete_article(article_id)
+			return Response({'status': 'success', 'deleted': success})
+		except Exception as e:
+			return Response({'status': 'error', 'message': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
+
+# --- OJS Sync API Views ---
+class OJSJournalListView(APIView):
+	permission_classes = [IsAuthenticated]
+
+	def get(self, request):
+		try:
+			data = ojs_list_journals()
+			results = data.get('items', data)  # OJS API may return list or dict
+			serialized = [OJSJournalSerializer.from_ojs_result(j) for j in results]
+			return Response({'results': serialized})
+		except Exception as e:
+			return Response({'detail': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
+
+class OJSSubmissionListView(APIView):
+	permission_classes = [IsAuthenticated]
+
+	def get(self, request):
+		try:
+			data = ojs_list_submissions()
+			results = data.get('items', data)
+			serialized = [OJSSubmissionSerializer.from_ojs_result(s) for s in results]
+			return Response({'results': serialized})
+		except Exception as e:
+			return Response({'detail': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
+
+class OJSSubmissionCreateView(APIView):
+	permission_classes = [IsAuthenticated]
+
+	def post(self, request):
+		try:
+			resp = ojs_create_submission(request.data)
+			return Response({'status': 'success', 'result': resp})
+		except Exception as e:
+			return Response({'status': 'error', 'message': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
+
+class OJSSubmissionUpdateView(APIView):
+	permission_classes = [IsAuthenticated]
+
+	def put(self, request, submission_id):
+		try:
+			resp = ojs_update_submission(submission_id, request.data)
+			return Response({'status': 'success', 'result': resp})
 		except Exception as e:
 			return Response({'status': 'error', 'message': str(e)}, status=status.HTTP_502_BAD_GATEWAY)

@@ -214,3 +214,107 @@ class DOAJInclusionCheckSerializer(serializers.Serializer):
 class DOAJSubmitUpdateSerializer(serializers.Serializer):
     status = serializers.CharField()
     message = serializers.CharField(allow_blank=True, required=False)
+
+# --- OJS Review Serializer ---
+class OJSReviewSerializer(serializers.Serializer):
+    id = serializers.CharField()
+    submission_id = serializers.CharField()
+    reviewer_id = serializers.CharField()
+    recommendation = serializers.CharField(allow_blank=True, required=False)
+    comments = serializers.CharField(allow_blank=True, required=False)
+    status = serializers.CharField()
+    # Add more fields as needed
+
+    @staticmethod
+    def from_ojs_result(result):
+        return {
+            'id': result.get('id'),
+            'submission_id': result.get('submission_id'),
+            'reviewer_id': result.get('reviewer_id'),
+            'recommendation': result.get('recommendation', ''),
+            'comments': result.get('comments', ''),
+            'status': result.get('status'),
+        }
+
+# --- OJS Comment Serializer ---
+class OJSCommentSerializer(serializers.Serializer):
+    id = serializers.CharField()
+    submission_id = serializers.CharField()
+    user_id = serializers.CharField()
+    content = serializers.CharField()
+    created_at = serializers.DateTimeField(required=False)
+    # Add more fields as needed
+
+    @staticmethod
+    def from_ojs_result(result):
+        return {
+            'id': result.get('id'),
+            'submission_id': result.get('submission_id'),
+            'user_id': result.get('user_id'),
+            'content': result.get('content'),
+            'created_at': result.get('created_at'),
+        }
+# --- OJS User Serializer ---
+class OJSUserSerializer(serializers.Serializer):
+    id = serializers.CharField()
+    email = serializers.EmailField()
+    first_name = serializers.CharField(allow_blank=True, required=False)
+    last_name = serializers.CharField(allow_blank=True, required=False)
+    roles = serializers.ListField(child=serializers.CharField(), required=False)
+    # Add more fields as needed
+
+    @staticmethod
+    def from_ojs_result(result):
+        return {
+            'id': result.get('id'),
+            'email': result.get('email'),
+            'first_name': result.get('first_name', ''),
+            'last_name': result.get('last_name', ''),
+            'roles': result.get('roles', []),
+        }
+# --- OJS Article Serializer ---
+class OJSArticleSerializer(serializers.Serializer):
+    id = serializers.CharField()
+    title = serializers.CharField()
+    abstract = serializers.CharField(allow_blank=True, required=False)
+    status = serializers.CharField()
+    # Add more fields as needed (authors, files, etc.)
+
+    @staticmethod
+    def from_ojs_result(result):
+        return {
+            'id': result.get('id'),
+            'title': result.get('title'),
+            'abstract': result.get('abstract', ''),
+            'status': result.get('status'),
+        }
+
+# --- OJS Serializers ---
+class OJSJournalSerializer(serializers.Serializer):
+    id = serializers.CharField()
+    name = serializers.CharField()
+    description = serializers.CharField(allow_blank=True, required=False)
+    # Add more fields as needed
+
+    @staticmethod
+    def from_ojs_result(result):
+        return {
+            'id': result.get('id'),
+            'name': result.get('name'),
+            'description': result.get('description', ''),
+        }
+
+
+class OJSSubmissionSerializer(serializers.Serializer):
+    id = serializers.CharField()
+    title = serializers.CharField()
+    status = serializers.CharField()
+    # Add more fields as needed
+
+    @staticmethod
+    def from_ojs_result(result):
+        return {
+            'id': result.get('id'),
+            'title': result.get('title'),
+            'status': result.get('status'),
+        }

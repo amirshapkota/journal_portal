@@ -5,6 +5,7 @@ OpenAlex API client utilities (extended).
 Docs: https://docs.openalex.org/api
 """
 import requests
+from django.conf import settings
 
 ROR_API_BASE = "https://api.ror.org/organizations"
 OPENALEX_BASE = "https://api.openalex.org"
@@ -154,3 +155,184 @@ def doaj_submit_or_update(data, api_key, endpoint="journals", method="POST", obj
     resp.raise_for_status()
     return resp.json()
 
+# OJS API base URL and key from settings
+OJS_API_BASE = getattr(settings, 'OJS_API_BASE_URL', '')
+OJS_API_KEY = getattr(settings, 'OJS_API_KEY', '')
+
+# --- OJS → Django ---
+def ojs_list_journals():
+    url = f"{OJS_API_BASE}/api/v1/journals"
+    headers = {"Authorization": f"Token {OJS_API_KEY}"}
+    resp = requests.get(url, headers=headers)
+    resp.raise_for_status()
+    return resp.json()
+
+def ojs_list_submissions():
+    url = f"{OJS_API_BASE}/api/v1/submissions"
+    headers = {"Authorization": f"Token {OJS_API_KEY}"}
+    resp = requests.get(url, headers=headers)
+    resp.raise_for_status()
+    return resp.json()
+
+# --- Django → OJS ---
+def ojs_create_submission(data):
+    url = f"{OJS_API_BASE}/api/v1/submissions"
+    headers = {"Authorization": f"Token {OJS_API_KEY}", "Content-Type": "application/json"}
+    resp = requests.post(url, json=data, headers=headers)
+    resp.raise_for_status()
+    return resp.json()
+
+def ojs_update_submission(submission_id, data):
+    url = f"{OJS_API_BASE}/api/v1/submissions/{submission_id}"
+    headers = {"Authorization": f"Token {OJS_API_KEY}", "Content-Type": "application/json"}
+    resp = requests.put(url, json=data, headers=headers)
+    resp.raise_for_status()
+    return resp.json()
+
+# --- OJS Article (Submission) Sync Utilities ---
+
+def ojs_list_articles():
+    url = f"{OJS_API_BASE}/api/v1/articles"
+    headers = {"Authorization": f"Token {OJS_API_KEY}"}
+    resp = requests.get(url, headers=headers)
+    resp.raise_for_status()
+    return resp.json()
+
+def ojs_get_article(article_id):
+    url = f"{OJS_API_BASE}/api/v1/articles/{article_id}"
+    headers = {"Authorization": f"Token {OJS_API_KEY}"}
+    resp = requests.get(url, headers=headers)
+    resp.raise_for_status()
+    return resp.json()
+
+def ojs_create_article(data):
+    url = f"{OJS_API_BASE}/api/v1/articles"
+    headers = {"Authorization": f"Token {OJS_API_KEY}", "Content-Type": "application/json"}
+    resp = requests.post(url, json=data, headers=headers)
+    resp.raise_for_status()
+    return resp.json()
+
+def ojs_update_article(article_id, data):
+    url = f"{OJS_API_BASE}/api/v1/articles/{article_id}"
+    headers = {"Authorization": f"Token {OJS_API_KEY}", "Content-Type": "application/json"}
+    resp = requests.put(url, json=data, headers=headers)
+    resp.raise_for_status()
+    return resp.json()
+
+def ojs_delete_article(article_id):
+    url = f"{OJS_API_BASE}/api/v1/articles/{article_id}"
+    headers = {"Authorization": f"Token {OJS_API_KEY}"}
+    resp = requests.delete(url, headers=headers)
+    resp.raise_for_status()
+    return resp.status_code == 204
+
+# --- OJS User Sync Utilities ---
+
+def ojs_list_users():
+    url = f"{OJS_API_BASE}/api/v1/users"
+    headers = {"Authorization": f"Token {OJS_API_KEY}"}
+    resp = requests.get(url, headers=headers)
+    resp.raise_for_status()
+    return resp.json()
+
+def ojs_get_user(user_id):
+    url = f"{OJS_API_BASE}/api/v1/users/{user_id}"
+    headers = {"Authorization": f"Token {OJS_API_KEY}"}
+    resp = requests.get(url, headers=headers)
+    resp.raise_for_status()
+    return resp.json()
+
+def ojs_create_user(data):
+    url = f"{OJS_API_BASE}/api/v1/users"
+    headers = {"Authorization": f"Token {OJS_API_KEY}", "Content-Type": "application/json"}
+    resp = requests.post(url, json=data, headers=headers)
+    resp.raise_for_status()
+    return resp.json()
+
+def ojs_update_user(user_id, data):
+    url = f"{OJS_API_BASE}/api/v1/users/{user_id}"
+    headers = {"Authorization": f"Token {OJS_API_KEY}", "Content-Type": "application/json"}
+    resp = requests.put(url, json=data, headers=headers)
+    resp.raise_for_status()
+    return resp.json()
+
+def ojs_delete_user(user_id):
+    url = f"{OJS_API_BASE}/api/v1/users/{user_id}"
+    headers = {"Authorization": f"Token {OJS_API_KEY}"}
+    resp = requests.delete(url, headers=headers)
+    resp.raise_for_status()
+    return resp.status_code == 204
+
+# --- OJS Review Sync Utilities ---
+
+def ojs_list_reviews():
+    url = f"{OJS_API_BASE}/api/v1/reviews"
+    headers = {"Authorization": f"Token {OJS_API_KEY}"}
+    resp = requests.get(url, headers=headers)
+    resp.raise_for_status()
+    return resp.json()
+
+def ojs_get_review(review_id):
+    url = f"{OJS_API_BASE}/api/v1/reviews/{review_id}"
+    headers = {"Authorization": f"Token {OJS_API_KEY}"}
+    resp = requests.get(url, headers=headers)
+    resp.raise_for_status()
+    return resp.json()
+
+def ojs_create_review(data):
+    url = f"{OJS_API_BASE}/api/v1/reviews"
+    headers = {"Authorization": f"Token {OJS_API_KEY}", "Content-Type": "application/json"}
+    resp = requests.post(url, json=data, headers=headers)
+    resp.raise_for_status()
+    return resp.json()
+
+def ojs_update_review(review_id, data):
+    url = f"{OJS_API_BASE}/api/v1/reviews/{review_id}"
+    headers = {"Authorization": f"Token {OJS_API_KEY}", "Content-Type": "application/json"}
+    resp = requests.put(url, json=data, headers=headers)
+    resp.raise_for_status()
+    return resp.json()
+
+def ojs_delete_review(review_id):
+    url = f"{OJS_API_BASE}/api/v1/reviews/{review_id}"
+    headers = {"Authorization": f"Token {OJS_API_KEY}"}
+    resp = requests.delete(url, headers=headers)
+    resp.raise_for_status()
+    return resp.status_code == 204
+
+# --- OJS Comment Sync Utilities ---
+
+def ojs_list_comments():
+    url = f"{OJS_API_BASE}/api/v1/comments"
+    headers = {"Authorization": f"Token {OJS_API_KEY}"}
+    resp = requests.get(url, headers=headers)
+    resp.raise_for_status()
+    return resp.json()
+
+def ojs_get_comment(comment_id):
+    url = f"{OJS_API_BASE}/api/v1/comments/{comment_id}"
+    headers = {"Authorization": f"Token {OJS_API_KEY}"}
+    resp = requests.get(url, headers=headers)
+    resp.raise_for_status()
+    return resp.json()
+
+def ojs_create_comment(data):
+    url = f"{OJS_API_BASE}/api/v1/comments"
+    headers = {"Authorization": f"Token {OJS_API_KEY}", "Content-Type": "application/json"}
+    resp = requests.post(url, json=data, headers=headers)
+    resp.raise_for_status()
+    return resp.json()
+
+def ojs_update_comment(comment_id, data):
+    url = f"{OJS_API_BASE}/api/v1/comments/{comment_id}"
+    headers = {"Authorization": f"Token {OJS_API_KEY}", "Content-Type": "application/json"}
+    resp = requests.put(url, json=data, headers=headers)
+    resp.raise_for_status()
+    return resp.json()
+
+def ojs_delete_comment(comment_id):
+    url = f"{OJS_API_BASE}/api/v1/comments/{comment_id}"
+    headers = {"Authorization": f"Token {OJS_API_KEY}"}
+    resp = requests.delete(url, headers=headers)
+    resp.raise_for_status()
+    return resp.status_code == 204
