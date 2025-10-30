@@ -143,3 +143,74 @@ class OpenAlexWorkSerializer(serializers.Serializer):
             'type': result.get('type'),
             'authorships': result.get('authorships', []),
         }
+    
+class DOAJJournalSerializer(serializers.Serializer):
+    id = serializers.CharField()
+    title = serializers.CharField()
+    publisher = serializers.CharField(allow_null=True, required=False)
+    issn = serializers.ListField(child=serializers.CharField(), required=False)
+    country = serializers.CharField(allow_null=True, required=False)
+    subjects = serializers.ListField(child=serializers.CharField(), required=False)
+    # Add more fields as needed
+
+    @staticmethod
+    def from_doaj_result(result):
+        bibjson = result.get('bibjson', {})
+        # ISSN: try bibjson['issn'], then bibjson['identifier'] (type: 'issn')
+        issn_list = []
+        issn_raw = bibjson.get('issn', [])
+        for i in issn_raw:
+            if isinstance(i, str):
+                issn_list.append(i)
+            elif isinstance(i, dict) and 'value' in i:
+                issn_list.append(i['value'])
+        # If still empty, try bibjson['identifier']
+        if not issn_list:
+            for ident in bibjson.get('identifier', []):
+                if ident.get('type') == 'issn' and ident.get('id'):
+                    issn_list.append(ident['id'])
+        # Country: try bibjson['country'], then publisher['country']
+        country = bibjson.get('country')
+        publisher = bibjson.get('publisher')
+        if not country and isinstance(publisher, dict):
+            country = publisher.get('country')
+        return {
+            'id': result.get('id'),
+            'title': bibjson.get('title'),
+            'publisher': publisher,
+            'issn': issn_list,
+            'country': country,
+            'subjects': [s.get('term') for s in bibjson.get('subject', []) if s.get('term')],
+        }
+
+
+class DOAJArticleSerializer(serializers.Serializer):
+    id = serializers.CharField()
+    title = serializers.CharField()
+    doi = serializers.CharField(allow_null=True, required=False)
+    journal = serializers.CharField(allow_null=True, required=False)
+    year = serializers.CharField(allow_null=True, required=False)
+    authors = serializers.ListField(child=serializers.CharField(), required=False)
+    # Add more fields as needed
+
+    @staticmethod
+    def from_doaj_result(result):
+        bibjson = result.get('bibjson', {})
+        return {
+            'id': result.get('id'),
+            'title': bibjson.get('title'),
+            'doi': bibjson.get('identifier', [{}])[0].get('id') if bibjson.get('identifier') else None,
+            'journal': bibjson.get('journal', {}).get('title') if bibjson.get('journal') else None,
+            'year': bibjson.get('year'),
+            'authors': [a.get('name') for a in bibjson.get('author', []) if a.get('name')],
+        }
+
+
+class DOAJInclusionCheckSerializer(serializers.Serializer):
+    issn = serializers.CharField()
+    included = serializers.BooleanField()
+
+
+class DOAJSubmitUpdateSerializer(serializers.Serializer):
+    status = serializers.CharField()
+    message = serializers.CharField(allow_blank=True, required=False)

@@ -19,6 +19,12 @@ from .views import (
     OpenAlexInstitutionDetailView,
     OpenAlexWorkSearchView,
     OpenAlexWorkDetailView,
+    DOAJJournalSearchView,
+    DOAJArticleSearchView,
+    DOAJInclusionCheckView,
+    DOAJJournalMetadataView,
+    DOAJArticleMetadataView,
+    DOAJSubmitUpdateView,
 )
 
 router = DefaultRouter()
@@ -41,4 +47,12 @@ urlpatterns = [
     path('openalex/institutions/<path:inst_id>/', OpenAlexInstitutionDetailView.as_view(), name='openalex_institution_detail'),
     path('openalex/works/search/', OpenAlexWorkSearchView.as_view(), name='openalex_work_search'),
     path('openalex/works/<path:work_id>/', OpenAlexWorkDetailView.as_view(), name='openalex_work_detail'),
+
+    # DOAJ endpoints
+    path('doaj/journals/search/', DOAJJournalSearchView.as_view(), name='doaj_journal_search'),
+    path('doaj/articles/search/', DOAJArticleSearchView.as_view(), name='doaj_article_search'),
+    path('doaj/journals/inclusion/', DOAJInclusionCheckView.as_view(), name='doaj_inclusion_check'),
+    path('doaj/journals/<str:journal_id>/', DOAJJournalMetadataView.as_view(), name='doaj_journal_metadata'),
+    path('doaj/articles/<str:article_id>/', DOAJArticleMetadataView.as_view(), name='doaj_article_metadata'),
+    path('doaj/submit/', DOAJSubmitUpdateView.as_view(), name='doaj_submit_update'),
 ]

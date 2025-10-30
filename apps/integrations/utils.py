@@ -8,6 +8,7 @@ import requests
 
 ROR_API_BASE = "https://api.ror.org/organizations"
 OPENALEX_BASE = "https://api.openalex.org"
+DOAJ_API_BASE = "https://doaj.org/api/v2/"
 
 def search_ror_organizations(query, page=1):
     """
@@ -89,3 +90,67 @@ def get_openalex_work(work_id):
     resp = requests.get(url, timeout=10)
     resp.raise_for_status()
     return resp.json()
+
+# DOAJ v2 search uses /search/journals/{query} and pagination via 'page' and 'pageSize' params
+def doaj_search_journals(query, page=1, page_size=10):
+    url = f"{DOAJ_API_BASE}search/journals/{query}"
+    params = {"page": page, "pageSize": page_size}
+    resp = requests.get(url, params=params)
+    resp.raise_for_status()
+    data = resp.json()
+    # v2 returns 'results' as a list, 'total' as int
+    return {
+        'results': data.get('results', []),
+        'total': data.get('total', len(data.get('results', [])))
+    }
+
+# Search articles by query
+
+def doaj_search_articles(query, page=1, page_size=10):
+    url = f"{DOAJ_API_BASE}search/articles/{query}"
+    params = {"page": page, "pageSize": page_size}
+    resp = requests.get(url, params=params)
+    resp.raise_for_status()
+    data = resp.json()
+    return {
+        'results': data.get('results', []),
+        'total': data.get('total', len(data.get('results', [])))
+    }
+
+# Check if a journal is included in DOAJ by ISSN
+
+def doaj_check_inclusion(issn):
+    # v2: /search/journals/issn:{issn}
+    url = f"{DOAJ_API_BASE}search/journals/issn:{issn}"
+    resp = requests.get(url)
+    resp.raise_for_status()
+    data = resp.json()
+    return data.get('total', 0) > 0
+
+# Fetch journal metadata by DOAJ journal id
+def doaj_fetch_journal_metadata(journal_id):
+    url = f"{DOAJ_API_BASE}journals/{journal_id}"
+    resp = requests.get(url)
+    resp.raise_for_status()
+    return resp.json()
+
+# Fetch article metadata by DOAJ article id
+def doaj_fetch_article_metadata(article_id):
+    url = f"{DOAJ_API_BASE}articles/{article_id}"
+    resp = requests.get(url)
+    resp.raise_for_status()
+    return resp.json()
+
+# Submit or update data (requires API key, not implemented here)
+def doaj_submit_or_update(data, api_key, endpoint="journals", method="POST", object_id=None):
+    url = f"{DOAJ_API_BASE}{endpoint}/"
+    if object_id:
+        url += f"{object_id}"
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    if method == "POST":
+        resp = requests.post(url, json=data, headers=headers)
+    else:
+        resp = requests.put(url, json=data, headers=headers)
+    resp.raise_for_status()
+    return resp.json()
+

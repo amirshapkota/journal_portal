@@ -16,10 +16,16 @@ from .utils import (
 	search_openalex_authors, get_openalex_author,
     search_openalex_institutions, get_openalex_institution,
     search_openalex_works, get_openalex_work,
+	doaj_search_journals, doaj_search_articles, doaj_check_inclusion,
+	doaj_fetch_journal_metadata, doaj_fetch_article_metadata, doaj_submit_or_update
 )
 from .serializers import (
-    ROROrganizationSerializer, OpenAlexAuthorSerializer, OpenAlexInstitutionSerializer, OpenAlexWorkSerializer
+    ROROrganizationSerializer,
+	OpenAlexAuthorSerializer, OpenAlexInstitutionSerializer, OpenAlexWorkSerializer,
+	DOAJJournalSerializer, DOAJArticleSerializer, DOAJInclusionCheckSerializer, DOAJSubmitUpdateSerializer
 )
+from rest_framework.permissions import IsAuthenticatedOrReadOnly
+
 
 import json
 import base64
@@ -512,3 +518,99 @@ class OpenAlexWorkDetailView(APIView):
             return Response(serialized)
         except Exception as e:
             return Response({'detail': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
+class DOAJJournalSearchView(APIView):
+	permission_classes = [AllowAny]
+
+	def get(self, request):
+		query = request.query_params.get('query')
+		page = int(request.query_params.get('page', 1))
+		page_size = int(request.query_params.get('page_size', 10))
+		if not query:
+			return Response({'detail': 'Missing query parameter.'}, status=status.HTTP_400_BAD_REQUEST)
+		try:
+			data = doaj_search_journals(query, page=page, page_size=page_size)
+			results = data.get('results', [])
+			serialized = [DOAJJournalSerializer.from_doaj_result(r) for r in results]
+			return Response({
+				'count': data.get('total', len(results)),
+				'results': serialized
+			})
+		except Exception as e:
+			return Response({'detail': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
+
+
+class DOAJArticleSearchView(APIView):
+	permission_classes = [AllowAny]
+
+	def get(self, request):
+		query = request.query_params.get('query')
+		page = int(request.query_params.get('page', 1))
+		page_size = int(request.query_params.get('page_size', 10))
+		if not query:
+			return Response({'detail': 'Missing query parameter.'}, status=status.HTTP_400_BAD_REQUEST)
+		try:
+			data = doaj_search_articles(query, page=page, page_size=page_size)
+			results = data.get('results', [])
+			serialized = [DOAJArticleSerializer.from_doaj_result(r) for r in results]
+			return Response({
+				'count': data.get('total', len(results)),
+				'results': serialized
+			})
+		except Exception as e:
+			return Response({'detail': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
+
+
+class DOAJInclusionCheckView(APIView):
+	permission_classes = [AllowAny]
+
+	def get(self, request):
+		issn = request.query_params.get('issn')
+		if not issn:
+			return Response({'detail': 'Missing issn parameter.'}, status=status.HTTP_400_BAD_REQUEST)
+		try:
+			included = doaj_check_inclusion(issn)
+			return Response({'issn': issn, 'included': included})
+		except Exception as e:
+			return Response({'detail': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
+
+
+class DOAJJournalMetadataView(APIView):
+	permission_classes = [AllowAny]
+
+	def get(self, request, journal_id):
+		try:
+			data = doaj_fetch_journal_metadata(journal_id)
+			serialized = DOAJJournalSerializer.from_doaj_result(data)
+			return Response(serialized)
+		except Exception as e:
+			return Response({'detail': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
+
+
+class DOAJArticleMetadataView(APIView):
+	permission_classes = [AllowAny]
+
+	def get(self, request, article_id):
+		try:
+			data = doaj_fetch_article_metadata(article_id)
+			serialized = DOAJArticleSerializer.from_doaj_result(data)
+			return Response(serialized)
+		except Exception as e:
+			return Response({'detail': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
+
+
+class DOAJSubmitUpdateView(APIView):
+	permission_classes = [IsAuthenticated]
+
+	def post(self, request):
+		api_key = request.data.get('api_key')
+		endpoint = request.data.get('endpoint', 'journals')
+		method = request.data.get('method', 'POST')
+		object_id = request.data.get('object_id')
+		data = request.data.get('data')
+		if not api_key or not data:
+			return Response({'detail': 'api_key and data are required.'}, status=status.HTTP_400_BAD_REQUEST)
+		try:
+			resp = doaj_submit_or_update(data, api_key, endpoint=endpoint, method=method, object_id=object_id)
+			return Response({'status': 'success', 'message': resp})
+		except Exception as e:
+			return Response({'status': 'error', 'message': str(e)}, status=status.HTTP_502_BAD_GATEWAY)

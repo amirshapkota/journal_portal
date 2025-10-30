@@ -110,6 +110,15 @@ DATABASES = {
     }
 }
 
+# For render
+# import dj_database_url
+
+# DATABASES = {
+#     "default": dj_database_url.parse(
+#         "postgresql://journal_db_z0qj_user:Msqx3M0R7ex7wKFQy6zS6Ip2INDUQjH5@dpg-d41fk5ripnbc73fbhvv0-a.singapore-postgres.render.com/journal_db_z0qj"
+#     )
+# }
+
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
