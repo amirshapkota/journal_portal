@@ -7,12 +7,12 @@ ML-powered reviewer recommendation system using TF-IDF and cosine similarity to 
 
 ## Features
 
-### ✅ Intelligent Matching
+###  Intelligent Matching
 - **TF-IDF Vectorization**: Analyzes submission content (title, abstract, keywords)
 - **Cosine Similarity**: Matches reviewers based on expertise areas and profile
 - **Multi-factor Scoring**: Combines multiple metrics for optimal recommendations
 
-### ✅ Scoring Factors
+###  Scoring Factors
 
 1. **Similarity Score (0-1)** - Content/Expertise Match
    - Submission: title (3x weight), abstract (2x), keywords, tags
@@ -32,7 +32,7 @@ ML-powered reviewer recommendation system using TF-IDF and cosine similarity to 
    - 40% weight: on-time completion rate
    - New reviewers get 0.5 (neutral)
 
-### ✅ Composite Scoring
+###  Composite Scoring
 Default weights:
 - Similarity: 50%
 - Availability: 20%
@@ -141,16 +141,16 @@ python test_reviewer_recommendations.py
 ## Setup Requirements
 
 ### 1. Reviewers Must Have:
-- ✅ User account with `Reviewer` role
-- ✅ Active status (`is_active=True`)
-- ✅ Expertise areas assigned (for better matching)
-- ✅ Bio (optional but improves matching)
+-  User account with `Reviewer` role
+-  Active status (`is_active=True`)
+-  Expertise areas assigned (for better matching)
+-  Bio (optional but improves matching)
 
 ### 2. Submissions Must Have:
-- ✅ Title
-- ✅ Abstract (recommended)
-- ✅ Keywords in `metadata_json` (recommended)
-- ✅ Tags in `metadata_json` (optional)
+-  Title
+-  Abstract (recommended)
+-  Keywords in `metadata_json` (recommended)
+-  Tags in `metadata_json` (optional)
 
 ### 3. For Quality & Response Scores:
 - Track review completion with `ReviewAssignment` model
@@ -292,16 +292,16 @@ composite_score = (similarity × 0.5) +
 ## Filtering Logic
 
 ### Reviewers are Automatically Excluded if:
-1. ❌ They are the submission's corresponding author
-2. ❌ They are a co-author on the submission
-3. ❌ They already have a review assignment for this submission
-4. ❌ Their user account is inactive
+1.  They are the submission's corresponding author
+2.  They are a co-author on the submission
+3.  They already have a review assignment for this submission
+4.  Their user account is inactive
 
 ### Reviewers are Prioritized if:
-1. ✅ Strong expertise match (high similarity score)
-2. ✅ Low current workload (high availability score)
-3. ✅ High past review quality scores
-4. ✅ Good acceptance and completion rates
+1.  Strong expertise match (high similarity score)
+2.  Low current workload (high availability score)
+3.  High past review quality scores
+4.  Good acceptance and completion rates
 
 ---
 
@@ -334,10 +334,10 @@ composite_score = (similarity × 0.5) +
 ## Performance Considerations
 
 ### Scalability:
-- ✅ TF-IDF vectorization is efficient (O(n×m) where n=docs, m=features)
-- ✅ Cosine similarity is fast (O(n) for n reviewers)
-- ✅ Database queries use proper indexing
-- ✅ Can handle 100s of potential reviewers efficiently
+-  TF-IDF vectorization is efficient (O(n×m) where n=docs, m=features)
+-  Cosine similarity is fast (O(n) for n reviewers)
+-  Database queries use proper indexing
+-  Can handle 100s of potential reviewers efficiently
 
 ### Optimization Tips:
 1. Cache expertise areas with `prefetch_related()`
@@ -422,18 +422,18 @@ python test_reviewer_recommendations.py
 Testing Reviewer Recommendation System
 ==============================================================
 
-✅ scikit-learn version: 1.5.2
-✅ numpy version: 2.0.2
-✅ Found 5 submissions to test
-✅ Recommendation engine initialized
+ scikit-learn version: 1.5.2
+ numpy version: 2.0.2
+ Found 5 submissions to test
+ Recommendation engine initialized
 
-📄 Testing with submission: Machine Learning in Healthcare...
+ Testing with submission: Machine Learning in Healthcare...
    Abstract: This paper explores the application of machine...
 
-👥 Found 12 potential reviewers
+ Found 12 potential reviewers
 
-🤖 Generating ML recommendations...
-✅ Generated 10 recommendations
+ Generating ML recommendations...
+ Generated 10 recommendations
 
 ==============================================================
 TOP RECOMMENDATIONS:
@@ -450,19 +450,19 @@ TOP RECOMMENDATIONS:
      - Response:     0.750
    ...
 
-✅ ALL TESTS PASSED!
+ ALL TESTS PASSED!
 ```
 
 ---
 
 ## Summary
 
-✅ **ML-powered** reviewer matching using TF-IDF and cosine similarity  
-✅ **Multi-factor scoring** (similarity, availability, quality, response rate)  
-✅ **Customizable weights** for different scenarios  
-✅ **REST API endpoints** with OpenAPI documentation  
-✅ **Automatic filtering** of authors and existing reviewers  
-✅ **Scalable** for large reviewer pools  
-✅ **Production-ready** with proper error handling  
+ **ML-powered** reviewer matching using TF-IDF and cosine similarity  
+ **Multi-factor scoring** (similarity, availability, quality, response rate)  
+ **Customizable weights** for different scenarios  
+ **REST API endpoints** with OpenAPI documentation  
+ **Automatic filtering** of authors and existing reviewers  
+ **Scalable** for large reviewer pools  
+ **Production-ready** with proper error handling  
 
 **The system is ready to use!** 🚀
