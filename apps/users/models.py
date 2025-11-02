@@ -187,6 +187,14 @@ class Profile(models.Model):
         help_text="Research areas and expertise of the user"
     )
     
+    # OJS Integration (user IDs are journal-specific in OJS)
+    # We store mapping as JSON: {"journal_id_1": ojs_user_id_1, "journal_id_2": ojs_user_id_2}
+    ojs_id_mapping = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Map of journal ID to OJS user ID: {'journal_uuid': ojs_user_id}"
+    )
+    
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

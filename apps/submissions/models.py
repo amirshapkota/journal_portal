@@ -87,6 +87,13 @@ class Submission(models.Model):
     submitted_at = models.DateTimeField(null=True, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
     
+    # OJS Integration
+    ojs_id = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="Open Journal Systems submission ID for this journal"
+    )
+    
     # Search vector for full-text search
     search_vector = SearchVectorField(null=True)
     
@@ -100,6 +107,9 @@ class Submission(models.Model):
             GinIndex(fields=['search_vector']),
             GinIndex(fields=['metadata_json']),
         ]
+        # CRITICAL: Prevent data collision between journals
+        # Same OJS ID can exist in different journals
+        unique_together = [['ojs_id', 'journal']]
     
     def __str__(self):
         return f"{self.title[:50]}... ({self.get_status_display()})"

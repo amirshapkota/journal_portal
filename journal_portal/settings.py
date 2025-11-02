@@ -279,6 +279,10 @@ CELERY_TIMEZONE = TIME_ZONE
 CELERY_TASK_ALWAYS_EAGER = True
 CELERY_TASK_EAGER_PROPAGATES = True
 
+# Celery Beat Schedule for Periodic Tasks
+from apps.integrations.celery_schedule import CELERY_BEAT_SCHEDULE
+CELERY_BEAT_SCHEDULE = CELERY_BEAT_SCHEDULE
+
 # Cache Configuration
 CACHES = {
     'default': {

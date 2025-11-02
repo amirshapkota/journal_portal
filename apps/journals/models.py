@@ -31,6 +31,39 @@ class Journal(models.Model):
     website_url = models.URLField(blank=True)
     contact_email = models.EmailField(blank=True)
     
+    # OJS Integration Settings
+    ojs_enabled = models.BooleanField(
+        default=False,
+        help_text="Enable OJS sync for this journal"
+    )
+    ojs_api_url = models.URLField(
+        blank=True,
+        help_text="OJS API base URL for this journal (e.g., https://journal.com/index.php/journal/api/v1)"
+    )
+    ojs_api_key = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="API key for OJS authentication"
+    )
+    ojs_journal_id = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="Journal ID in OJS system"
+    )
+    last_synced_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Last successful sync with OJS"
+    )
+    sync_enabled = models.BooleanField(
+        default=True,
+        help_text="Enable automatic background sync for this journal"
+    )
+    sync_interval_hours = models.IntegerField(
+        default=1,
+        help_text="Sync interval in hours (default: 1 hour)"
+    )
+    
     # Journal settings and configuration
     settings = models.JSONField(
         default=dict,
