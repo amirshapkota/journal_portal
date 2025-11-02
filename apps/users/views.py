@@ -94,20 +94,10 @@ class CustomTokenRefreshView(TokenRefreshView):
         
         response = super().post(request, *args, **kwargs)
         
-        if response.status_code == 200:
-            # If token rotation is enabled, update the cookie with new refresh token
-            new_refresh_token = response.data.get('refresh')
-            if new_refresh_token:
-                response.set_cookie(
-                    key='refresh_token',
-                    value=new_refresh_token,
-                    httponly=True,
-                    secure=not settings.DEBUG,
-                    samesite='Lax',
-                    max_age=7 * 24 * 60 * 60,
-                )
-                # Remove refresh token from response body
-                response.data.pop('refresh', None)
+        # Since token rotation is disabled, refresh token stays the same
+        # Just remove it from response body if present
+        if response.status_code == 200 and 'refresh' in response.data:
+            response.data.pop('refresh', None)
         
         return response
 
