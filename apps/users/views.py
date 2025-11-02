@@ -63,7 +63,8 @@ class CustomTokenObtainPairView(TokenObtainPairView):
                     value=refresh_token,
                     httponly=True,
                     secure=not settings.DEBUG,  # Use secure cookies in production
-                    samesite='Lax',
+                    samesite='None' if not settings.DEBUG else 'Lax',  # 'None' for cross-origin in production
+                    path='/',  # Make cookie available on all paths
                     max_age=7 * 24 * 60 * 60,  # 7 days (same as REFRESH_TOKEN_LIFETIME)
                 )
                 # Remove refresh token from response body for security
@@ -83,7 +84,11 @@ class CustomTokenRefreshView(TokenRefreshView):
         # Get refresh token from cookie
         refresh_token = request.COOKIES.get('refresh_token')
         
+        # Debug logging
+        logger.debug(f"Available cookies: {list(request.COOKIES.keys())}")
+        
         if not refresh_token:
+            logger.warning("Refresh token not found in cookies")
             return Response(
                 {'detail': 'Refresh token not found in cookies.'},
                 status=status.HTTP_401_UNAUTHORIZED
@@ -94,10 +99,14 @@ class CustomTokenRefreshView(TokenRefreshView):
         
         response = super().post(request, *args, **kwargs)
         
-        # Since token rotation is disabled, refresh token stays the same
-        # Just remove it from response body if present
-        if response.status_code == 200 and 'refresh' in response.data:
-            response.data.pop('refresh', None)
+        if response.status_code == 200:
+            logger.info("Token refresh successful")
+            # Since token rotation is disabled, refresh token stays the same
+            # Just remove it from response body if present
+            if 'refresh' in response.data:
+                response.data.pop('refresh', None)
+        else:
+            logger.warning(f"Token refresh failed with status {response.status_code}")
         
         return response
 
@@ -125,7 +134,7 @@ class LogoutView(APIView):
             {'detail': 'Successfully logged out.'},
             status=status.HTTP_200_OK
         )
-        response.delete_cookie('refresh_token')
+        response.delete_cookie('refresh_token', path='/', samesite='None' if not settings.DEBUG else 'Lax')
         
         logger.info(f"User logged out: {request.user.email}")
         return response
@@ -240,39 +249,6 @@ class EmailVerificationView(APIView):
                 }, status=status.HTTP_400_BAD_REQUEST)
         
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-@extend_schema_view(
-    post=extend_schema(
-        summary="Logout user",
-        description="Logout user and blacklist refresh token."
-    )
-)
-class LogoutView(APIView):
-    """Handle user logout and token blacklisting."""
-    
-    permission_classes = [permissions.IsAuthenticated]
-    
-    def post(self, request):
-        """Logout user and blacklist refresh token."""
-        try:
-            refresh_token = request.data.get("refresh_token")
-            if refresh_token:
-                token = RefreshToken(refresh_token)
-                token.blacklist()
-            
-            logout(request)
-            logger.info(f"User logged out: {request.user.email}")
-            
-            return Response({
-                'message': 'Successfully logged out.'
-            }, status=status.HTTP_200_OK)
-            
-        except Exception as e:
-            logger.error(f"Logout error for {request.user.email}: {str(e)}")
-            return Response({
-                'error': 'Error during logout.'
-            }, status=status.HTTP_400_BAD_REQUEST)
 
 
 @extend_schema_view(
