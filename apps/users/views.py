@@ -48,14 +48,96 @@ class CustomTokenObtainPairView(TokenObtainPairView):
     
     @method_decorator(ratelimit(key='ip', rate='10/m', method='POST'))
     def post(self, request, *args, **kwargs):
-        """Handle login with rate limiting."""
+        """Handle login with rate limiting and set refresh token as HTTP-only cookie."""
         response = super().post(request, *args, **kwargs)
         
         if response.status_code == 200:
             logger.info(f"Successful login for user: {request.data.get('email')}")
+            
+            # Extract refresh token from response data
+            refresh_token = response.data.get('refresh')
+            if refresh_token:
+                # Set refresh token as HTTP-only cookie
+                response.set_cookie(
+                    key='refresh_token',
+                    value=refresh_token,
+                    httponly=True,
+                    secure=not settings.DEBUG,  # Use secure cookies in production
+                    samesite='Lax',
+                    max_age=7 * 24 * 60 * 60,  # 7 days (same as REFRESH_TOKEN_LIFETIME)
+                )
+                # Remove refresh token from response body for security
+                response.data.pop('refresh', None)
         else:
             logger.warning(f"Failed login attempt for: {request.data.get('email')}")
         
+        return response
+
+
+class CustomTokenRefreshView(TokenRefreshView):
+    """Custom token refresh view that reads refresh token from HTTP-only cookie."""
+    
+    @method_decorator(ratelimit(key='ip', rate='20/m', method='POST'))
+    def post(self, request, *args, **kwargs):
+        """Refresh access token using refresh token from cookie."""
+        # Get refresh token from cookie
+        refresh_token = request.COOKIES.get('refresh_token')
+        
+        if not refresh_token:
+            return Response(
+                {'detail': 'Refresh token not found in cookies.'},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+        
+        # Add refresh token to request data
+        request.data['refresh'] = refresh_token
+        
+        response = super().post(request, *args, **kwargs)
+        
+        if response.status_code == 200:
+            # If token rotation is enabled, update the cookie with new refresh token
+            new_refresh_token = response.data.get('refresh')
+            if new_refresh_token:
+                response.set_cookie(
+                    key='refresh_token',
+                    value=new_refresh_token,
+                    httponly=True,
+                    secure=not settings.DEBUG,
+                    samesite='Lax',
+                    max_age=7 * 24 * 60 * 60,
+                )
+                # Remove refresh token from response body
+                response.data.pop('refresh', None)
+        
+        return response
+
+
+class LogoutView(APIView):
+    """Handle user logout by clearing the refresh token cookie."""
+    
+    permission_classes = [permissions.IsAuthenticated]
+    
+    @extend_schema(
+        summary="Logout user",
+        description="Logout user and clear refresh token cookie."
+    )
+    def post(self, request):
+        """Clear refresh token cookie and blacklist the token."""
+        try:
+            refresh_token = request.COOKIES.get('refresh_token')
+            if refresh_token:
+                token = RefreshToken(refresh_token)
+                token.blacklist()
+        except Exception as e:
+            logger.warning(f"Error blacklisting token during logout: {str(e)}")
+        
+        response = Response(
+            {'detail': 'Successfully logged out.'},
+            status=status.HTTP_200_OK
+        )
+        response.delete_cookie('refresh_token')
+        
+        logger.info(f"User logged out: {request.user.email}")
         return response
 
 
