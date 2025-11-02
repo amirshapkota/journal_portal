@@ -201,7 +201,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
 ]
-CORS_ALLOW_ALL_ORIGINS = True
+# CORS_ALLOW_ALL_ORIGINS = True  # ← DISABLED: Conflicts with credentials
 CORS_ALLOW_CREDENTIALS = True  # Required for cookies
 CORS_ALLOW_HEADERS = [
     'accept',
@@ -220,7 +220,7 @@ CORS_EXPOSE_HEADERS = ['Content-Type', 'X-CSRFToken']
 from datetime import timedelta
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(hours=1),
+    'ACCESS_TOKEN_LIFETIME': timedelta(seconds=10),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'ROTATE_REFRESH_TOKENS': False,
     'BLACKLIST_AFTER_ROTATION': False,

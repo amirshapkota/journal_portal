@@ -1,22 +1,31 @@
 """
 URL configuration for ml app.
-Handles ML integration points and jobs.
+Handles ML integration points and ML-powered features.
 """
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 
-# from .views import MLJobViewSet, EmbeddingViewSet, RecommendationViewSet
+from .views import ReviewerRecommendationView, ReviewerRecommendationCustomWeightsView
 
 router = DefaultRouter()
-# router.register(r'jobs', MLJobViewSet)
-# router.register(r'embeddings', EmbeddingViewSet)
-# router.register(r'recommendations', RecommendationViewSet)
 
 urlpatterns = [
     path('', include(router.urls)),
-    # Add custom ML endpoints here
-    # path('reviewer-recommendations/', ReviewerRecommendationView.as_view(), name='reviewer_recommendations'),
+    
+    # Reviewer Recommendation endpoints
+    path(
+        'reviewer-recommendations/<uuid:submission_id>/',
+        ReviewerRecommendationView.as_view(),
+        name='reviewer_recommendations'
+    ),
+    path(
+        'reviewer-recommendations/<uuid:submission_id>/custom-weights/',
+        ReviewerRecommendationCustomWeightsView.as_view(),
+        name='reviewer_recommendations_custom_weights'
+    ),
+    
+    # Future ML endpoints
     # path('anomaly-detection/', AnomalyDetectionView.as_view(), name='anomaly_detection'),
     # path('text-analysis/', TextAnalysisView.as_view(), name='text_analysis'),
-    # path('similarity-check/', SimilarityCheckView.as_view(), name='similarity_check'),
+    # path('plagiarism-check/', PlagiarismCheckView.as_view(), name='plagiarism_check'),
 ]
