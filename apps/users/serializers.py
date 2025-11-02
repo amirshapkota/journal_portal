@@ -25,11 +25,14 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         token['email'] = user.email
         token['first_name'] = user.first_name
         token['last_name'] = user.last_name
-        # Check if user has a profile and get verification status
+        # Check if user has a profile and get verification status and roles
         is_verified = False
+        roles = []
         if hasattr(user, 'profile'):
             is_verified = user.profile.verification_status == 'GENUINE'
+            roles = list(user.profile.roles.values_list('name', flat=True))
         token['is_verified'] = is_verified
+        token['roles'] = roles
         
         return token
 
@@ -39,8 +42,11 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         # Add extra user information to response
         user = self.user
         is_verified = False
+        roles = []
         if hasattr(user, 'profile'):
             is_verified = user.profile.verification_status == 'GENUINE'
+            # Get user roles as an array
+            roles = list(user.profile.roles.values_list('name', flat=True))
             
         data.update({
             'user': {
@@ -49,6 +55,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
                 'first_name': user.first_name,
                 'last_name': user.last_name,
                 'is_verified': is_verified,
+                'roles': roles,
                 'date_joined': user.date_joined,
             }
         })

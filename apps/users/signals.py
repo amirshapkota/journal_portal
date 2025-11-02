@@ -7,7 +7,7 @@ Handles automatic profile creation and other user-related events.
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.conf import settings
-from .models import CustomUser, Profile
+from .models import CustomUser, Profile, Role
 
 
 @receiver(post_save, sender=CustomUser)
@@ -16,12 +16,25 @@ def create_user_profile(sender, instance, created, **kwargs):
     Automatically create a Profile when a new user is created.
     
     This ensures every user has an associated profile for extended information.
+    Also assigns the default 'READER' role to new users.
     """
     if created:
-        Profile.objects.create(
+        profile = Profile.objects.create(
             user=instance,
             display_name=f"{instance.first_name} {instance.last_name}".strip()
         )
+        
+        # Assign default READER role to new users
+        try:
+            reader_role = Role.objects.get(name='READER')
+            profile.roles.add(reader_role)
+        except Role.DoesNotExist:
+            # If READER role doesn't exist, create it
+            reader_role = Role.objects.create(
+                name='READER',
+                description='Default role for registered users with read access'
+            )
+            profile.roles.add(reader_role)
 
 
 @receiver(post_save, sender=CustomUser)
