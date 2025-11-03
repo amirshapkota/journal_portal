@@ -27,10 +27,10 @@ def test_reviewer_recommendations():
     try:
         import sklearn
         import numpy as np
-        print(f"\n✅ scikit-learn version: {sklearn.__version__}")
-        print(f"✅ numpy version: {np.version.version}")
+        print(f"\n scikit-learn version: {sklearn.__version__}")
+        print(f" numpy version: {np.version.version}")
     except ImportError as e:
-        print(f"\n❌ Missing dependency: {e}")
+        print(f"\n Missing dependency: {e}")
         print("\nPlease install:")
         print("  pip install scikit-learn==1.5.2 numpy==2.0.2")
         return
@@ -38,18 +38,18 @@ def test_reviewer_recommendations():
     # Get a test submission
     submissions = Submission.objects.all()[:5]
     if not submissions:
-        print("\n❌ No submissions found. Create a test submission first.")
+        print("\n No submissions found. Create a test submission first.")
         return
     
-    print(f"\n✅ Found {submissions.count()} submissions to test")
+    print(f"\n Found {submissions.count()} submissions to test")
     
     # Initialize engine
     engine = ReviewerRecommendationEngine()
-    print("✅ Recommendation engine initialized")
+    print(" Recommendation engine initialized")
     
     # Test with first submission
     submission = submissions[0]
-    print(f"\n📄 Testing with submission: {submission.title[:50]}...")
+    print(f"\n Testing with submission: {submission.title[:50]}...")
     print(f"   Abstract: {submission.abstract[:100] if submission.abstract else 'No abstract'}...")
     
     # Get potential reviewers
@@ -57,7 +57,7 @@ def test_reviewer_recommendations():
     print(f"\n👥 Found {len(potential_reviewers)} potential reviewers")
     
     if not potential_reviewers:
-        print("\n⚠️  No potential reviewers found.")
+        print("\n  No potential reviewers found.")
         print("   Tips:")
         print("   1. Create users with Reviewer role")
         print("   2. Add expertise areas to reviewer profiles")
@@ -79,13 +79,13 @@ def test_reviewer_recommendations():
     )
     
     if not recommendations:
-        print("❌ No recommendations generated")
+        print(" No recommendations generated")
         print("   Check that:")
         print("   - Submission has title/abstract/keywords")
         print("   - Reviewers have bio/expertise areas")
         return
     
-    print(f"\n✅ Generated {len(recommendations)} recommendations")
+    print(f"\n Generated {len(recommendations)} recommendations")
     print("\n" + "="*60)
     print("TOP RECOMMENDATIONS:")
     print("="*60)
@@ -128,7 +128,7 @@ def test_reviewer_recommendations():
         print(f"   Similarity: {rec['scores']['similarity']:.3f}")
     
     print("\n" + "="*60)
-    print("✅ ALL TESTS PASSED!")
+    print(" ALL TESTS PASSED!")
     print("="*60)
     print("\nAPI Endpoints available:")
     print("  GET  /api/v1/ml/reviewer-recommendations/<submission_id>/")

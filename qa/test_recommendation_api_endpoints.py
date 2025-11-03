@@ -6,7 +6,9 @@ import os
 import django
 import requests
 import json
+import sys
 
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'journal_portal.settings')
 django.setup()
 
