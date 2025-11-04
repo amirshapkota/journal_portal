@@ -283,17 +283,84 @@ class VerificationStatusView(APIView):
             profile=profile
         ).order_by('-created_at').first()
         
-        return Response({
-            'profile_status': profile.verification_status,
-            'is_verified': profile.is_verified(),
-            'has_pending_request': latest_request.status == 'PENDING' if latest_request else False,
-            'latest_request': {
+        # Build response with score breakdown
+        latest_request_data = None
+        if latest_request:
+            latest_request_data = {
                 'id': str(latest_request.id),
                 'status': latest_request.status,
                 'requested_role': latest_request.requested_role,
                 'auto_score': latest_request.auto_score,
+                'score_breakdown': self._format_score_breakdown(latest_request),
                 'created_at': latest_request.created_at.isoformat(),
-            } if latest_request else None,
+            }
+        
+        return Response({
+            'profile_status': profile.verification_status,
+            'is_verified': profile.is_verified(),
+            'has_pending_request': latest_request.status == 'PENDING' if latest_request else False,
+            'latest_request': latest_request_data,
             'orcid_connected': hasattr(profile, 'orcid_integration') and profile.orcid_integration.status == 'CONNECTED',
             'roles': [role.name for role in profile.roles.all()]
         })
+    
+    def _format_score_breakdown(self, verification_request):
+        """
+        Format score details into a user-friendly array.
+        
+        Returns array of scoring factors with earned/max points.
+        """
+        score_details = verification_request.score_details or {}
+        
+        breakdown = [
+            {
+                'criterion': 'ORCID Verification',
+                'description': 'Verified ORCID iD connected to account',
+                'points_earned': score_details.get('orcid', 0),
+                'points_possible': 30,
+                'status': 'completed' if score_details.get('orcid', 0) > 0 else 'missing',
+                'weight': 'highest'
+            },
+            {
+                'criterion': 'Institutional Email',
+                'description': 'Email from recognized academic domain (.edu, .ac.uk, etc.)',
+                'points_earned': score_details.get('institutional_email', 0),
+                'points_possible': 25,
+                'status': 'completed' if score_details.get('institutional_email', 0) > 0 else 'missing',
+                'weight': 'high'
+            },
+            {
+                'criterion': 'Email-Affiliation Match',
+                'description': 'Email domain matches claimed institution',
+                'points_earned': score_details.get('email_affiliation_match', 0),
+                'points_possible': 15,
+                'status': 'completed' if score_details.get('email_affiliation_match', 0) > 0 else 'missing',
+                'weight': 'medium'
+            },
+            {
+                'criterion': 'Research Interests',
+                'description': 'Detailed research interests provided (50+ characters)',
+                'points_earned': score_details.get('research_interests', 0),
+                'points_possible': 10,
+                'status': 'completed' if score_details.get('research_interests', 0) > 0 else 'missing',
+                'weight': 'low'
+            },
+            {
+                'criterion': 'Academic Position',
+                'description': 'Academic position/title specified',
+                'points_earned': score_details.get('academic_position', 0),
+                'points_possible': 10,
+                'status': 'completed' if score_details.get('academic_position', 0) > 0 else 'missing',
+                'weight': 'low'
+            },
+            {
+                'criterion': 'Supporting Documents',
+                'description': 'CV, publications, or other credentials uploaded',
+                'points_earned': score_details.get('supporting_documents', 0),
+                'points_possible': 10,
+                'status': 'completed' if score_details.get('supporting_documents', 0) > 0 else 'missing',
+                'weight': 'low'
+            }
+        ]
+        
+        return breakdown
