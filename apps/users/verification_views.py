@@ -354,11 +354,11 @@ class VerificationStatusView(APIView):
                 'weight': 'low'
             },
             {
-                'criterion': 'Supporting Documents',
-                'description': 'CV, publications, or other credentials uploaded',
-                'points_earned': score_details.get('supporting_documents', 0),
+                'criterion': 'Supporting Letter',
+                'description': 'Letter from supervisor/institution (100+ characters)',
+                'points_earned': score_details.get('supporting_letter', 0),
                 'points_possible': 10,
-                'status': 'completed' if score_details.get('supporting_documents', 0) > 0 else 'missing',
+                'status': 'completed' if score_details.get('supporting_letter', 0) > 0 else 'missing',
                 'weight': 'low'
             }
         ]

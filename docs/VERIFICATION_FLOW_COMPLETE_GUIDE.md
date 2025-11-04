@@ -20,7 +20,7 @@ The verification system validates user identities before granting them **Author*
 - **Rule-based auto-scoring** (0-100 points) to evaluate trustworthiness
 - **ORCID integration** for identity verification
 - **Admin review workflow** with approve/reject/request info actions
-- **Document upload** for supporting credentials
+- **Supporting letter** from supervisor/institution for credential verification
 
 ### Key Roles
 
@@ -180,41 +180,7 @@ Authorization: Bearer {access_token}
 
 ---
 
-### Step 4: Upload Supporting Documents (Optional - 10 Points)
-
-**What happens**: User uploads CV, publications, credentials
-
-**API Endpoint**:
-```http
-POST /api/v1/documents/upload/
-Authorization: Bearer {access_token}
-Content-Type: multipart/form-data
-
-{
-  "file": <file_binary>,
-  "document_type": "CV",
-  "description": "Current CV with publications"
-}
-```
-
-**Response**:
-```json
-{
-  "id": "uuid",
-  "file_url": "/media/documents/cv_123.pdf",
-  "document_type": "CV",
-  "uploaded_at": "2025-11-04T10:30:00Z"
-}
-```
-
-**Information Auto-Grabbed**:
-- File name, size, type
-- Upload timestamp
-- Number of documents uploaded
-
----
-
-### Step 5: Submit Verification Request
+### Step 4: Submit Verification Request
 
 **What happens**: User submits request with all information
 
@@ -230,16 +196,7 @@ Content-Type: application/json
   "affiliation_email": "researcher@stanford.edu",
   "research_interests": "Deep Learning, Computer Vision, Natural Language Processing. Focus on transformer architectures and attention mechanisms.",
   "academic_position": "PhD Student",
-  "supporting_documents": [
-    {
-      "type": "CV",
-      "url": "/media/documents/cv_123.pdf"
-    },
-    {
-      "type": "PUBLICATIONS",
-      "url": "/media/documents/publications_list.pdf"
-    }
-  ]
+  "supporting_letter": "Dear Verification Team,\n\nThis letter is to confirm that Jane Smith is a PhD student in the Computer Science Department at Stanford University under my supervision. She joined the program in Fall 2022 and her research focuses on deep learning and computer vision.\n\nSincerely,\nDr. Andrew Ng\nProfessor of Computer Science"
 }
 ```
 
@@ -252,7 +209,7 @@ Content-Type: application/json
    - "Stanford" in email: 15 points ✅
    - Research interests >50 chars: 10 points ✅
    - Academic position: 10 points ✅
-   - Supporting docs: 10 points ✅
+   - Supporting letter >100 chars: 10 points ✅
    - **Total: 100/100** 🎉
 4. Saves score_details JSON
 5. Sets status to 'PENDING'
@@ -306,8 +263,8 @@ Content-Type: application/json
       "weight": "low"
     },
     {
-      "criterion": "Supporting Documents",
-      "description": "CV, publications uploaded",
+      "criterion": "Supporting Letter",
+      "description": "Letter from supervisor/institution (100+ characters)",
       "points_earned": 10,
       "points_possible": 10,
       "status": "completed",
@@ -414,7 +371,6 @@ Content-Type: application/json
 - Show info request notification
 - Display admin's message
 - Provide text area for response
-- Allow document upload
 - Change status back to PENDING
 
 ---
@@ -632,13 +588,7 @@ Authorization: Bearer {admin_access_token}
   "affiliation_email": "researcher@stanford.edu",
   "research_interests": "Deep Learning, Computer Vision, Natural Language Processing. Focus on transformer architectures.",
   "academic_position": "PhD Student",
-  "supporting_documents": [
-    {
-      "type": "CV",
-      "url": "/media/documents/cv_123.pdf",
-      "uploaded_at": "2025-11-04T10:25:00Z"
-    }
-  ],
+  "supporting_letter": "Dear Verification Team,\n\nThis letter confirms that Jane Smith is a PhD student under my supervision in the Computer Science Department at Stanford University...",
   "orcid_verified": true,
   "orcid_id": "0000-0002-1234-5678",
   "auto_score": 100,
@@ -648,7 +598,7 @@ Authorization: Bearer {admin_access_token}
     "email_affiliation_match": 15,
     "research_interests": 10,
     "academic_position": 10,
-    "supporting_documents": 10
+    "supporting_letter": 10
   },
   "created_at": "2025-11-04T10:30:00Z"
 }
@@ -658,7 +608,7 @@ Authorization: Bearer {admin_access_token}
 - Display user profile information
 - Show ORCID verification badge
 - Display score breakdown with visual bars
-- Show uploaded documents (downloadable)
+- Show supporting letter content
 - Provide action buttons: Approve, Reject, Request Info
 
 ---
@@ -816,8 +766,7 @@ Authorization: Bearer {admin_access_token}
 | `GET` | `/api/v1/users/orcid/connect/` | Get ORCID auth URL | Authenticated |
 | `GET` | `/api/v1/users/orcid/callback/` | ORCID callback (auto) | Authenticated |
 | `GET` | `/api/v1/users/orcid/status/` | Check ORCID connection | Authenticated |
-| `POST` | `/api/v1/documents/upload/` | Upload supporting docs | Authenticated |
-| `POST` | `/api/v1/users/verification-requests/` | Submit verification | Authenticated |
+| `POST` | `/api/v1/users/verification-requests/` | Submit verification (with letter) | Authenticated |
 | `GET` | `/api/v1/users/verification-requests/` | List own requests | Authenticated |
 | `GET` | `/api/v1/users/verification-requests/{id}/` | Get request details | Authenticated |
 | `GET` | `/api/v1/users/verification/status/` | Quick status check | Authenticated |
@@ -935,7 +884,7 @@ Authorization: Bearer {admin_access_token}
 | **ORCID Profile** | Name, publications, affiliations | - | ORCID OAuth callback |
 | **Profile Fields** | Research interests length | 10 | Profile update |
 | **Profile Fields** | Academic position provided | 10 | Profile update |
-| **Document Upload** | Number of documents > 0 | 10 | Document upload |
+| **Supporting Letter** | Letter length > 100 chars | 10 | Verification submission |
 | **Profile Completeness** | Bio, affiliation, etc. | - | Profile update |
 
 ### Score Calculation (Automatic)
@@ -965,8 +914,8 @@ def calculate_auto_score(verification_request):
     if verification_request.academic_position:
         score += 10
     
-    # 6. Supporting Documents (10 points)
-    if len(verification_request.supporting_documents) > 0:
+    # 6. Supporting Letter (10 points)
+    if len(verification_request.supporting_letter) > 100:
         score += 10
     
     return score  # 0-100
@@ -1250,15 +1199,14 @@ export function VerificationQueue() {
 
 ## Summary
 
-### User Journey (5-7 Steps)
+### User Journey (4-6 Steps)
 
 1. **Register** → Auto-grabs email domain
 2. **Complete Profile** → Auto-grabs research interests, position
 3. **Connect ORCID** → Auto-grabs ORCID iD (+30 points!)
-4. **Upload Documents** → Auto-grabs file metadata (+10 points)
-5. **Submit Verification** → Auto-calculates score (0-100)
-6. **Check Status** → Monitor progress
-7. **Get Approved** → Auto-grants roles
+4. **Submit Verification** → Include supporting letter, auto-calculates score (0-100)
+5. **Check Status** → Monitor progress
+6. **Get Approved** → Auto-grants roles
 
 ### Admin Journey (3-4 Steps)
 
@@ -1272,7 +1220,7 @@ export function VerificationQueue() {
 ✅ **Email domain** (for institutional check)  
 ✅ **ORCID iD** (highest weight: 30 points)  
 ✅ **Profile completeness** (research interests, position)  
-✅ **Document uploads** (count and metadata)  
+✅ **Supporting letter** (length validation)  
 ✅ **Email-affiliation match** (algorithmic check)  
 ✅ **Verification timestamp** (all actions logged)  
 

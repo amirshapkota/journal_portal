@@ -304,10 +304,10 @@ class VerificationRequest(models.Model):
         help_text="Current academic position (e.g., Professor, PhD Student)"
     )
     
-    # Supporting documents (URLs or file references)
-    supporting_documents = models.JSONField(
-        default=list,
-        help_text="List of supporting document references"
+    # Supporting letter from supervisor/institution
+    supporting_letter = models.TextField(
+        blank=True,
+        help_text="Letter from supervisor or institution supporting the verification request"
     )
     
     # ORCID integration
@@ -430,12 +430,12 @@ class VerificationRequest(models.Model):
         else:
             details['academic_position'] = 0
         
-        # Supporting documents (10 points)
-        if self.supporting_documents and len(self.supporting_documents) > 0:
+        # Supporting letter (10 points)
+        if self.supporting_letter and len(self.supporting_letter) > 100:
             score += 10
-            details['supporting_documents'] = 10
+            details['supporting_letter'] = 10
         else:
-            details['supporting_documents'] = 0
+            details['supporting_letter'] = 0
         
         self.auto_score = score
         self.score_details = details
