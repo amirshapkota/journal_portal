@@ -259,7 +259,6 @@ class VerificationRequest(models.Model):
     ROLE_CHOICES = [
         ('AUTHOR', 'Author'),
         ('REVIEWER', 'Reviewer'),
-        ('BOTH', 'Author and Reviewer'),
     ]
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -273,10 +272,10 @@ class VerificationRequest(models.Model):
     )
     
     # Request details
-    requested_role = models.CharField(
-        max_length=20,
-        choices=ROLE_CHOICES,
-        help_text="Role being requested for verification"
+    requested_roles = ArrayField(
+        models.CharField(max_length=20, choices=ROLE_CHOICES),
+        default=list,
+        help_text="Roles being requested for verification (e.g., ['AUTHOR', 'REVIEWER'])"
     )
     status = models.CharField(
         max_length=20,
@@ -383,7 +382,8 @@ class VerificationRequest(models.Model):
         ]
     
     def __str__(self):
-        return f"Verification request for {self.profile.user.email} - {self.get_requested_role_display()} ({self.status})"
+        roles = ', '.join(self.requested_roles) if self.requested_roles else 'No roles'
+        return f"Verification request for {self.profile.user.email} - {roles} ({self.status})"
     
     def calculate_auto_score(self):
         """

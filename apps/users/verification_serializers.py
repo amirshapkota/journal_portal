@@ -13,7 +13,7 @@ class VerificationRequestSerializer(serializers.ModelSerializer):
     class Meta:
         model = VerificationRequest
         fields = [
-            'id', 'profile_email', 'profile_name', 'requested_role', 'status',
+            'id', 'profile_email', 'profile_name', 'requested_roles', 'status',
             'affiliation', 'affiliation_email', 'orcid_verified', 'orcid_id',
             'auto_score', 'created_at', 'updated_at'
         ]
@@ -26,11 +26,24 @@ class VerificationRequestCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = VerificationRequest
         fields = [
-            'id', 'requested_role', 'affiliation', 'affiliation_email',
+            'id', 'requested_roles', 'affiliation', 'affiliation_email',
             'research_interests', 'academic_position', 'supporting_letter',
             'auto_score', 'orcid_verified', 'orcid_id', 'status', 'created_at'
         ]
         read_only_fields = ['id', 'auto_score', 'orcid_verified', 'orcid_id', 'status', 'created_at']
+    
+    def validate_requested_roles(self, value):
+        """Validate requested roles array."""
+        if not value or len(value) == 0:
+            raise serializers.ValidationError("At least one role must be requested.")
+        
+        valid_roles = ['AUTHOR', 'REVIEWER']
+        for role in value:
+            if role not in valid_roles:
+                raise serializers.ValidationError(f"Invalid role: {role}. Must be one of {valid_roles}")
+        
+        # Remove duplicates
+        return list(set(value))
     
     def validate(self, data):
         """Validate verification request data."""
@@ -61,7 +74,7 @@ class VerificationRequestDetailSerializer(serializers.ModelSerializer):
         model = VerificationRequest
         fields = [
             'id', 'profile_id', 'profile_email', 'profile_name',
-            'requested_role', 'status', 'affiliation', 'affiliation_email',
+            'requested_roles', 'status', 'affiliation', 'affiliation_email',
             'research_interests', 'academic_position', 'supporting_letter',
             'orcid_verified', 'orcid_id', 'auto_score', 'score_details',
             'reviewed_by_email', 'reviewed_at', 'admin_notes',

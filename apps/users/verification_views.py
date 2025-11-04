@@ -179,24 +179,26 @@ class AdminVerificationViewSet(viewsets.ReadOnlyModelViewSet):
             profile = verification_request.profile
             profile.verification_status = 'GENUINE'
             
-            # Add requested role
-            requested_role = verification_request.requested_role
-            if requested_role == 'AUTHOR' or requested_role == 'BOTH':
-                from apps.users.models import Role
-                author_role, _ = Role.objects.get_or_create(name='Author')
-                profile.roles.add(author_role)
+            # Add requested roles
+            from apps.users.models import Role
+            granted_roles = []
             
-            if requested_role == 'REVIEWER' or requested_role == 'BOTH':
-                from apps.users.models import Role
-                reviewer_role, _ = Role.objects.get_or_create(name='Reviewer')
-                profile.roles.add(reviewer_role)
+            for role_name in verification_request.requested_roles:
+                if role_name == 'AUTHOR':
+                    author_role, _ = Role.objects.get_or_create(name='AUTHOR')
+                    profile.roles.add(author_role)
+                    granted_roles.append('Author')
+                elif role_name == 'REVIEWER':
+                    reviewer_role, _ = Role.objects.get_or_create(name='REVIEWER')
+                    profile.roles.add(reviewer_role)
+                    granted_roles.append('Reviewer')
             
             profile.save()
             
             return Response({
                 'detail': 'Verification approved',
                 'profile_status': profile.verification_status,
-                'roles_granted': requested_role
+                'roles_granted': granted_roles
             })
         
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

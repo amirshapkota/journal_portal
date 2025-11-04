@@ -191,7 +191,7 @@ Authorization: Bearer {access_token}
 Content-Type: application/json
 
 {
-  "requested_role": "BOTH",
+  "requested_roles": ["AUTHOR", "REVIEWER"],
   "affiliation": "Stanford University",
   "affiliation_email": "researcher@stanford.edu",
   "research_interests": "Deep Learning, Computer Vision, Natural Language Processing. Focus on transformer architectures and attention mechanisms.",
@@ -219,7 +219,7 @@ Content-Type: application/json
 {
   "id": "uuid",
   "status": "PENDING",
-  "requested_role": "BOTH",
+  "requested_roles": ["AUTHOR", "REVIEWER"],
   "auto_score": 100,
   "score_breakdown": [
     {
@@ -303,7 +303,7 @@ Authorization: Bearer {access_token}
   "latest_request": {
     "id": "uuid",
     "status": "PENDING",
-    "requested_role": "BOTH",
+    "requested_roles": ["AUTHOR", "REVIEWER"],
     "auto_score": 100,
     "score_breakdown": [...],
     "created_at": "2025-11-04T10:30:00Z"
@@ -338,7 +338,7 @@ Authorization: Bearer {access_token}
 {
   "id": "uuid",
   "status": "INFO_REQUESTED",
-  "requested_role": "BOTH",
+  "requested_roles": ["AUTHOR", "REVIEWER"],
   "auto_score": 55,
   "additional_info_requested": "Please provide a letter from your supervisor confirming your PhD enrollment at Stanford University.",
   "created_at": "2025-11-04T10:30:00Z",
@@ -396,7 +396,7 @@ Authorization: Bearer {access_token}
   "latest_request": {
     "id": "uuid",
     "status": "APPROVED",
-    "requested_role": "BOTH",
+    "requested_roles": ["AUTHOR", "REVIEWER"],
     "auto_score": 100,
     "created_at": "2025-11-04T10:30:00Z",
     "reviewed_at": "2025-11-04T15:45:00Z",
