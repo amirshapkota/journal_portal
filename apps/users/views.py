@@ -134,7 +134,13 @@ class LogoutView(APIView):
             {'detail': 'Successfully logged out.'},
             status=status.HTTP_200_OK
         )
-        response.delete_cookie('refresh_token', path='/', samesite='None' if not settings.DEBUG else 'Lax')
+        # Delete cookie with same attributes as when it was set
+        response.delete_cookie(
+            key='refresh_token',
+            path='/',
+            samesite='None' if not settings.DEBUG else 'Lax',
+            secure=not settings.DEBUG  # Must match the secure flag used when setting
+        )
         
         logger.info(f"User logged out: {request.user.email}")
         return response
