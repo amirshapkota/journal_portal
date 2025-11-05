@@ -296,85 +296,123 @@ class ORCIDCallbackView(APIView):
 		# Clean up old state tokens for this user
 		ORCIDOAuthState.objects.filter(user=user).delete()
 
-		# Return HTML page that closes window and notifies parent
-		from django.http import HttpResponse
-		html = f"""
-		<!DOCTYPE html>
-		<html>
-		<head>
-			<title>ORCID Connected</title>
-			<style>
-				body {{
-					font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-					display: flex;
-					justify-content: center;
-					align-items: center;
-					height: 100vh;
-					margin: 0;
-					background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-					color: white;
-				}}
-				.container {{
-					text-align: center;
-					background: rgba(255, 255, 255, 0.1);
-					padding: 40px;
-					border-radius: 20px;
-					backdrop-filter: blur(10px);
-					box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
-				}}
-				.success-icon {{
-					font-size: 64px;
-					margin-bottom: 20px;
-				}}
-				h1 {{
-					margin: 0 0 10px 0;
-					font-size: 32px;
-				}}
-				p {{
-					margin: 10px 0;
-					opacity: 0.9;
-				}}
-				.orcid {{
-					font-family: monospace;
-					background: rgba(255, 255, 255, 0.2);
-					padding: 5px 10px;
-					border-radius: 5px;
-					display: inline-block;
-					margin: 10px 0;
-				}}
-			</style>
-		</head>
-		<body>
-			<div class="container">
-				<div class="success-icon">✅</div>
-				<h1>ORCID Connected!</h1>
-				<p>Your ORCID iD has been successfully linked</p>
-				<div class="orcid">{orcid_id}</div>
-				<p><small>This window will close automatically...</small></p>
-			</div>
-			<script>
-				// Notify parent window (if opened as popup)
-				if (window.opener) {{
-					window.opener.postMessage({{
-						type: 'ORCID_CONNECTED',
-						orcid_id: '{orcid_id}',
-						user_email: '{user.email}'
-					}}, '*');
-				}}
-				
-				// Close window after 2 seconds
-				setTimeout(() => {{
-					window.close();
-					// If window.close() doesn't work (not opened by script), redirect
-					if (!window.closed) {{
-						window.location.href = '/';
-					}}
-				}}, 2000);
-			</script>
-		</body>
-		</html>
-		"""
-		return HttpResponse(html)
+
+from django.http import HttpResponse
+def orcid_connected(request, orcid_id, user):
+    # Return HTML page that closes window and notifies parent
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>ORCID Connected</title>
+        <style>
+            body {{
+                font-family: 'Segoe UI', Roboto, sans-serif;
+                background-color: #1a1a1a;
+                color: #fff;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                height: 100vh;
+                margin: 0;
+            }}
+
+            .card {{
+                background-color: #2b2b2b;
+                border-radius: 12px;
+                text-align: center;
+                padding: 40px 50px;
+                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+                width: 350px;
+            }}
+
+            .icon {{
+                background-color: #c8e6c9;
+                border-radius: 50%;
+                width: 100px;
+                height: 100px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                margin: 0 auto 20px auto;
+            }}
+
+            .icon svg {{
+                width: 50px;
+                height: 50px;
+                fill: #388e3c;
+            }}
+
+            h2 {{
+                margin: 10px 0 5px;
+                color: #b2ff59;
+            }}
+
+            p {{
+                margin: 5px 0 15px;
+                font-size: 14px;
+                opacity: 0.9;
+            }}
+
+            .orcid-box {{
+                background: #333;
+                padding: 10px;
+                border-radius: 6px;
+                color: #76ff03;
+                font-weight: bold;
+                letter-spacing: 0.5px;
+                margin-bottom: 10px;
+            }}
+
+            .redirect {{
+                color: #ff9800;
+                margin-top: 15px;
+                font-size: 14px;
+            }}
+
+            .thankyou {{
+                margin-top: 10px;
+                font-size: 13px;
+                color: #aaa;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="card">
+            <div class="icon">
+                <svg viewBox="0 0 24 24">
+                    <path d="M9 16.2l-3.5-3.5L4 14.2l5 5 12-12-1.4-1.4z" />
+                </svg>
+            </div>
+            <h2>ORCID Connected!</h2>
+            <p>Your ORCID iD has been successfully linked.</p>
+            <div class="orcid-box">{orcid_id}</div>
+            <div class="redirect">Please wait while we redirect back...</div>
+            <div class="thankyou">Thank you!</div>
+        </div>
+
+        <script>
+            // Notify parent window
+            if (window.opener) {{
+                window.opener.postMessage({{
+                    type: 'ORCID_CONNECTED',
+                    orcid_id: '{orcid_id}',
+                    user_email: '{user.email}'
+                }}, '*');
+            }}
+
+            // Auto close or redirect
+            setTimeout(() => {{
+                window.close();
+                if (!window.closed) {{
+                    window.location.href = '/';
+                }}
+            }}, 2000);
+        </script>
+    </body>
+    </html>
+    """
+    return HttpResponse(html)
 
 
 class ORCIDStatusView(APIView):
