@@ -199,13 +199,6 @@ def test_anomaly_detection():
     else:
         print(f"\n  Found {bot_count} potential bot account(s)")
     
-    print_separator("TEST COMPLETE")
-    print("\n Anomaly Detection System is functional!")
-    print("\n Available API Endpoints:")
-    print("   GET  /api/v1/ml/anomaly-detection/scan/")
-    print("   GET  /api/v1/ml/anomaly-detection/user/<user_id>/")
-    print("   GET  /api/v1/ml/anomaly-detection/submission/<submission_id>/")
-    print("   GET  /api/v1/ml/anomaly-detection/reviewer/<reviewer_id>/")
     print()
 
 

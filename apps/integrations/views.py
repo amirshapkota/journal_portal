@@ -138,7 +138,15 @@ class ORCIDAuthorizeView(APIView):
 		# Return URL or redirect directly
 		if request.query_params.get('redirect') == 'true':
 			return redirect(authorize_url)
-		return Response({'authorize_url': authorize_url})
+		
+		return Response({
+			'authorize_url': authorize_url,
+			'instructions': {
+				'popup': 'Open this URL in a popup window (800x600)',
+				'listener': 'Listen for postMessage event with type: ORCID_CONNECTED',
+				'example': 'window.open(authorize_url, "orcid", "width=800,height=600")'
+			}
+		})
 
 
 class ORCIDCallbackView(APIView):
@@ -288,13 +296,85 @@ class ORCIDCallbackView(APIView):
 		# Clean up old state tokens for this user
 		ORCIDOAuthState.objects.filter(user=user).delete()
 
-		# Return success page or JSON
-		return Response({
-			'detail': 'ORCID connected successfully!', 
-			'orcid_id': orcid_id,
-			'user_email': user.email,
-			'message': 'You can now close this window and check your profile.'
-		})
+		# Return HTML page that closes window and notifies parent
+		from django.http import HttpResponse
+		html = f"""
+		<!DOCTYPE html>
+		<html>
+		<head>
+			<title>ORCID Connected</title>
+			<style>
+				body {{
+					font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+					display: flex;
+					justify-content: center;
+					align-items: center;
+					height: 100vh;
+					margin: 0;
+					background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+					color: white;
+				}}
+				.container {{
+					text-align: center;
+					background: rgba(255, 255, 255, 0.1);
+					padding: 40px;
+					border-radius: 20px;
+					backdrop-filter: blur(10px);
+					box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+				}}
+				.success-icon {{
+					font-size: 64px;
+					margin-bottom: 20px;
+				}}
+				h1 {{
+					margin: 0 0 10px 0;
+					font-size: 32px;
+				}}
+				p {{
+					margin: 10px 0;
+					opacity: 0.9;
+				}}
+				.orcid {{
+					font-family: monospace;
+					background: rgba(255, 255, 255, 0.2);
+					padding: 5px 10px;
+					border-radius: 5px;
+					display: inline-block;
+					margin: 10px 0;
+				}}
+			</style>
+		</head>
+		<body>
+			<div class="container">
+				<div class="success-icon">✅</div>
+				<h1>ORCID Connected!</h1>
+				<p>Your ORCID iD has been successfully linked</p>
+				<div class="orcid">{orcid_id}</div>
+				<p><small>This window will close automatically...</small></p>
+			</div>
+			<script>
+				// Notify parent window (if opened as popup)
+				if (window.opener) {{
+					window.opener.postMessage({{
+						type: 'ORCID_CONNECTED',
+						orcid_id: '{orcid_id}',
+						user_email: '{user.email}'
+					}}, '*');
+				}}
+				
+				// Close window after 2 seconds
+				setTimeout(() => {{
+					window.close();
+					// If window.close() doesn't work (not opened by script), redirect
+					if (!window.closed) {{
+						window.location.href = '/';
+					}}
+				}}, 2000);
+			</script>
+		</body>
+		</html>
+		"""
+		return HttpResponse(html)
 
 
 class ORCIDStatusView(APIView):
