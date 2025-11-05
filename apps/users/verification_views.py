@@ -291,7 +291,7 @@ class VerificationStatusView(APIView):
             latest_request_data = {
                 'id': str(latest_request.id),
                 'status': latest_request.status,
-                'requested_role': latest_request.requested_role,
+                'requested_roles': latest_request.requested_roles,
                 'auto_score': latest_request.auto_score,
                 'score_breakdown': self._format_score_breakdown(latest_request),
                 'created_at': latest_request.created_at.isoformat(),
