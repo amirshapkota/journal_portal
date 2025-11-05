@@ -165,41 +165,41 @@ class ORCIDCallbackView(APIView):
 		error = request.query_params.get('error')
 		state = request.query_params.get('state')
 		
-		# Return detailed debug info if no params
+		# Redirect to frontend with error if no params
 		if not code and not error and not state:
-			return Response({
-				'detail': 'Missing authorization code from ORCID',
-				'debug': {
-					'received_GET_params': dict(request.GET),
-					'received_query_params': dict(request.query_params),
-					'full_path': request.get_full_path(),
-					'query_string': request.META.get('QUERY_STRING', ''),
-					'request_method': request.method,
-					'content_type': request.content_type,
-				},
-				'help': 'Make sure your ORCID application redirect URI is exactly: http://127.0.0.1:8000/api/v1/integrations/orcid/callback/'
-			}, status=status.HTTP_400_BAD_REQUEST)
+			error_params = urlencode({
+				'success': 'false',
+				'error': 'missing_params',
+				'error_description': 'Missing authorization code from ORCID'
+			})
+			return redirect(f"http://127.0.0.1:3000/orcid-callback.html?{error_params}")
 		
+		# Redirect to frontend with error if user denied
 		if error:
-			return Response({
-				'detail': 'ORCID authorization denied', 
+			error_params = urlencode({
+				'success': 'false',
 				'error': error,
-				'error_description': request.query_params.get('error_description', '')
-			}, status=status.HTTP_400_BAD_REQUEST)
+				'error_description': request.query_params.get('error_description', 'ORCID authorization denied')
+			})
+			return redirect(f"http://127.0.0.1:3000/orcid-callback.html?{error_params}")
 		
+		# Redirect to frontend with error if no code
 		if not code:
-			return Response({
-				'detail': 'Missing authorization code from ORCID',
-				'received_params': list(request.query_params.keys()),
-				'state_present': bool(state),
-				'help': 'Make sure your ORCID application redirect URI is exactly: http://127.0.0.1:8000/api/v1/integrations/orcid/callback/'
-			}, status=status.HTTP_400_BAD_REQUEST)
+			error_params = urlencode({
+				'success': 'false',
+				'error': 'missing_code',
+				'error_description': 'Missing authorization code from ORCID'
+			})
+			return redirect(f"http://127.0.0.1:3000/orcid-callback.html?{error_params}")
 		
+		# Redirect to frontend with error if no state
 		if not state:
-			return Response({
-				'detail': 'Missing state parameter',
-				'help': 'State parameter is required for security'
-			}, status=status.HTTP_400_BAD_REQUEST)
+			error_params = urlencode({
+				'success': 'false',
+				'error': 'missing_state',
+				'error_description': 'Missing state parameter - security validation failed'
+			})
+			return redirect(f"http://127.0.0.1:3000/orcid-callback.html?{error_params}")
 		
 		# Look up state token in database (not session)
 		try:
@@ -209,10 +209,12 @@ class ORCIDCallbackView(APIView):
 				expires_at__gt=timezone.now()
 			)
 		except ORCIDOAuthState.DoesNotExist:
-			return Response({
-				'detail': 'Invalid or expired state parameter',
-				'help': 'Please start the authorization process again'
-			}, status=status.HTTP_400_BAD_REQUEST)
+			error_params = urlencode({
+				'success': 'false',
+				'error': 'invalid_state',
+				'error_description': 'Invalid or expired state parameter. Please try again.'
+			})
+			return redirect(f"http://127.0.0.1:3000/orcid-callback.html?{error_params}")
 		
 		# Mark state as used
 		oauth_state.used = True
@@ -225,7 +227,12 @@ class ORCIDCallbackView(APIView):
 		try:
 			token_data = exchange_code_for_token(code, redirect_uri)
 		except requests.HTTPError as e:
-			return Response({'detail': 'Token exchange failed', 'error': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
+			error_params = urlencode({
+				'success': 'false',
+				'error': 'token_exchange_failed',
+				'error_description': f'Failed to exchange code for token: {str(e)}'
+			})
+			return redirect(f"http://127.0.0.1:3000/orcid-callback.html?{error_params}")
 
 		orcid_id = token_data.get('orcid') or token_data.get('orcid_id')
 		access_token = token_data.get('access_token')
@@ -234,7 +241,12 @@ class ORCIDCallbackView(APIView):
 		expires_in = token_data.get('expires_in')
 
 		if not orcid_id or not access_token:
-			return Response({'detail': 'Invalid token response from ORCID'}, status=status.HTTP_502_BAD_GATEWAY)
+			error_params = urlencode({
+				'success': 'false',
+				'error': 'invalid_token_response',
+				'error_description': 'Invalid token response from ORCID - missing credentials'
+			})
+			return redirect(f"http://127.0.0.1:3000/orcid-callback.html?{error_params}")
 
 		# Create or update integration record
 		profile: Profile = user.profile
@@ -288,13 +300,15 @@ class ORCIDCallbackView(APIView):
 		# Clean up old state tokens for this user
 		ORCIDOAuthState.objects.filter(user=user).delete()
 
-		# Return success page or JSON
-		return Response({
-			'detail': 'ORCID connected successfully!', 
+		# Redirect to frontend callback page with success parameters
+		from urllib.parse import urlencode
+		callback_params = {
+			'success': 'true',
 			'orcid_id': orcid_id,
-			'user_email': user.email,
-			'message': 'You can now close this window and check your profile.'
-		})
+			'user_email': user.email
+		}
+		frontend_callback_url = f"http://127.0.0.1:3000/orcid-callback.html?{urlencode(callback_params)}"
+		return redirect(frontend_callback_url)
 
 
 class ORCIDStatusView(APIView):
