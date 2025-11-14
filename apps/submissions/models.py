@@ -183,7 +183,9 @@ class AuthorContribution(models.Model):
 
 class Document(models.Model):
     """
-    Document model representing files associated with submissions.
+    Document model for SuperDoc integration.
+    SuperDoc handles version history, comments, and tracked changes via Yjs CRDT.
+    We only store the binary Yjs state and original DOCX file.
     """
     DOCUMENT_TYPE_CHOICES = [
         ('MANUSCRIPT', 'Manuscript'),
@@ -206,15 +208,6 @@ class Document(models.Model):
     document_type = models.CharField(max_length=20, choices=DOCUMENT_TYPE_CHOICES)
     description = models.TextField(blank=True)
     
-    # Version management
-    current_version = models.ForeignKey(
-        'DocumentVersion',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='+'
-    )
-    
     # Document management
     created_by = models.ForeignKey(
         'users.Profile',
@@ -222,11 +215,32 @@ class Document(models.Model):
         related_name='created_documents'
     )
     
-    # Editor session for live editing
-    editor_session_id = models.CharField(
-        max_length=100,
+    # SuperDoc Yjs state (binary CRDT data)
+    # This stores ALL SuperDoc state: content, versions, comments, tracked changes
+    yjs_state = models.BinaryField(
+        null=True,
         blank=True,
-        help_text="Session ID for collaborative editing"
+        help_text="Binary Yjs state containing document content, versions, and comments"
+    )
+    
+    # Original DOCX file
+    original_file = models.FileField(
+        upload_to='documents/%Y/%m/%d/',
+        null=True,
+        blank=True,
+        help_text="Original uploaded DOCX file"
+    )
+    file_name = models.CharField(max_length=255, blank=True, default='')
+    file_size = models.PositiveIntegerField(default=0, help_text="File size in bytes")
+    
+    # Last edit tracking
+    last_edited_at = models.DateTimeField(null=True, blank=True)
+    last_edited_by = models.ForeignKey(
+        'users.Profile',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='last_edited_documents'
     )
     
     # Timestamps

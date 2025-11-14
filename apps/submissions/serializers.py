@@ -68,19 +68,19 @@ class DocumentVersionSerializer(serializers.ModelSerializer):
 class DocumentSerializer(serializers.ModelSerializer):
     """Serializer for Document management."""
     
-    current_version = DocumentVersionSerializer(read_only=True)
-    versions = DocumentVersionSerializer(many=True, read_only=True)
     created_by = ProfileSerializer(read_only=True)
     document_type_display = serializers.CharField(source='get_document_type_display', read_only=True)
+    last_edited_by = ProfileSerializer(read_only=True)
     
     class Meta:
         model = Document
         fields = (
             'id', 'title', 'document_type', 'document_type_display',
-            'description', 'current_version', 'versions', 'created_by',
-            'editor_session_id', 'created_at', 'updated_at'
+            'description', 'created_by', 'file_name', 'file_size',
+            'last_edited_by', 'last_edited_at', 'created_at', 'updated_at'
         )
-        read_only_fields = ('id', 'created_by', 'created_at', 'updated_at')
+        read_only_fields = ('id', 'created_by', 'file_name', 'file_size', 
+                           'last_edited_by', 'last_edited_at', 'created_at', 'updated_at')
 
 
 class CommentSerializer(serializers.ModelSerializer):
