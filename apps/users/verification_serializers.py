@@ -37,10 +37,13 @@ class VerificationRequestCreateSerializer(serializers.ModelSerializer):
         if not value or len(value) == 0:
             raise serializers.ValidationError("At least one role must be requested.")
         
-        valid_roles = ['AUTHOR', 'REVIEWER']
+        # Allow AUTHOR, REVIEWER, and EDITOR (but not ADMIN, CHIEF_EDITOR, or READER)
+        valid_roles = ['AUTHOR', 'REVIEWER', 'EDITOR']
         for role in value:
             if role not in valid_roles:
-                raise serializers.ValidationError(f"Invalid role: {role}. Must be one of {valid_roles}")
+                raise serializers.ValidationError(
+                    f"Invalid role: {role}. Must be one of {valid_roles}"
+                )
         
         # Remove duplicates
         return list(set(value))
