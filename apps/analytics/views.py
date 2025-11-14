@@ -549,7 +549,7 @@ class MyAnalyticsView(APIView):
         author_stats = None
         if profile.roles.filter(name='AUTHOR').exists():
             submissions = Submission.objects.filter(
-                Q(submitter=profile) | Q(authors__profile=profile)
+                Q(corresponding_author=profile) | Q(coauthors=profile)
             ).distinct()
             
             author_stats = {
