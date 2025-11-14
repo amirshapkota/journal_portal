@@ -15,9 +15,9 @@ class VerificationRequestSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'profile_email', 'profile_name', 'requested_roles', 'status',
             'affiliation', 'affiliation_email', 'academic_position', 'orcid_verified', 'orcid_id',
-            'auto_score', 'created_at', 'updated_at'
+            'auto_score', 'rejection_reason', 'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'status', 'orcid_verified', 'orcid_id', 'auto_score', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'status', 'orcid_verified', 'orcid_id', 'auto_score', 'rejection_reason', 'created_at', 'updated_at']
 
 
 class VerificationRequestCreateSerializer(serializers.ModelSerializer):
