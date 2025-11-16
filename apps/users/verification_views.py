@@ -79,6 +79,8 @@ class VerificationRequestViewSet(viewsets.ModelViewSet):
         # (unless it's already approved/rejected)
         if verification_request.status not in ['APPROVED', 'REJECTED', 'WITHDRAWN']:
             verification_request.status = 'PENDING'
+            verification_request.additional_info_requested = ''  # Clear the info request
+            verification_request.admin_notes = ''  # Clear admin notes
             verification_request.calculate_auto_score()
             verification_request.save()
     
