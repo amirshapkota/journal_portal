@@ -4,19 +4,74 @@ Minimal API for SuperDoc document editing - handles Yjs state and DOCX files onl
 SuperDoc handles version history, comments, and tracked changes internally.
 """
 
-from rest_framework import viewsets, status
+from rest_framework import viewsets, status, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.http import FileResponse
 from drf_spectacular.utils import extend_schema, OpenApiResponse
 import base64
 
-from .models import Submission, Document
+from .models import Submission, Document, AuthorContribution
 from .superdoc_serializers import SuperDocCreateSerializer, SuperDocMetadataSerializer
 from apps.users.models import Profile
+from apps.reviews.models import ReviewAssignment
+
+
+class SuperDocPermission(permissions.BasePermission):
+    """
+    Custom permission for SuperDoc documents.
+    
+    Rules:
+    - Admin/staff: full access to all documents
+    - Corresponding author: full access (view + edit)
+    - Co-authors: view and comment only (edit=False)
+    - Reviewers: view and comment only (edit=False)
+    - Journal editors: full access
+    - Others: no access
+    """
+    
+    def has_permission(self, request, view):
+        """Check if user is authenticated."""
+        return request.user and request.user.is_authenticated
+    
+    def has_object_permission(self, request, view, obj):
+        """Check if user can access this specific document."""
+        document = obj
+        user = request.user
+        
+        # Admin/staff - full access
+        if user.is_superuser or user.is_staff:
+            return True
+        
+        # Must have profile
+        profile = getattr(user, 'profile', None)
+        if not profile:
+            return False
+        
+        submission = document.submission
+        
+        # Corresponding author - full access
+        if submission.corresponding_author == profile:
+            return True
+        
+        # Co-authors - view only (edit check handled separately)
+        if AuthorContribution.objects.filter(submission=submission, profile=profile).exists():
+            # Allow GET requests (view)
+            return request.method in permissions.SAFE_METHODS
+        
+        # Reviewers - view only
+        if ReviewAssignment.objects.filter(submission=submission, reviewer=profile).exists():
+            # Allow GET requests (view)
+            return request.method in permissions.SAFE_METHODS
+        
+        # Journal editors - full access
+        from apps.journals.models import JournalStaff
+        if JournalStaff.objects.filter(journal=submission.journal, profile=profile, is_active=True).exists():
+            return True
+        
+        return False
 
 
 def can_access_document(user, document):
@@ -41,20 +96,17 @@ def can_access_document(user, document):
         return (True, True)
     
     # Co-authors - can view and comment (SuperDoc handles this in UI)
-    from .models import AuthorContribution
     if AuthorContribution.objects.filter(submission=submission, profile=profile).exists():
         return (True, False)
     
     # Reviewers - can view and comment (check review assignments)
-    from apps.reviews.models import ReviewAssignment
     if ReviewAssignment.objects.filter(submission=submission, reviewer=profile).exists():
         return (True, False)
     
-    # Editors - full access
-    journal = submission.journal
-    if hasattr(journal, 'editorial_board'):
-        if journal.editorial_board.filter(user=profile).exists():
-            return (True, True)
+    # Journal editors - full access
+    from apps.journals.models import JournalStaff
+    if JournalStaff.objects.filter(journal=submission.journal, profile=profile, is_active=True).exists():
+        return (True, True)
     
     return (False, False)
 
@@ -73,7 +125,16 @@ class SuperDocViewSet(viewsets.ViewSet):
     - DOCX file upload/download
     - Access permissions
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [SuperDocPermission]
+    
+    def get_permissions(self):
+        """
+        Instantiate and return the list of permissions that this view requires.
+        """
+        if self.action == 'create':
+            # Only authenticated users can create documents
+            return [permissions.IsAuthenticated()]
+        return [SuperDocPermission()]
     
     def list(self, request):
         """List all documents user has access to."""
