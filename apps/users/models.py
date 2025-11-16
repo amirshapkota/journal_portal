@@ -259,6 +259,7 @@ class VerificationRequest(models.Model):
     ROLE_CHOICES = [
         ('AUTHOR', 'Author'),
         ('REVIEWER', 'Reviewer'),
+        ('EDITOR', 'Editor'),
     ]
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
