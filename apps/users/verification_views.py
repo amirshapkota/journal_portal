@@ -41,7 +41,7 @@ class VerificationRequestViewSet(viewsets.ModelViewSet):
         """Return appropriate serializer based on action."""
         if self.action == 'create':
             return VerificationRequestCreateSerializer
-        elif self.action == 'retrieve':
+        elif self.action in ['retrieve', 'my_requests']:
             return VerificationRequestDetailSerializer
         return VerificationRequestSerializer
     
@@ -70,6 +70,17 @@ class VerificationRequestViewSet(viewsets.ModelViewSet):
         # Calculate automated score
         verification_request.calculate_auto_score()
         verification_request.save()
+    
+    def perform_update(self, serializer):
+        """Update verification request and set status to PENDING for re-review."""
+        verification_request = serializer.save()
+        
+        # When user updates their request, reset to PENDING for admin review
+        # (unless it's already approved/rejected)
+        if verification_request.status not in ['APPROVED', 'REJECTED', 'WITHDRAWN']:
+            verification_request.status = 'PENDING'
+            verification_request.calculate_auto_score()
+            verification_request.save()
     
     @action(detail=False, methods=['get'])
     def my_requests(self, request):
