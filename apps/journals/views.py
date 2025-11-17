@@ -80,6 +80,19 @@ class JournalViewSet(viewsets.ModelViewSet):
             return JournalSettingsSerializer
         return JournalSerializer
     
+    def perform_create(self, serializer):
+        """Create journal and automatically add creator as Editor-in-Chief."""
+        journal = serializer.save()
+        
+        # Automatically add the creator as Editor-in-Chief if they have a profile
+        if hasattr(self.request.user, 'profile'):
+            JournalStaff.objects.create(
+                journal=journal,
+                profile=self.request.user.profile,
+                role='EDITOR_IN_CHIEF',
+                is_active=True
+            )
+    
     def get_queryset(self):
         """Filter queryset based on user permissions."""
         queryset = Journal.objects.select_related().prefetch_related(

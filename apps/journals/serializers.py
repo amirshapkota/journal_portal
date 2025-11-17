@@ -49,6 +49,8 @@ class JournalSerializer(serializers.ModelSerializer):
         fields = (
             'id', 'title', 'short_name', 'publisher', 'description',
             'issn_print', 'issn_online', 'website_url', 'contact_email',
+            'main_contact_name', 'main_contact_email', 'main_contact_phone',
+            'technical_contact_name', 'technical_contact_email', 'technical_contact_phone',
             'settings', 'is_active', 'is_accepting_submissions',
             'staff_members', 'submission_count', 'active_staff_count',
             'created_at', 'updated_at'
@@ -105,6 +107,9 @@ class JournalListSerializer(serializers.ModelSerializer):
         fields = (
             'id', 'title', 'short_name', 'publisher',
             'is_active', 'is_accepting_submissions',
+            'issn_print', 'issn_online',
+            'website_url', 'contact_email',
+            'description',
             'submission_count', 'editor_in_chief', 'created_at'
         )
     

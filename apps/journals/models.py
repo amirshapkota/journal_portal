@@ -31,6 +31,16 @@ class Journal(models.Model):
     website_url = models.URLField(blank=True)
     contact_email = models.EmailField(blank=True)
     
+    # Main Contact Information
+    main_contact_name = models.CharField(max_length=255, blank=True, help_text="Main contact person name")
+    main_contact_email = models.EmailField(blank=True, help_text="Main contact email")
+    main_contact_phone = models.CharField(max_length=50, blank=True, help_text="Main contact phone number")
+    
+    # Technical Contact Information
+    technical_contact_name = models.CharField(max_length=255, blank=True, help_text="Technical contact person name")
+    technical_contact_email = models.EmailField(blank=True, help_text="Technical contact email")
+    technical_contact_phone = models.CharField(max_length=50, blank=True, help_text="Technical contact phone number")
+    
     # OJS Integration Settings
     ojs_enabled = models.BooleanField(
         default=False,
