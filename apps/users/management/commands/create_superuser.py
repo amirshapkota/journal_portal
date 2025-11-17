@@ -18,13 +18,13 @@ class Command(BaseCommand):
         parser.add_argument(
             '--email',
             type=str,
-            default=config('SUPERUSER_EMAIL', default='admin@journal-portal.com'),
+            default=config('SUPERUSER_EMAIL', default='superadmin@journal-portal.com'),
             help='Superuser email address'
         )
         parser.add_argument(
             '--password',
             type=str,
-            default=config('SUPERUSER_PASSWORD', default='admin123456'),
+            default=config('SUPERUSER_PASSWORD', default='admin123123'),
             help='Superuser password'
         )
         parser.add_argument(

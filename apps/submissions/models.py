@@ -38,6 +38,40 @@ class Submission(models.Model):
     title = models.CharField(max_length=500)
     abstract = models.TextField(help_text="Manuscript abstract")
     
+    # Taxonomy classification
+    section = models.ForeignKey(
+        'journals.Section',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='submissions',
+        help_text="Journal section for this submission"
+    )
+    category = models.ForeignKey(
+        'journals.Category',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='submissions',
+        help_text="Category within the section"
+    )
+    research_type = models.ForeignKey(
+        'journals.ResearchType',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='submissions',
+        help_text="Type of research (Original, Review, etc.)"
+    )
+    area = models.ForeignKey(
+        'journals.Area',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='submissions',
+        help_text="Specific research area"
+    )
+    
     # Authorship
     corresponding_author = models.ForeignKey(
         'users.Profile',
@@ -104,6 +138,8 @@ class Submission(models.Model):
             models.Index(fields=['corresponding_author']),
             models.Index(fields=['status', 'submitted_at']),
             models.Index(fields=['created_at']),
+            models.Index(fields=['section', 'category']),
+            models.Index(fields=['research_type', 'area']),
             GinIndex(fields=['search_vector']),
             GinIndex(fields=['metadata_json']),
         ]

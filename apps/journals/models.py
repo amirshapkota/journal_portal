@@ -153,3 +153,169 @@ class JournalStaff(models.Model):
     
     def __str__(self):
         return f"{self.profile} - {self.get_role_display()} at {self.journal.short_name}"
+
+
+class Section(models.Model):
+    """
+    Section model for journal taxonomy (top level).
+    Example: Life Sciences, Physical Sciences, Engineering
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    journal = models.ForeignKey(
+        Journal,
+        on_delete=models.CASCADE,
+        related_name='sections'
+    )
+    
+    name = models.CharField(max_length=255, help_text="Section name")
+    code = models.CharField(max_length=50, help_text="Short code for section")
+    description = models.TextField(blank=True)
+    
+    # Section editor assignment
+    section_editor = models.ForeignKey(
+        'users.Profile',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='managed_sections',
+        help_text="Primary section editor"
+    )
+    
+    # Display order
+    order = models.PositiveIntegerField(default=0, help_text="Display order")
+    is_active = models.BooleanField(default=True)
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        unique_together = ['journal', 'code']
+        ordering = ['order', 'name']
+        indexes = [
+            models.Index(fields=['journal', 'is_active']),
+        ]
+    
+    def __str__(self):
+        return f"{self.name} ({self.journal.short_name})"
+
+
+class Category(models.Model):
+    """
+    Category model for journal taxonomy (second level).
+    Example: Biology, Chemistry, Computer Science
+    Belongs to a Section.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    section = models.ForeignKey(
+        Section,
+        on_delete=models.CASCADE,
+        related_name='categories'
+    )
+    
+    name = models.CharField(max_length=255, help_text="Category name")
+    code = models.CharField(max_length=50, help_text="Short code for category")
+    description = models.TextField(blank=True)
+    
+    # Display order
+    order = models.PositiveIntegerField(default=0, help_text="Display order")
+    is_active = models.BooleanField(default=True)
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name_plural = "Categories"
+        unique_together = ['section', 'code']
+        ordering = ['order', 'name']
+        indexes = [
+            models.Index(fields=['section', 'is_active']),
+        ]
+    
+    def __str__(self):
+        return f"{self.name} ({self.section.name})"
+
+
+class ResearchType(models.Model):
+    """
+    Research Type model for journal taxonomy (third level).
+    Example: Original Research, Review Article, Case Study, Meta-Analysis
+    Belongs to a Category.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    category = models.ForeignKey(
+        Category,
+        on_delete=models.CASCADE,
+        related_name='research_types'
+    )
+    
+    name = models.CharField(max_length=255, help_text="Research type name")
+    code = models.CharField(max_length=50, help_text="Short code for research type")
+    description = models.TextField(blank=True)
+    
+    # Manuscript requirements specific to this research type
+    requirements = models.JSONField(
+        default=dict,
+        help_text="Specific requirements for this research type (word count, sections, etc.)"
+    )
+    
+    # Display order
+    order = models.PositiveIntegerField(default=0, help_text="Display order")
+    is_active = models.BooleanField(default=True)
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        unique_together = ['category', 'code']
+        ordering = ['order', 'name']
+        indexes = [
+            models.Index(fields=['category', 'is_active']),
+        ]
+    
+    def __str__(self):
+        return f"{self.name} ({self.category.name})"
+
+
+class Area(models.Model):
+    """
+    Area model for journal taxonomy (fourth level - most specific).
+    Example: Molecular Biology, Quantum Physics, Machine Learning
+    Belongs to a Research Type.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    research_type = models.ForeignKey(
+        ResearchType,
+        on_delete=models.CASCADE,
+        related_name='areas'
+    )
+    
+    name = models.CharField(max_length=255, help_text="Area name")
+    code = models.CharField(max_length=50, help_text="Short code for area")
+    description = models.TextField(blank=True)
+    
+    # Keywords for matching
+    keywords = models.JSONField(
+        default=list,
+        help_text="Keywords associated with this area for matching/recommendation"
+    )
+    
+    # Display order
+    order = models.PositiveIntegerField(default=0, help_text="Display order")
+    is_active = models.BooleanField(default=True)
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        unique_together = ['research_type', 'code']
+        ordering = ['order', 'name']
+        indexes = [
+            models.Index(fields=['research_type', 'is_active']),
+        ]
+    
+    def __str__(self):
+        return f"{self.name} ({self.research_type.name})"

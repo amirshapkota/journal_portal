@@ -12,10 +12,12 @@ from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 from drf_spectacular.types import OpenApiTypes
 
-from .models import Journal, JournalStaff
+from .models import Journal, JournalStaff, Section, Category, ResearchType, Area
 from .serializers import (
     JournalSerializer, JournalListSerializer, JournalSettingsSerializer,
-    JournalStaffSerializer, AddStaffMemberSerializer
+    JournalStaffSerializer, AddStaffMemberSerializer,
+    SectionSerializer, CategorySerializer, ResearchTypeSerializer,
+    AreaSerializer, TaxonomyTreeSerializer
 )
 from apps.users.models import Profile
 
@@ -259,3 +261,179 @@ class JournalViewSet(viewsets.ModelViewSet):
         }
         
         return Response(stats)
+
+
+class SectionViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for Section management.
+    Provides CRUD operations for journal sections.
+    """
+    serializer_class = SectionSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['name', 'code', 'description']
+    ordering_fields = ['order', 'name', 'created_at']
+    ordering = ['order', 'name']
+    
+    def get_queryset(self):
+        """Filter sections by journal."""
+        queryset = Section.objects.select_related('journal', 'section_editor').prefetch_related('categories')
+        
+        # Filter by journal if provided
+        journal_id = self.request.query_params.get('journal')
+        if journal_id:
+            queryset = queryset.filter(journal_id=journal_id)
+        
+        # Non-staff users only see active sections
+        if not (self.request.user.is_staff or self.request.user.is_superuser):
+            queryset = queryset.filter(is_active=True)
+        
+        return queryset
+
+
+class CategoryViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for Category management.
+    Provides CRUD operations for categories within sections.
+    """
+    serializer_class = CategorySerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['name', 'code', 'description']
+    ordering_fields = ['order', 'name', 'created_at']
+    ordering = ['order', 'name']
+    
+    def get_queryset(self):
+        """Filter categories by section or journal."""
+        queryset = Category.objects.select_related('section__journal').prefetch_related('research_types')
+        
+        # Filter by section if provided
+        section_id = self.request.query_params.get('section')
+        if section_id:
+            queryset = queryset.filter(section_id=section_id)
+        
+        # Filter by journal if provided
+        journal_id = self.request.query_params.get('journal')
+        if journal_id:
+            queryset = queryset.filter(section__journal_id=journal_id)
+        
+        # Non-staff users only see active categories
+        if not (self.request.user.is_staff or self.request.user.is_superuser):
+            queryset = queryset.filter(is_active=True)
+        
+        return queryset
+
+
+class ResearchTypeViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for ResearchType management.
+    Provides CRUD operations for research types within categories.
+    """
+    serializer_class = ResearchTypeSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['name', 'code', 'description']
+    ordering_fields = ['order', 'name', 'created_at']
+    ordering = ['order', 'name']
+    
+    def get_queryset(self):
+        """Filter research types by category, section, or journal."""
+        queryset = ResearchType.objects.select_related('category__section__journal').prefetch_related('areas')
+        
+        # Filter by category if provided
+        category_id = self.request.query_params.get('category')
+        if category_id:
+            queryset = queryset.filter(category_id=category_id)
+        
+        # Filter by section if provided
+        section_id = self.request.query_params.get('section')
+        if section_id:
+            queryset = queryset.filter(category__section_id=section_id)
+        
+        # Filter by journal if provided
+        journal_id = self.request.query_params.get('journal')
+        if journal_id:
+            queryset = queryset.filter(category__section__journal_id=journal_id)
+        
+        # Non-staff users only see active research types
+        if not (self.request.user.is_staff or self.request.user.is_superuser):
+            queryset = queryset.filter(is_active=True)
+        
+        return queryset
+
+
+class AreaViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for Area management.
+    Provides CRUD operations for areas within research types.
+    """
+    serializer_class = AreaSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['name', 'code', 'description', 'keywords']
+    ordering_fields = ['order', 'name', 'created_at']
+    ordering = ['order', 'name']
+    
+    def get_queryset(self):
+        """Filter areas by research type, category, section, or journal."""
+        queryset = Area.objects.select_related('research_type__category__section__journal')
+        
+        # Filter by research type if provided
+        research_type_id = self.request.query_params.get('research_type')
+        if research_type_id:
+            queryset = queryset.filter(research_type_id=research_type_id)
+        
+        # Filter by category if provided
+        category_id = self.request.query_params.get('category')
+        if category_id:
+            queryset = queryset.filter(research_type__category_id=category_id)
+        
+        # Filter by section if provided
+        section_id = self.request.query_params.get('section')
+        if section_id:
+            queryset = queryset.filter(research_type__category__section_id=section_id)
+        
+        # Filter by journal if provided
+        journal_id = self.request.query_params.get('journal')
+        if journal_id:
+            queryset = queryset.filter(research_type__category__section__journal_id=journal_id)
+        
+        # Non-staff users only see active areas
+        if not (self.request.user.is_staff or self.request.user.is_superuser):
+            queryset = queryset.filter(is_active=True)
+        
+        return queryset
+    
+    @extend_schema(
+        summary="Get complete taxonomy tree for a journal",
+        description="Returns nested structure: Section -> Category -> ResearchType -> Area",
+        parameters=[
+            OpenApiParameter(
+                name='journal_id',
+                type=OpenApiTypes.UUID,
+                location=OpenApiParameter.QUERY,
+                description='Journal ID to get taxonomy tree for',
+                required=True
+            )
+        ]
+    )
+    @action(detail=False, methods=['get'], url_path='taxonomy-tree')
+    def taxonomy_tree(self, request):
+        """Get complete taxonomy tree for a journal."""
+        journal_id = request.query_params.get('journal_id')
+        
+        if not journal_id:
+            return Response(
+                {'error': 'journal_id parameter is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        sections = Section.objects.filter(
+            journal_id=journal_id,
+            is_active=True
+        ).prefetch_related(
+            'categories__research_types__areas'
+        )
+        
+        serializer = TaxonomyTreeSerializer(sections, many=True)
+        return Response(serializer.data)

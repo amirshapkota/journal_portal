@@ -5,7 +5,7 @@ Handles journal CRUD, staff management, and configuration.
 
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
-from .models import Journal, JournalStaff
+from .models import Journal, JournalStaff, Section, Category, ResearchType, Area
 from apps.users.serializers import ProfileSerializer
 
 User = get_user_model()
@@ -201,3 +201,169 @@ class AddStaffMemberSerializer(serializers.Serializer):
             )
         
         return attrs
+
+
+class SectionSerializer(serializers.ModelSerializer):
+    """Serializer for journal Sections."""
+    
+    section_editor_name = serializers.CharField(
+        source='section_editor.display_name',
+        read_only=True,
+        allow_null=True
+    )
+    category_count = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Section
+        fields = (
+            'id', 'journal', 'name', 'code', 'description',
+            'section_editor', 'section_editor_name', 'order',
+            'is_active', 'category_count', 'created_at', 'updated_at'
+        )
+        read_only_fields = ('id', 'created_at', 'updated_at')
+    
+    def get_category_count(self, obj):
+        """Get number of categories in this section."""
+        return obj.categories.filter(is_active=True).count()
+    
+    def validate_code(self, value):
+        """Validate code format."""
+        import re
+        if not re.match(r'^[A-Z0-9_]+$', value.upper()):
+            raise serializers.ValidationError(
+                "Code must contain only uppercase letters, numbers, and underscores."
+            )
+        return value.upper()
+
+
+class CategorySerializer(serializers.ModelSerializer):
+    """Serializer for Categories."""
+    
+    section_name = serializers.CharField(source='section.name', read_only=True)
+    research_type_count = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Category
+        fields = (
+            'id', 'section', 'section_name', 'name', 'code',
+            'description', 'order', 'is_active',
+            'research_type_count', 'created_at', 'updated_at'
+        )
+        read_only_fields = ('id', 'created_at', 'updated_at')
+    
+    def get_research_type_count(self, obj):
+        """Get number of research types in this category."""
+        return obj.research_types.filter(is_active=True).count()
+    
+    def validate_code(self, value):
+        """Validate code format."""
+        import re
+        if not re.match(r'^[A-Z0-9_]+$', value.upper()):
+            raise serializers.ValidationError(
+                "Code must contain only uppercase letters, numbers, and underscores."
+            )
+        return value.upper()
+
+
+class ResearchTypeSerializer(serializers.ModelSerializer):
+    """Serializer for Research Types."""
+    
+    category_name = serializers.CharField(source='category.name', read_only=True)
+    area_count = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = ResearchType
+        fields = (
+            'id', 'category', 'category_name', 'name', 'code',
+            'description', 'requirements', 'order', 'is_active',
+            'area_count', 'created_at', 'updated_at'
+        )
+        read_only_fields = ('id', 'created_at', 'updated_at')
+    
+    def get_area_count(self, obj):
+        """Get number of areas in this research type."""
+        return obj.areas.filter(is_active=True).count()
+    
+    def validate_code(self, value):
+        """Validate code format."""
+        import re
+        if not re.match(r'^[A-Z0-9_]+$', value.upper()):
+            raise serializers.ValidationError(
+                "Code must contain only uppercase letters, numbers, and underscores."
+            )
+        return value.upper()
+
+
+class AreaSerializer(serializers.ModelSerializer):
+    """Serializer for Areas."""
+    
+    research_type_name = serializers.CharField(source='research_type.name', read_only=True)
+    
+    class Meta:
+        model = Area
+        fields = (
+            'id', 'research_type', 'research_type_name', 'name',
+            'code', 'description', 'keywords', 'order', 'is_active',
+            'created_at', 'updated_at'
+        )
+        read_only_fields = ('id', 'created_at', 'updated_at')
+    
+    def validate_code(self, value):
+        """Validate code format."""
+        import re
+        if not re.match(r'^[A-Z0-9_]+$', value.upper()):
+            raise serializers.ValidationError(
+                "Code must contain only uppercase letters, numbers, and underscores."
+            )
+        return value.upper()
+    
+    def validate_keywords(self, value):
+        """Validate keywords is a list of strings."""
+        if not isinstance(value, list):
+            raise serializers.ValidationError("Keywords must be a list.")
+        for keyword in value:
+            if not isinstance(keyword, str):
+                raise serializers.ValidationError("All keywords must be strings.")
+        return value
+
+
+class TaxonomyTreeSerializer(serializers.Serializer):
+    """
+    Serializer for complete taxonomy tree.
+    Returns nested structure: Section -> Category -> ResearchType -> Area
+    """
+    id = serializers.UUIDField()
+    name = serializers.CharField()
+    code = serializers.CharField()
+    categories = serializers.SerializerMethodField()
+    
+    def get_categories(self, section):
+        """Get categories with nested research types and areas."""
+        categories = section.categories.filter(is_active=True)
+        result = []
+        for category in categories:
+            research_types = category.research_types.filter(is_active=True)
+            rt_list = []
+            for rt in research_types:
+                areas = rt.areas.filter(is_active=True)
+                rt_list.append({
+                    'id': rt.id,
+                    'name': rt.name,
+                    'code': rt.code,
+                    'areas': [
+                        {
+                            'id': area.id,
+                            'name': area.name,
+                            'code': area.code,
+                            'keywords': area.keywords
+                        }
+                        for area in areas
+                    ]
+                })
+            result.append({
+                'id': category.id,
+                'name': category.name,
+                'code': category.code,
+                'research_types': rt_list
+            })
+        return result
