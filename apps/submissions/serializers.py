@@ -163,11 +163,8 @@ class SubmissionSerializer(serializers.ModelSerializer):
 class SubmissionListSerializer(serializers.ModelSerializer):
     """Lightweight Submission serializer for list views."""
     
-    journal_name = serializers.CharField(source='journal.title', read_only=True)
-    corresponding_author_name = serializers.CharField(
-        source='corresponding_author.display_name', 
-        read_only=True
-    )
+    journal_name = serializers.SerializerMethodField()
+    corresponding_author_name = serializers.SerializerMethodField()
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     document_count = serializers.SerializerMethodField()
     
@@ -178,6 +175,16 @@ class SubmissionListSerializer(serializers.ModelSerializer):
             'status', 'status_display', 'submission_number', 'document_count',
             'created_at', 'submitted_at', 'updated_at'
         )
+    
+    def get_journal_name(self, obj):
+        """Get journal name safely."""
+        return obj.journal.title if obj.journal else None
+    
+    def get_corresponding_author_name(self, obj):
+        """Get corresponding author name safely."""
+        if obj.corresponding_author:
+            return obj.corresponding_author.display_name or f"{obj.corresponding_author.user.first_name} {obj.corresponding_author.user.last_name}".strip() or obj.corresponding_author.user.email
+        return None
     
     def get_document_count(self, obj):
         """Get document count for submission."""

@@ -91,10 +91,10 @@ class SubmissionViewSet(viewsets.ModelViewSet):
         """Filter queryset based on user permissions."""
         user = self.request.user
         queryset = Submission.objects.select_related(
-            'journal', 'corresponding_author__user'
+            'journal', 'corresponding_author', 'corresponding_author__user'
         ).prefetch_related(
             'author_contributions__profile__user',
-            'documents__current_version'
+            'documents'
         )
         
         # Admin sees all
