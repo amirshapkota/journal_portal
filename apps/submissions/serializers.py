@@ -71,16 +71,26 @@ class DocumentSerializer(serializers.ModelSerializer):
     created_by = ProfileSerializer(read_only=True)
     document_type_display = serializers.CharField(source='get_document_type_display', read_only=True)
     last_edited_by = ProfileSerializer(read_only=True)
+    file_url = serializers.SerializerMethodField()
     
     class Meta:
         model = Document
         fields = (
             'id', 'title', 'document_type', 'document_type_display',
-            'description', 'created_by', 'file_name', 'file_size',
+            'description', 'created_by', 'file_name', 'file_size', 'file_url',
             'last_edited_by', 'last_edited_at', 'created_at', 'updated_at'
         )
         read_only_fields = ('id', 'created_by', 'file_name', 'file_size', 
                            'last_edited_by', 'last_edited_at', 'created_at', 'updated_at')
+    
+    def get_file_url(self, obj):
+        """Generate absolute URL for the original file."""
+        if obj.original_file:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.original_file.url)
+            return obj.original_file.url
+        return None
 
 
 class CommentSerializer(serializers.ModelSerializer):
@@ -338,8 +348,11 @@ class DocumentUploadSerializer(serializers.ModelSerializer):
                 is_current=True
             )
             
-            # Set current version
+            # Set current version and also populate SuperDoc fields
             document.current_version = version
+            document.original_file = version.file
+            document.file_name = version.file_name
+            document.file_size = version.file_size
             document.save()
             
         except Exception as e:
