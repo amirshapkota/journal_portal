@@ -443,3 +443,55 @@ class SuperDocViewSet(viewsets.ViewSet):
         response['Content-Disposition'] = f'attachment; filename="{document.file_name}"'
         
         return response
+    
+    @extend_schema(
+        summary="Delete document",
+        description="Delete a document and all associated data",
+        responses={
+            204: OpenApiResponse(description="Document deleted successfully"),
+            403: OpenApiResponse(description="No permission to delete this document"),
+            404: OpenApiResponse(description="Document not found"),
+        }
+    )
+    def destroy(self, request, pk=None):
+        """
+        Delete a document.
+        Only corresponding author, journal editors, and admin can delete.
+        """
+        document = get_object_or_404(Document, pk=pk)
+        user = request.user
+        
+        # Check deletion permissions
+        can_delete = False
+        
+        # Admin/staff - can delete
+        if user.is_superuser or user.is_staff:
+            can_delete = True
+        
+        profile = getattr(user, 'profile', None)
+        if profile:
+            submission = document.submission
+            
+            # Corresponding author - can delete
+            if submission.corresponding_author == profile:
+                can_delete = True
+            
+            # Journal editors - can delete
+            from apps.journals.models import JournalStaff
+            if JournalStaff.objects.filter(
+                journal=submission.journal, 
+                profile=profile, 
+                is_active=True
+            ).exists():
+                can_delete = True
+        
+        if not can_delete:
+            return Response(
+                {'error': 'You do not have permission to delete this document'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Delete the document (file will be deleted automatically via FileField)
+        document.delete()
+        
+        return Response(status=status.HTTP_204_NO_CONTENT)
