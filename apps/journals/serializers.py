@@ -109,7 +109,7 @@ class JournalListSerializer(serializers.ModelSerializer):
             'is_active', 'is_accepting_submissions',
             'issn_print', 'issn_online',
             'website_url', 'contact_email',
-            'description',
+            'description', 'settings',
             'submission_count', 'editor_in_chief', 'created_at'
         )
     
