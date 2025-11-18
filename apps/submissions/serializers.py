@@ -167,13 +167,14 @@ class SubmissionListSerializer(serializers.ModelSerializer):
     corresponding_author_name = serializers.SerializerMethodField()
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     document_count = serializers.SerializerMethodField()
+    review_assignment_count = serializers.SerializerMethodField()
     
     class Meta:
         model = Submission
         fields = (
             'id', 'title', 'journal_name', 'corresponding_author_name',
             'status', 'status_display', 'submission_number', 'document_count',
-            'created_at', 'submitted_at', 'updated_at'
+            'review_assignment_count', 'created_at', 'submitted_at', 'updated_at'
         )
     
     def get_journal_name(self, obj):
@@ -189,6 +190,10 @@ class SubmissionListSerializer(serializers.ModelSerializer):
     def get_document_count(self, obj):
         """Get document count for submission."""
         return obj.documents.count()
+    
+    def get_review_assignment_count(self, obj):
+        """Get count of review assignments for this submission."""
+        return obj.review_assignments.filter(status__in=['PENDING', 'ACCEPTED']).count()
 
 
 class SubmissionStatusUpdateSerializer(serializers.Serializer):

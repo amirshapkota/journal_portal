@@ -94,7 +94,8 @@ class SubmissionViewSet(viewsets.ModelViewSet):
             'journal', 'corresponding_author', 'corresponding_author__user'
         ).prefetch_related(
             'author_contributions__profile__user',
-            'documents'
+            'documents',
+            'review_assignments'
         )
         
         # Admin sees all
@@ -120,6 +121,96 @@ class SubmissionViewSet(viewsets.ModelViewSet):
             return queryset.filter(user_submissions | journal_submissions).distinct()
         
         return queryset.none()
+    
+    @extend_schema(
+        summary="List draft submissions",
+        description="Get all submissions in DRAFT status.",
+        responses={200: SubmissionListSerializer(many=True)}
+    )
+    @action(detail=False, methods=['get'])
+    def drafts(self, request):
+        """Get all draft submissions for the user."""
+        queryset = self.get_queryset().filter(status='DRAFT')
+        
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = SubmissionListSerializer(page, many=True, context={'request': request})
+            return self.get_paginated_response(serializer.data)
+        
+        serializer = SubmissionListSerializer(queryset, many=True, context={'request': request})
+        return Response(serializer.data)
+    
+    @extend_schema(
+        summary="List unassigned submissions",
+        description="Get all submissions that are SUBMITTED or UNDER_REVIEW but have no reviewers assigned.",
+        responses={200: SubmissionListSerializer(many=True)}
+    )
+    @action(detail=False, methods=['get'])
+    def unassigned(self, request):
+        """Get all unassigned submissions (no reviewers assigned)."""
+        from django.db.models import Count
+        
+        queryset = self.get_queryset().filter(
+            status__in=['SUBMITTED', 'UNDER_REVIEW']
+        ).annotate(
+            review_count=Count('review_assignments', filter=Q(
+                review_assignments__status__in=['PENDING', 'ACCEPTED']
+            ))
+        ).filter(review_count=0)
+        
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = SubmissionListSerializer(page, many=True, context={'request': request})
+            return self.get_paginated_response(serializer.data)
+        
+        serializer = SubmissionListSerializer(queryset, many=True, context={'request': request})
+        return Response(serializer.data)
+    
+    @extend_schema(
+        summary="List active submissions",
+        description="Get all submissions that are actively being reviewed (have reviewers assigned).",
+        responses={200: SubmissionListSerializer(many=True)}
+    )
+    @action(detail=False, methods=['get'])
+    def active(self, request):
+        """Get all active submissions (reviewers assigned)."""
+        from django.db.models import Count
+        
+        queryset = self.get_queryset().filter(
+            status__in=['SUBMITTED', 'UNDER_REVIEW', 'REVISION_REQUIRED', 'REVISED']
+        ).annotate(
+            review_count=Count('review_assignments', filter=Q(
+                review_assignments__status__in=['PENDING', 'ACCEPTED']
+            ))
+        ).filter(review_count__gt=0)
+        
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = SubmissionListSerializer(page, many=True, context={'request': request})
+            return self.get_paginated_response(serializer.data)
+        
+        serializer = SubmissionListSerializer(queryset, many=True, context={'request': request})
+        return Response(serializer.data)
+    
+    @extend_schema(
+        summary="List archived submissions",
+        description="Get all submissions that are completed (ACCEPTED, REJECTED, WITHDRAWN, or PUBLISHED).",
+        responses={200: SubmissionListSerializer(many=True)}
+    )
+    @action(detail=False, methods=['get'])
+    def archived(self, request):
+        """Get all archived submissions (completed)."""
+        queryset = self.get_queryset().filter(
+            status__in=['ACCEPTED', 'REJECTED', 'WITHDRAWN', 'PUBLISHED']
+        )
+        
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = SubmissionListSerializer(page, many=True, context={'request': request})
+            return self.get_paginated_response(serializer.data)
+        
+        serializer = SubmissionListSerializer(queryset, many=True, context={'request': request})
+        return Response(serializer.data)
     
     @extend_schema(
         summary="Submit for review",
