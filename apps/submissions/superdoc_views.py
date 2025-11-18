@@ -165,7 +165,7 @@ class SuperDocViewSet(viewsets.ViewSet):
         
         documents = documents.distinct()
         
-        serializer = SuperDocMetadataSerializer(documents, many=True)
+        serializer = SuperDocMetadataSerializer(documents, many=True, context={'request': request})
         return Response(serializer.data)
     
     def create(self, request):
@@ -178,7 +178,7 @@ class SuperDocViewSet(viewsets.ViewSet):
         if serializer.is_valid():
             document = serializer.save()
             return Response(
-                SuperDocMetadataSerializer(document).data,
+                SuperDocMetadataSerializer(document, context={'request': request}).data,
                 status=status.HTTP_201_CREATED
             )
         
@@ -195,7 +195,7 @@ class SuperDocViewSet(viewsets.ViewSet):
                 status=status.HTTP_403_FORBIDDEN
             )
         
-        serializer = SuperDocMetadataSerializer(document)
+        serializer = SuperDocMetadataSerializer(document, context={'request': request})
         return Response(serializer.data)
     
     @extend_schema(
@@ -232,6 +232,9 @@ class SuperDocViewSet(viewsets.ViewSet):
             'updated_at': document.updated_at,
             'last_edited_at': document.last_edited_at,
             'last_edited_by': None,
+            'file_url': None,
+            'file_name': None,
+            'file_size': None,
         }
         
         # Add last editor info
@@ -344,11 +347,14 @@ class SuperDocViewSet(viewsets.ViewSet):
         document.last_edited_by = request.user.profile
         document.save()
         
+        # Build absolute file URL
+        file_url = request.build_absolute_uri(document.original_file.url) if document.original_file else None
+        
         return Response({
             'status': 'uploaded',
             'file_name': document.file_name,
             'file_size': document.file_size,
-            'file_url': request.build_absolute_uri(document.original_file.url)
+            'file_url': file_url
         })
     
     @extend_schema(
@@ -390,10 +396,14 @@ class SuperDocViewSet(viewsets.ViewSet):
         document.last_edited_by = request.user.profile
         document.save()
         
+        # Build absolute file URL
+        file_url = request.build_absolute_uri(document.original_file.url) if document.original_file else None
+        
         return Response({
             'status': 'exported',
             'file_name': document.file_name,
-            'file_url': request.build_absolute_uri(document.original_file.url)
+            'file_size': document.file_size,
+            'file_url': file_url
         })
     
     @extend_schema(

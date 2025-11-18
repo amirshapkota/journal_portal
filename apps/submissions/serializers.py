@@ -119,14 +119,16 @@ class SubmissionSerializer(serializers.ModelSerializer):
     author_contributions = AuthorContributionSerializer(many=True, read_only=True)
     documents = DocumentSerializer(many=True, read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
+    review_type_display = serializers.CharField(source='get_review_type_display', read_only=True)
     
     class Meta:
         model = Submission
         fields = (
             'id', 'journal', 'journal_id', 'title', 'abstract',
             'corresponding_author', 'author_contributions', 'documents',
-            'status', 'status_display', 'submission_number', 'metadata_json',
-            'compliance_score', 'created_at', 'submitted_at', 'updated_at'
+            'status', 'status_display', 'submission_number', 'review_type',
+            'review_type_display', 'metadata_json', 'compliance_score', 
+            'created_at', 'submitted_at', 'updated_at'
         )
         read_only_fields = (
             'id', 'corresponding_author', 'submission_number',
