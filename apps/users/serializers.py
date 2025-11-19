@@ -31,6 +31,13 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         if hasattr(user, 'profile'):
             is_verified = user.profile.verification_status == 'GENUINE'
             roles = list(user.profile.roles.values_list('name', flat=True))
+            
+            # Add EDITOR role if user is a journal staff member
+            from apps.journals.models import JournalStaff
+            if JournalStaff.objects.filter(profile=user.profile, is_active=True).exists():
+                if 'EDITOR' not in roles:
+                    roles.append('EDITOR')
+        
         token['is_verified'] = is_verified
         token['roles'] = roles
         
@@ -47,6 +54,12 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             is_verified = user.profile.verification_status == 'GENUINE'
             # Get user roles as an array
             roles = list(user.profile.roles.values_list('name', flat=True))
+            
+            # Add EDITOR role if user is a journal staff member
+            from apps.journals.models import JournalStaff
+            if JournalStaff.objects.filter(profile=user.profile, is_active=True).exists():
+                if 'EDITOR' not in roles:
+                    roles.append('EDITOR')
             
         data.update({
             'user': {

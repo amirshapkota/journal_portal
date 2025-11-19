@@ -204,6 +204,10 @@ class AdminVerificationViewSet(viewsets.ReadOnlyModelViewSet):
                     reviewer_role, _ = Role.objects.get_or_create(name='REVIEWER')
                     profile.roles.add(reviewer_role)
                     granted_roles.append('Reviewer')
+                elif role_name == 'EDITOR':
+                    editor_role, _ = Role.objects.get_or_create(name='EDITOR')
+                    profile.roles.add(editor_role)
+                    granted_roles.append('Editor')
             
             profile.save()
             
