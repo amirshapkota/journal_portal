@@ -254,7 +254,7 @@ class SuperDocViewSet(viewsets.ViewSet):
     
     @extend_schema(
         summary="Save document (manual save)",
-        description="Save the current DOCX file with all edits and comments embedded",
+        description="Save the current DOCX file with all edits and comments embedded. Replaces the existing file - does NOT create a version.",
         responses={
             200: OpenApiResponse(description="Document saved successfully"),
             403: OpenApiResponse(description="No edit access to this document"),
@@ -264,8 +264,19 @@ class SuperDocViewSet(viewsets.ViewSet):
     @action(detail=True, methods=['post'], url_path='save')
     def save_document(self, request, pk=None):
         """
-        Save document from SuperDoc editor.
-        Frontend exports DOCX with all comments and sends it here.
+        Save document from SuperDoc editor (manual save).
+        
+        This endpoint REPLACES the existing DOCX file with the updated one.
+        The old file is automatically deleted by Django's FileField.
+        
+        Version creation happens separately when:
+        - Author submits the document for review
+        - Author submits a revision after review
+        
+        Use this endpoint for:
+        - Author making edits and saving progress
+        - Reviewer adding comments and saving
+        - Any intermediate saves during editing
         """
         document = get_object_or_404(Document, pk=pk)
         can_view, can_edit = can_access_document(request.user, document)
@@ -291,8 +302,15 @@ class SuperDocViewSet(viewsets.ViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Save the updated file
-        document.original_file = docx_file
+        # Delete old file and save new one
+        # Django's FileField automatically deletes the old file when replaced
+        if document.original_file:
+            old_file = document.original_file
+            document.original_file = docx_file
+            old_file.delete(save=False)  # Explicitly delete old file
+        else:
+            document.original_file = docx_file
+        
         document.file_name = docx_file.name
         document.file_size = docx_file.size
         document.last_edited_at = timezone.now()
@@ -306,6 +324,89 @@ class SuperDocViewSet(viewsets.ViewSet):
             'message': 'Document saved successfully',
             'document': serializer.data
         })
+    
+    @extend_schema(
+        summary="Create document version",
+        description="Create a new version snapshot when submitting document or revision",
+        responses={
+            201: OpenApiResponse(description="Version created successfully"),
+            403: OpenApiResponse(description="No permission to create version"),
+            400: OpenApiResponse(description="Invalid request"),
+        }
+    )
+    @action(detail=True, methods=['post'], url_path='create-version')
+    def create_version(self, request, pk=None):
+        """
+        Create a new version of the document.
+        
+        This should be called when:
+        - Author submits the manuscript for review (initial submission)
+        - Author submits a revision after receiving reviewer feedback
+        
+        This creates a snapshot in DocumentVersion table and keeps
+        the current document.original_file as the working copy.
+        """
+        document = get_object_or_404(Document, pk=pk)
+        can_view, can_edit = can_access_document(request.user, document)
+        
+        # Only corresponding author or editors can create versions
+        if not can_edit:
+            return Response(
+                {'error': 'You do not have permission to create versions'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        if not document.original_file:
+            return Response(
+                {'error': 'No document file to create version from'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Get change summary from request
+        change_summary = request.data.get('change_summary', '')
+        
+        # Import DocumentVersion model
+        from .models import DocumentVersion
+        import hashlib
+        
+        # Read file and calculate hash
+        document.original_file.seek(0)
+        file_content = document.original_file.read()
+        file_hash = hashlib.sha256(file_content).hexdigest()
+        document.original_file.seek(0)
+        
+        # Get next version number
+        last_version = DocumentVersion.objects.filter(
+            document=document
+        ).order_by('-version_number').first()
+        version_number = (last_version.version_number + 1) if last_version else 1
+        
+        # Create new version
+        version = DocumentVersion.objects.create(
+            document=document,
+            version_number=version_number,
+            change_summary=change_summary,
+            file=document.original_file,
+            file_name=document.file_name,
+            file_size=document.file_size,
+            file_hash=file_hash,
+            is_current=True,
+            created_by=request.user.profile
+        )
+        
+        return Response({
+            'status': 'created',
+            'message': f'Version {version_number} created successfully',
+            'version': {
+                'id': str(version.id),
+                'version_number': version.version_number,
+                'change_summary': version.change_summary,
+                'file_name': version.file_name,
+                'file_size': version.file_size,
+                'created_by': version.created_by.display_name,
+                'created_at': version.created_at,
+            }
+        }, status=status.HTTP_201_CREATED)
     
     @extend_schema(
         summary="Download document",
