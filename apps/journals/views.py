@@ -110,15 +110,37 @@ class JournalViewSet(viewsets.ModelViewSet):
             )
     
     def get_queryset(self):
-        """Filter queryset based on user permissions."""
+        """Filter queryset based on user permissions and active role."""
         queryset = Journal.objects.select_related().prefetch_related(
             'staff_members__profile__user',
             'submissions'
         )
         
-        # Non-staff users only see active journals
-        if not (self.request.user.is_staff or self.request.user.is_superuser):
-            queryset = queryset.filter(is_active=True)
+        # Superuser sees all journals
+        if self.request.user.is_superuser:
+            return queryset
+        
+        # Check for active role in request headers or query params
+        active_role = self.request.headers.get('X-Active-Role') or self.request.query_params.get('active_role')
+        
+        # If user is explicitly acting as AUTHOR, show all active journals
+        if active_role == 'AUTHOR':
+            return queryset.filter(is_active=True, is_accepting_submissions=True)
+        
+        # Staff and Editors see only journals where they are staff members
+        if self.request.user.is_staff or (hasattr(self.request.user, 'profile') and 
+            self.request.user.profile.roles.filter(name='EDITOR').exists()):
+            
+            if hasattr(self.request.user, 'profile'):
+                # Return only journals where this user is a staff member
+                queryset = queryset.filter(
+                    staff_members__profile=self.request.user.profile,
+                    staff_members__is_active=True
+                ).distinct()
+                return queryset
+        
+        # Other users (including AUTHORS without explicit role header) see active journals
+        queryset = queryset.filter(is_active=True)
         
         return queryset
     
