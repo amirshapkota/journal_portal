@@ -98,6 +98,16 @@ class SubmissionViewSet(viewsets.ModelViewSet):
             'review_assignments'
         )
         
+        # Filter by journal if provided
+        journal_id = self.request.query_params.get('journal')
+        if journal_id:
+            queryset = queryset.filter(journal_id=journal_id)
+        
+        # Filter by status if provided
+        status_filter = self.request.query_params.get('status')
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+        
         # Admin sees all
         if user.is_superuser or user.is_staff:
             return queryset
