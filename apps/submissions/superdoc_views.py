@@ -1,7 +1,8 @@
 """
 SuperDoc Integration ViewSet.
-Minimal API for SuperDoc document editing - handles Yjs state and DOCX files only.
-SuperDoc handles version history, comments, and tracked changes internally.
+Handles document management for SuperDoc editor.
+Comments and formatting are stored within the DOCX file itself.
+Manual save workflow - no real-time collaboration (no Yjs needed).
 """
 
 from rest_framework import viewsets, status, permissions
@@ -11,7 +12,6 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.http import FileResponse
 from drf_spectacular.utils import extend_schema, OpenApiResponse
-import base64
 
 from .models import Submission, Document, AuthorContribution
 from .superdoc_serializers import SuperDocCreateSerializer, SuperDocMetadataSerializer
@@ -113,17 +113,17 @@ def can_access_document(user, document):
 
 class SuperDocViewSet(viewsets.ViewSet):
     """
-    Minimal API for SuperDoc integration.
+    API for SuperDoc integration with manual save workflow.
     
     SuperDoc handles:
-    - Version history (via Yjs CRDT)
-    - Comments and tracked changes
-    - Collaborative editing UI
+    - Comments stored in DOCX file natively
+    - Track changes within DOCX
+    - Document editing UI
     
-    Backend only handles:
-    - Storing binary Yjs state
-    - DOCX file upload/download
+    Backend handles:
+    - DOCX file storage and retrieval
     - Access permissions
+    - Version tracking via updated files
     """
     permission_classes = [SuperDocPermission]
     
@@ -200,7 +200,7 @@ class SuperDocViewSet(viewsets.ViewSet):
     
     @extend_schema(
         summary="Load document for SuperDoc editor",
-        description="Returns document metadata, original DOCX URL, and Yjs state if exists",
+        description="Returns document metadata and DOCX file URL",
         responses={
             200: OpenApiResponse(description="Document loaded successfully"),
             403: OpenApiResponse(description="No access to this document"),
@@ -211,7 +211,7 @@ class SuperDocViewSet(viewsets.ViewSet):
     def load_document(self, request, pk=None):
         """
         Load document for SuperDoc editor.
-        Returns original DOCX file URL + Yjs state if exists.
+        Returns DOCX file URL with all comments embedded.
         """
         document = get_object_or_404(Document, pk=pk)
         can_view, can_edit = can_access_document(request.user, document)
@@ -250,70 +250,22 @@ class SuperDocViewSet(viewsets.ViewSet):
             response_data['file_name'] = document.file_name
             response_data['file_size'] = document.file_size
         
-        # Add Yjs state if exists (base64 encoded binary data)
-        if document.yjs_state:
-            response_data['yjs_state'] = base64.b64encode(document.yjs_state).decode('utf-8')
-        else:
-            response_data['yjs_state'] = None
-        
         return Response(response_data)
     
     @extend_schema(
-        summary="Save Yjs state from SuperDoc",
-        description="Save binary Yjs state containing document content, versions, and comments",
+        summary="Save document (manual save)",
+        description="Save the current DOCX file with all edits and comments embedded",
         responses={
-            200: OpenApiResponse(description="State saved successfully"),
+            200: OpenApiResponse(description="Document saved successfully"),
             403: OpenApiResponse(description="No edit access to this document"),
+            400: OpenApiResponse(description="No file provided"),
         }
     )
-    @action(detail=True, methods=['post'], url_path='save-state')
-    def save_state(self, request, pk=None):
+    @action(detail=True, methods=['post'], url_path='save')
+    def save_document(self, request, pk=None):
         """
-        Save Yjs state from SuperDoc.
-        Called periodically by frontend to persist document state.
-        """
-        document = get_object_or_404(Document, pk=pk)
-        can_view, can_edit = can_access_document(request.user, document)
-        
-        if not can_edit:
-            return Response(
-                {'error': 'You do not have permission to edit this document'},
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
-        # Get base64 encoded Yjs state from request
-        yjs_state_b64 = request.data.get('yjs_state')
-        
-        if yjs_state_b64:
-            # Decode base64 to binary
-            document.yjs_state = base64.b64decode(yjs_state_b64)
-            document.last_edited_at = timezone.now()
-            document.last_edited_by = request.user.profile
-            document.save()
-            
-            return Response({
-                'status': 'saved',
-                'last_edited_at': document.last_edited_at
-            })
-        
-        return Response(
-            {'error': 'No yjs_state provided'},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-    
-    @extend_schema(
-        summary="Upload DOCX file",
-        description="Upload initial DOCX file for a new document",
-        responses={
-            200: OpenApiResponse(description="File uploaded successfully"),
-            403: OpenApiResponse(description="No edit access to this document"),
-        }
-    )
-    @action(detail=True, methods=['post'], url_path='upload')
-    def upload_docx(self, request, pk=None):
-        """
-        Upload DOCX file to document.
-        Used for initial upload or replacing the document.
+        Save document from SuperDoc editor.
+        Frontend exports DOCX with all comments and sends it here.
         """
         document = get_object_or_404(Document, pk=pk)
         can_view, can_edit = can_access_document(request.user, document)
@@ -339,7 +291,7 @@ class SuperDocViewSet(viewsets.ViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Save file
+        # Save the updated file
         document.original_file = docx_file
         document.file_name = docx_file.name
         document.file_size = docx_file.size
@@ -347,63 +299,12 @@ class SuperDocViewSet(viewsets.ViewSet):
         document.last_edited_by = request.user.profile
         document.save()
         
-        # Build absolute file URL
-        file_url = request.build_absolute_uri(document.original_file.url) if document.original_file else None
-        
+        # Return updated metadata
+        serializer = SuperDocMetadataSerializer(document, context={'request': request})
         return Response({
-            'status': 'uploaded',
-            'file_name': document.file_name,
-            'file_size': document.file_size,
-            'file_url': file_url
-        })
-    
-    @extend_schema(
-        summary="Export document as DOCX",
-        description="Save the current SuperDoc state as DOCX file",
-        responses={
-            200: OpenApiResponse(description="Document exported successfully"),
-            403: OpenApiResponse(description="No edit access to this document"),
-        }
-    )
-    @action(detail=True, methods=['post'], url_path='export')
-    def export_docx(self, request, pk=None):
-        """
-        Export current document state to DOCX.
-        Frontend sends the exported DOCX blob from SuperDoc.
-        """
-        document = get_object_or_404(Document, pk=pk)
-        can_view, can_edit = can_access_document(request.user, document)
-        
-        if not can_edit:
-            return Response(
-                {'error': 'You do not have permission to edit this document'},
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
-        docx_file = request.FILES.get('file')
-        
-        if not docx_file:
-            return Response(
-                {'error': 'No file provided'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        # Save as current version
-        document.original_file = docx_file
-        document.file_name = docx_file.name if docx_file.name else document.file_name
-        document.file_size = docx_file.size
-        document.last_edited_at = timezone.now()
-        document.last_edited_by = request.user.profile
-        document.save()
-        
-        # Build absolute file URL
-        file_url = request.build_absolute_uri(document.original_file.url) if document.original_file else None
-        
-        return Response({
-            'status': 'exported',
-            'file_name': document.file_name,
-            'file_size': document.file_size,
-            'file_url': file_url
+            'status': 'saved',
+            'message': 'Document saved successfully',
+            'document': serializer.data
         })
     
     @extend_schema(
