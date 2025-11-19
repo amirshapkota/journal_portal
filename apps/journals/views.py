@@ -26,17 +26,33 @@ class JournalPermissions(permissions.BasePermission):
     """
     Custom permissions for journal management.
     - Anyone can view active journals
-    - Only staff/admin can create journals
+    - Users with EDITOR role, staff, or admin can create journals
     - Only journal staff can edit their journals
+    - Editors (Editor-in-Chief, Managing Editor) can manage staff
     """
     
     def has_permission(self, request, view):
         if request.method in permissions.SAFE_METHODS:
             return True
-        return request.user.is_authenticated and (
-            request.user.is_staff or
-            request.user.is_superuser
-        )
+        
+        # Special handling for staff management actions
+        if view.action in ['add_staff', 'remove_staff', 'update_staff']:
+            return request.user.is_authenticated
+        
+        # Allow authenticated users with EDITOR role to create/modify journals
+        if not request.user.is_authenticated:
+            return False
+        
+        # Superuser and staff always have permission
+        if request.user.is_staff or request.user.is_superuser:
+            return True
+        
+        # Check if user has EDITOR role
+        if hasattr(request.user, 'profile'):
+            from apps.users.models import Role
+            return request.user.profile.roles.filter(name='EDITOR').exists()
+        
+        return False
     
     def has_object_permission(self, request, view, obj):
         # Read permissions for active journals
@@ -47,7 +63,7 @@ class JournalPermissions(permissions.BasePermission):
         if request.user.is_superuser or request.user.is_staff:
             return True
         
-        # Check if user is journal staff
+        # Check if user is journal editor with management permissions
         if hasattr(request.user, 'profile'):
             return JournalStaff.objects.filter(
                 journal=obj,
@@ -155,10 +171,32 @@ class JournalViewSet(viewsets.ModelViewSet):
         request=AddStaffMemberSerializer,
         responses={201: JournalStaffSerializer}
     )
-    @action(detail=True, methods=['post'])
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
     def add_staff(self, request, pk=None):
-        """Add staff member to journal."""
+        """Add staff member to journal. Requires Editor-in-Chief or Managing Editor role."""
         journal = self.get_object()
+        
+        # Check if user has permission to add staff
+        if not (request.user.is_superuser or request.user.is_staff):
+            if not hasattr(request.user, 'profile'):
+                return Response(
+                    {'detail': 'You do not have permission to perform this action.'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+            # Check if user is Editor-in-Chief or Managing Editor
+            is_editor = JournalStaff.objects.filter(
+                journal=journal,
+                profile=request.user.profile,
+                is_active=True,
+                role__in=['EDITOR_IN_CHIEF', 'MANAGING_EDITOR']
+            ).exists()
+            
+            if not is_editor:
+                return Response(
+                    {'detail': 'Only Editor-in-Chief or Managing Editor can add staff members.'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
         serializer = AddStaffMemberSerializer(
             data=request.data,
             context={'journal': journal}
@@ -196,10 +234,32 @@ class JournalViewSet(viewsets.ModelViewSet):
             )
         ]
     )
-    @action(detail=True, methods=['delete'], url_path='staff/(?P<user_id>[^/.]+)')
+    @action(detail=True, methods=['delete'], url_path='staff/(?P<user_id>[^/.]+)', permission_classes=[IsAuthenticated])
     def remove_staff(self, request, pk=None, user_id=None):
-        """Remove staff member from journal."""
+        """Remove staff member from journal. Requires Editor-in-Chief or Managing Editor role."""
         journal = self.get_object()
+        
+        # Check if user has permission to remove staff
+        if not (request.user.is_superuser or request.user.is_staff):
+            if not hasattr(request.user, 'profile'):
+                return Response(
+                    {'detail': 'You do not have permission to perform this action.'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+            is_editor = JournalStaff.objects.filter(
+                journal=journal,
+                profile=request.user.profile,
+                is_active=True,
+                role__in=['EDITOR_IN_CHIEF', 'MANAGING_EDITOR']
+            ).exists()
+            
+            if not is_editor:
+                return Response(
+                    {'detail': 'Only Editor-in-Chief or Managing Editor can remove staff members.'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        
         profile = get_object_or_404(Profile, id=user_id)
         
         staff_member = get_object_or_404(
@@ -223,11 +283,34 @@ class JournalViewSet(viewsets.ModelViewSet):
     @action(
         detail=True, 
         methods=['put', 'patch'], 
-        url_path='staff/(?P<user_id>[^/.]+)/update'
+        url_path='staff/(?P<user_id>[^/.]+)/update',
+        permission_classes=[IsAuthenticated]
     )
     def update_staff(self, request, pk=None, user_id=None):
-        """Update staff member role or permissions."""
+        """Update staff member role or permissions. Requires Editor-in-Chief or Managing Editor role."""
         journal = self.get_object()
+        
+        # Check if user has permission to update staff
+        if not (request.user.is_superuser or request.user.is_staff):
+            if not hasattr(request.user, 'profile'):
+                return Response(
+                    {'detail': 'You do not have permission to perform this action.'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+            is_editor = JournalStaff.objects.filter(
+                journal=journal,
+                profile=request.user.profile,
+                is_active=True,
+                role__in=['EDITOR_IN_CHIEF', 'MANAGING_EDITOR']
+            ).exists()
+            
+            if not is_editor:
+                return Response(
+                    {'detail': 'Only Editor-in-Chief or Managing Editor can update staff members.'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        
         profile = get_object_or_404(Profile, id=user_id)
 
         staff_member = get_object_or_404(
