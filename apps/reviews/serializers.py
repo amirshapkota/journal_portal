@@ -90,8 +90,8 @@ class ReviewAssignmentCreateSerializer(serializers.ModelSerializer):
             )
         
         # Check for conflict of interest (same affiliation as author)
-        if submission.author.affiliation and reviewer.affiliation:
-            if submission.author.affiliation.lower() == reviewer.affiliation.lower():
+        if submission.corresponding_author.affiliation_name and reviewer.affiliation_name:
+            if submission.corresponding_author.affiliation_name.lower() == reviewer.affiliation_name.lower():
                 raise serializers.ValidationError(
                     "Potential conflict of interest: Reviewer and author share the same affiliation."
                 )

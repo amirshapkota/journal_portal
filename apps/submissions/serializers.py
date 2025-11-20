@@ -120,6 +120,33 @@ class CommentSerializer(serializers.ModelSerializer):
         return []
 
 
+class ReviewAssignmentBasicSerializer(serializers.ModelSerializer):
+    """Basic serializer for review assignments in submission details."""
+    reviewer_name = serializers.CharField(source='reviewer.display_name', read_only=True)
+    reviewer_email = serializers.CharField(source='reviewer.user.email', read_only=True)
+    reviewer_affiliation = serializers.CharField(source='reviewer.affiliation_name', read_only=True)
+    assigned_by_name = serializers.CharField(source='assigned_by.display_name', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    is_overdue = serializers.SerializerMethodField()
+    days_remaining = serializers.SerializerMethodField()
+    
+    class Meta:
+        from apps.reviews.models import ReviewAssignment
+        model = ReviewAssignment
+        fields = [
+            'id', 'reviewer', 'reviewer_name', 'reviewer_email', 'reviewer_affiliation',
+            'assigned_by', 'assigned_by_name', 'status', 'status_display',
+            'invited_at', 'due_date', 'accepted_at', 'declined_at', 'completed_at',
+            'decline_reason', 'review_round', 'is_overdue', 'days_remaining'
+        ]
+    
+    def get_is_overdue(self, obj):
+        return obj.is_overdue()
+    
+    def get_days_remaining(self, obj):
+        return obj.days_remaining()
+
+
 class SubmissionSerializer(serializers.ModelSerializer):
     """Comprehensive Submission serializer."""
     
@@ -128,6 +155,7 @@ class SubmissionSerializer(serializers.ModelSerializer):
     corresponding_author = ProfileSerializer(read_only=True)
     author_contributions = AuthorContributionSerializer(many=True, read_only=True)
     documents = DocumentSerializer(many=True, read_only=True)
+    review_assignments = ReviewAssignmentBasicSerializer(many=True, read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     review_type_display = serializers.CharField(source='get_review_type_display', read_only=True)
     
@@ -136,8 +164,9 @@ class SubmissionSerializer(serializers.ModelSerializer):
         fields = (
             'id', 'journal', 'journal_id', 'title', 'abstract',
             'corresponding_author', 'author_contributions', 'documents',
-            'status', 'status_display', 'submission_number', 'review_type',
-            'review_type_display', 'metadata_json', 'compliance_score', 
+            'review_assignments', 'status', 'status_display', 
+            'submission_number', 'review_type', 'review_type_display', 
+            'metadata_json', 'compliance_score', 
             'created_at', 'submitted_at', 'updated_at'
         )
         read_only_fields = (
