@@ -58,13 +58,11 @@ class SuperDocPermission(permissions.BasePermission):
         
         # Co-authors - view only (edit check handled separately)
         if AuthorContribution.objects.filter(submission=submission, profile=profile).exists():
-            # Allow GET requests (view)
-            return request.method in permissions.SAFE_METHODS
+            return True
         
-        # Reviewers - view only
+        # Reviewers - view and comment access
         if ReviewAssignment.objects.filter(submission=submission, reviewer=profile).exists():
-            # Allow GET requests (view)
-            return request.method in permissions.SAFE_METHODS
+            return True
         
         # Journal editors - full access
         from apps.journals.models import JournalStaff
@@ -95,13 +93,13 @@ def can_access_document(user, document):
     if submission.corresponding_author == profile:
         return (True, True)
     
-    # Co-authors - can view and comment (SuperDoc handles this in UI)
+    # Co-authors - can view and comment (edit permission controlled by SuperDoc UI)
     if AuthorContribution.objects.filter(submission=submission, profile=profile).exists():
         return (True, False)
     
-    # Reviewers - can view and comment (check review assignments)
+    # Reviewers - can view and comment (edit permission controlled by SuperDoc UI)
     if ReviewAssignment.objects.filter(submission=submission, reviewer=profile).exists():
-        return (True, False)
+        return (True, True)  # Give edit permission so they can add comments and track changes
     
     # Journal editors - full access
     from apps.journals.models import JournalStaff
