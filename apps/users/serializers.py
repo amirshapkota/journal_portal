@@ -12,6 +12,7 @@ from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from .models import CustomUser, Profile, Role
 import re
+import uuid
 
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
@@ -135,6 +136,13 @@ class ProfileSerializer(serializers.ModelSerializer):
     
     user_email = serializers.EmailField(source='user.email', read_only=True)
     user_name = serializers.SerializerMethodField()
+    expertise_areas = serializers.SerializerMethodField()
+    
+    def get_expertise_areas(self, obj):
+        """Convert Concept objects to list of names for GET requests."""
+        if obj.expertise_areas.exists():
+            return list(obj.expertise_areas.values_list('name', flat=True))
+        return []
     
     class Meta:
         model = Profile
@@ -159,6 +167,63 @@ class ProfileSerializer(serializers.ModelSerializer):
                     "ORCID ID must be in format: 0000-0000-0000-0000"
                 )
         return value
+    
+    def validate(self, attrs):
+        """Custom validation including expertise_areas."""
+        # Handle expertise_areas from initial data
+        if 'expertise_areas' in self.initial_data:
+            expertise_areas = self.initial_data.get('expertise_areas')
+            if expertise_areas is not None:
+                if not isinstance(expertise_areas, list):
+                    raise serializers.ValidationError({
+                        'expertise_areas': 'Must be a list of strings.'
+                    })
+                # Validate each item is a string
+                for item in expertise_areas:
+                    if not isinstance(item, str):
+                        raise serializers.ValidationError({
+                            'expertise_areas': 'All items must be strings.'
+                        })
+                attrs['expertise_areas'] = expertise_areas
+        return attrs
+    
+    def update(self, instance, validated_data):
+        """Update profile with proper handling of expertise areas."""
+        # Import here to avoid circular imports
+        from apps.common.models import Concept
+        
+        # Extract expertise_areas before updating other fields
+        expertise_areas_data = validated_data.pop('expertise_areas', None)
+        
+        # Update regular fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        
+        # Update expertise areas if provided
+        if expertise_areas_data is not None:
+            concept_objects = []
+            for concept_name in expertise_areas_data:
+                if concept_name and concept_name.strip():
+                    # Try to find existing concept by name first
+                    try:
+                        concept = Concept.objects.get(
+                            name=concept_name.strip(),
+                            provider='MANUAL'
+                        )
+                    except Concept.DoesNotExist:
+                        # Create new concept with unique external_id
+                        concept = Concept.objects.create(
+                            name=concept_name.strip(),
+                            provider='MANUAL',
+                            external_id=str(uuid.uuid4())
+                        )
+                    concept_objects.append(concept)
+            
+            # Set the many-to-many relationship
+            instance.expertise_areas.set(concept_objects)
+        
+        return instance
 
 
 class RoleSerializer(serializers.ModelSerializer):

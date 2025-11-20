@@ -36,19 +36,29 @@ class ReviewAssignmentSerializer(serializers.ModelSerializer):
     assigned_by_info = ReviewerProfileSerializer(source='assigned_by', read_only=True)
     submission_title = serializers.CharField(source='submission.title', read_only=True)
     submission_id = serializers.UUIDField(source='submission.id', read_only=True)
+    submission_number = serializers.CharField(source='submission.submission_number', read_only=True)
     days_remaining = serializers.IntegerField(read_only=True)
     is_overdue = serializers.BooleanField(read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    
+    def get_submission_details(self, obj):
+        """Get full submission details for review page."""
+        from apps.submissions.serializers import SubmissionSerializer
+        return SubmissionSerializer(obj.submission, context=self.context).data
+    
+    submission_details = serializers.SerializerMethodField()
     
     class Meta:
         model = ReviewAssignment
         fields = [
-            'id', 'submission', 'submission_id', 'submission_title',
+            'id', 'submission', 'submission_id', 'submission_title', 'submission_number',
             'reviewer', 'reviewer_info',
             'assigned_by', 'assigned_by_info',
-            'status', 'invited_at', 'due_date',
+            'status', 'status_display', 'invited_at', 'due_date',
             'accepted_at', 'declined_at', 'completed_at',
             'invitation_message', 'decline_reason',
             'review_round', 'days_remaining', 'is_overdue',
+            'submission_details',
             'created_at', 'updated_at'
         ]
         read_only_fields = [
