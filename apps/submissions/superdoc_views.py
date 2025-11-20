@@ -302,20 +302,33 @@ class SuperDocViewSet(viewsets.ViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Delete old file and save new one
-        # Django's FileField automatically deletes the old file when replaced
+        # Store reference to old file before replacing
+        old_file_path = None
         if document.original_file:
-            old_file = document.original_file
-            document.original_file = docx_file
-            old_file.delete(save=False)  # Explicitly delete old file
-        else:
-            document.original_file = docx_file
+            try:
+                old_file_path = document.original_file.path
+            except:
+                old_file_path = None
         
+        # Assign new file
+        document.original_file = docx_file
         document.file_name = docx_file.name
         document.file_size = docx_file.size
         document.last_edited_at = timezone.now()
         document.last_edited_by = request.user.profile
         document.save()
+        
+        # Delete old file after saving new one
+        if old_file_path:
+            try:
+                import os
+                if os.path.exists(old_file_path):
+                    os.remove(old_file_path)
+            except Exception as e:
+                # Log but don't fail if old file deletion fails
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f"Failed to delete old file {old_file_path}: {str(e)}")
         
         # Return updated metadata
         serializer = SuperDocMetadataSerializer(document, context={'request': request})
