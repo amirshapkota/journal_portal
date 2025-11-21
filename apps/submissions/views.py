@@ -183,11 +183,11 @@ class SubmissionViewSet(viewsets.ModelViewSet):
     )
     @action(detail=False, methods=['get'])
     def active(self, request):
-        """Get all active submissions (reviewers assigned)."""
+        """Get all active submissions (reviewers assigned and not yet published/archived)."""
         from django.db.models import Count
         
         queryset = self.get_queryset().filter(
-            status__in=['SUBMITTED', 'UNDER_REVIEW', 'REVISION_REQUIRED', 'REVISED']
+            status__in=['SUBMITTED', 'UNDER_REVIEW', 'REVISION_REQUIRED', 'REVISED', 'ACCEPTED']
         ).annotate(
             review_count=Count('review_assignments', filter=Q(
                 review_assignments__status__in=['PENDING', 'ACCEPTED']
@@ -224,16 +224,17 @@ class SubmissionViewSet(viewsets.ModelViewSet):
     
     @extend_schema(
         summary="Submit for review",
-        description="Submit a draft for review process.",
+        description="Submit a draft for review process or resubmit after revisions.",
     )
     @action(detail=True, methods=['post'])
     def submit(self, request, pk=None):
         """Submit manuscript for review."""
         submission = self.get_object()
         
-        if submission.status != 'DRAFT':
+        # Allow submission from DRAFT or REVISION_REQUIRED status
+        if submission.status not in ['DRAFT', 'REVISION_REQUIRED']:
             return Response(
-                {'error': 'Only draft submissions can be submitted'},
+                {'error': 'Only draft or revision-required submissions can be submitted'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
@@ -246,7 +247,14 @@ class SubmissionViewSet(viewsets.ModelViewSet):
         
         # Update status and set submission timestamp
         from django.utils import timezone
-        submission.status = 'SUBMITTED'
+        
+        # If resubmitting after revision, set status to REVISED
+        # If submitting for first time, set status to SUBMITTED
+        if submission.status == 'REVISION_REQUIRED':
+            submission.status = 'REVISED'
+        else:
+            submission.status = 'SUBMITTED'
+        
         submission.submitted_at = timezone.now()
         submission.save()
         

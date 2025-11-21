@@ -347,6 +347,7 @@ class DocumentUploadSerializer(serializers.ModelSerializer):
         file = validated_data.pop('file')
         submission = self.context['submission']
         user = self.context['request'].user
+        document_type = validated_data.get('document_type')
         
         # Create document first
         document = Document.objects.create(
@@ -383,6 +384,21 @@ class DocumentUploadSerializer(serializers.ModelSerializer):
             document.file_name = version.file_name
             document.file_size = version.file_size
             document.save()
+            
+            # Handle revision workflow
+            if document_type == 'REVISED_MANUSCRIPT' and submission.status == 'REVISION_REQUIRED':
+                # Update submission status to REVISED
+                submission.status = 'REVISED'
+                submission.save()
+                
+                # Clear old reviews (mark as superseded) so reviewers can review again
+                # Keep the reviewer assignments (status stays ACCEPTED)
+                from apps.reviews.models import Review
+                Review.objects.filter(
+                    submission=submission
+                ).update(
+                    is_published=False  # Mark old reviews as not current
+                )
             
         except Exception as e:
             # Clean up document if file storage fails

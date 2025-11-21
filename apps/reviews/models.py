@@ -79,7 +79,23 @@ class ReviewAssignment(models.Model):
             days = getattr(settings, 'JOURNAL_PORTAL', {}).get('REVIEW_DEADLINE_DAYS', 30)
             self.due_date = timezone.now() + timedelta(days=days)
         
+        # Track if status changed to ACCEPTED
+        is_new = self._state.adding
+        old_status = None
+        if not is_new:
+            try:
+                old_instance = ReviewAssignment.objects.get(pk=self.pk)
+                old_status = old_instance.status
+            except ReviewAssignment.DoesNotExist:
+                pass
+        
         super().save(*args, **kwargs)
+        
+        # Update submission status to UNDER_REVIEW when first reviewer accepts
+        if old_status == 'PENDING' and self.status == 'ACCEPTED':
+            if self.submission.status in ['SUBMITTED', 'REVISED']:
+                self.submission.status = 'UNDER_REVIEW'
+                self.submission.save()
     
     def is_overdue(self):
         """Check if the review is overdue."""
@@ -259,7 +275,7 @@ class Review(models.Model):
     
     # Review visibility and status
     is_anonymous = models.BooleanField(default=True)
-    is_published = models.BooleanField(default=False)
+    is_published = models.BooleanField(default=True)  # True by default for new reviews
     
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
@@ -285,13 +301,50 @@ class Review(models.Model):
             self.submission = self.assignment.submission
             self.reviewer = self.assignment.reviewer
         
+        is_new = self._state.adding
         super().save(*args, **kwargs)
         
-        # Update assignment status
-        if self.assignment:
-            self.assignment.status = 'COMPLETED'
-            self.assignment.completed_at = self.submitted_at
-            self.assignment.save()
+        # Update assignment status based on recommendation
+        if self.assignment and is_new:
+            if self.recommendation in ['ACCEPT', 'REJECT']:
+                # Mark as completed only for final decisions
+                self.assignment.status = 'COMPLETED'
+                self.assignment.completed_at = self.submitted_at
+                self.assignment.save()
+            # For MINOR_REVISION or MAJOR_REVISION, keep status as ACCEPTED (reviewer stays assigned)
+            # This allows the same reviewer to review revisions
+        
+        # Update submission status immediately when ANY reviewer submits
+        if is_new and self.submission:
+            # Get all current active reviews for this submission
+            all_reviews = self.submission.reviews.filter(is_published=True)
+            recommendations = [r.recommendation for r in all_reviews]
+            
+            # Priority 1: If ANY reviewer recommends REJECTION, set to REJECTED
+            if 'REJECT' in recommendations:
+                self.submission.status = 'REJECTED'
+                self.submission.save()
+            
+            # Priority 2: If ANY reviewer requests MAJOR or MINOR revision, set to REVISION_REQUIRED
+            elif 'MAJOR_REVISION' in recommendations or 'MINOR_REVISION' in recommendations:
+                self.submission.status = 'REVISION_REQUIRED'
+                self.submission.save()
+            
+            # Priority 3: If ALL assigned reviewers have submitted and ALL recommend ACCEPT, set to ACCEPTED
+            else:
+                # Count active reviewers (who haven't been completed)
+                active_reviewers_count = self.submission.review_assignments.filter(
+                    status='ACCEPTED'
+                ).count()
+                
+                # Count submitted reviews
+                submitted_reviews_count = all_reviews.count()
+                
+                # If all reviewers have submitted and all are ACCEPT
+                if submitted_reviews_count >= active_reviewers_count and active_reviewers_count > 0:
+                    if all(r == 'ACCEPT' for r in recommendations):
+                        self.submission.status = 'ACCEPTED'
+                        self.submission.save()
     
     def get_overall_score(self):
         """Calculate overall score from individual scores."""
