@@ -21,10 +21,10 @@ def get_auth_token():
     
     if response.status_code == 200:
         token = response.json().get('access')
-        print("✅ Authentication successful\n")
+        print(" Authentication successful\n")
         return token
     else:
-        print(f"❌ Authentication failed: {response.status_code}")
+        print(f" Authentication failed: {response.status_code}")
         print(response.text)
         return None
 
@@ -48,7 +48,7 @@ def test_endpoint(name, method, url, headers, data=None):
         print(f"Status Code: {response.status_code}")
         
         if response.status_code in [200, 201, 204]:
-            print(f"✅ SUCCESS")
+            print(f" SUCCESS")
             if response.status_code != 204:
                 try:
                     result = response.json()
@@ -56,19 +56,19 @@ def test_endpoint(name, method, url, headers, data=None):
                 except:
                     print(f"Response: {response.text[:500]}...")
         else:
-            print(f"❌ FAILED")
+            print(f" FAILED")
             print(f"Response: {response.text[:500]}")
         
         return response
     
     except requests.exceptions.Timeout:
-        print(f"⏱️  TIMEOUT - OJS server may be slow or unreachable")
+        print(f"  TIMEOUT - OJS server may be slow or unreachable")
         return None
     except requests.exceptions.ConnectionError:
-        print(f"🔌 CONNECTION ERROR - Cannot reach OJS server")
+        print(f" CONNECTION ERROR - Cannot reach OJS server")
         return None
     except Exception as e:
-        print(f"❌ ERROR: {str(e)}")
+        print(f" ERROR: {str(e)}")
         return None
 
 def main():
