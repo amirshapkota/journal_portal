@@ -420,12 +420,13 @@ class UserViewSet(ListModelMixin, RetrieveModelMixin, UpdateModelMixin, DestroyM
     def get_queryset(self):
         """Filter users based on permissions."""
         user = self.request.user
-        
-        # Users can only see their own data unless they have admin privileges
+        # Users can only see their own data unless they have admin privileges or are editors
         if user.is_staff or user.is_superuser:
             return CustomUser.objects.all()
-        else:
-            return CustomUser.objects.filter(id=user.id)
+        # Check for EDITOR role
+        if hasattr(user, 'profile') and user.profile.roles.filter(name='EDITOR').exists():
+            return CustomUser.objects.all()
+        return CustomUser.objects.filter(id=user.id)
 
 
 @extend_schema_view(
