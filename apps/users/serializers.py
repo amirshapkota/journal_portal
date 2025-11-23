@@ -20,7 +20,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     
     @classmethod
     def get_token(cls, user):
-        token = super().get_token(user)
+        token = super().get_token(user) 
         
         # Add custom claims
         token['email'] = user.email
@@ -33,11 +33,11 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             is_verified = user.profile.verification_status == 'GENUINE'
             roles = list(user.profile.roles.values_list('name', flat=True))
             
-            # Add EDITOR role if user is a journal staff member
-            from apps.journals.models import JournalStaff
-            if JournalStaff.objects.filter(profile=user.profile, is_active=True).exists():
-                if 'EDITOR' not in roles:
-                    roles.append('EDITOR')
+            # # Add EDITOR role if user is a journal staff member
+            # from apps.journals.models import JournalStaff
+            # if JournalStaff.objects.filter(profile=user.profile, is_active=True).exists():
+            #     if 'EDITOR' not in roles:
+            #         roles.append('EDITOR')
         
         token['is_verified'] = is_verified
         token['roles'] = roles
