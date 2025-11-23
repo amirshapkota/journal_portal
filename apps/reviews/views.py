@@ -300,7 +300,7 @@ class ReviewViewSet(viewsets.ModelViewSet):
         user = request.user
         can_view = (
             user.is_staff or
-            submission.author.user == user or
+            submission.corresponding_author.user == user or
             ReviewAssignment.objects.filter(
                 submission=submission,
                 reviewer=user.profile
@@ -744,7 +744,18 @@ class EditorialDecisionViewSet(viewsets.ModelViewSet):
         """Create editorial decision and trigger email notification."""
         from apps.notifications.tasks import send_decision_letter_email
         
-        decision = serializer.save()
+        # Automatically set decided_by to current user's profile
+        decision = serializer.save(decided_by=self.request.user.profile)
+        
+        # Update submission status based on decision type
+        submission = decision.submission
+        if decision.decision_type == 'ACCEPT':
+            submission.status = 'ACCEPTED'
+        elif decision.decision_type == 'REJECT':
+            submission.status = 'REJECTED'
+        elif decision.decision_type in ['MINOR_REVISION', 'MAJOR_REVISION']:
+            submission.status = 'REVISION_REQUIRED'
+        submission.save()
         
         # Send decision letter email to author
         try:

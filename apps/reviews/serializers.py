@@ -168,7 +168,9 @@ class ReviewCreateSerializer(serializers.ModelSerializer):
                 "You can only submit reviews for your own assignments."
             )
         
-        if value.status not in ['PENDING', 'ACCEPTED']:
+        # Allow submissions for PENDING, ACCEPTED, or COMPLETED assignments
+        # COMPLETED is allowed to support revision rounds where reviewers submit multiple reviews
+        if value.status not in ['PENDING', 'ACCEPTED', 'COMPLETED']:
             raise serializers.ValidationError(
                 "This assignment is not in a reviewable state."
             )
@@ -683,7 +685,7 @@ class EditorialDecisionCreateSerializer(serializers.ModelSerializer):
             'decision_letter', 'confidential_notes', 'reviews_summary',
             'revision_deadline', 'letter_template'
         ]
-        read_only_fields = ['id']
+        read_only_fields = ['id', 'decided_by']
     
     def validate_submission(self, value):
         """Validate that submission has completed reviews."""

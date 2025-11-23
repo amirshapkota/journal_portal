@@ -163,9 +163,7 @@ class SubmissionViewSet(viewsets.ModelViewSet):
         queryset = self.get_queryset().filter(
             status__in=['SUBMITTED', 'UNDER_REVIEW']
         ).annotate(
-            review_count=Count('review_assignments', filter=Q(
-                review_assignments__status__in=['PENDING', 'ACCEPTED']
-            ))
+            review_count=Count('review_assignments')
         ).filter(review_count=0)
         
         page = self.paginate_queryset(queryset)
@@ -189,9 +187,7 @@ class SubmissionViewSet(viewsets.ModelViewSet):
         queryset = self.get_queryset().filter(
             status__in=['SUBMITTED', 'UNDER_REVIEW', 'REVISION_REQUIRED', 'REVISED', 'ACCEPTED']
         ).annotate(
-            review_count=Count('review_assignments', filter=Q(
-                review_assignments__status__in=['PENDING', 'ACCEPTED']
-            ))
+            review_count=Count('review_assignments')
         ).filter(review_count__gt=0)
         
         page = self.paginate_queryset(queryset)
@@ -211,7 +207,7 @@ class SubmissionViewSet(viewsets.ModelViewSet):
     def archived(self, request):
         """Get all archived submissions (completed)."""
         queryset = self.get_queryset().filter(
-            status__in=['ACCEPTED', 'REJECTED', 'WITHDRAWN', 'PUBLISHED']
+            status__in=['REJECTED', 'WITHDRAWN', 'PUBLISHED']
         )
         
         page = self.paginate_queryset(queryset)
