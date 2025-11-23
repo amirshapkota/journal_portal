@@ -193,10 +193,10 @@ class Review(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     
     # Review assignment relationship
-    assignment = models.OneToOneField(
+    assignment = models.ForeignKey(
         ReviewAssignment,
         on_delete=models.CASCADE,
-        related_name='review'
+        related_name='reviews'
     )
     
     # Review details (shortcuts to assignment fields)
@@ -277,6 +277,20 @@ class Review(models.Model):
     is_anonymous = models.BooleanField(default=True)
     is_published = models.BooleanField(default=True)  # True by default for new reviews
     
+    # Revision round tracking
+    review_round = models.PositiveIntegerField(
+        default=1,
+        help_text="Which revision round this review belongs to (1=initial, 2=first revision, etc.)"
+    )
+    revision_round = models.ForeignKey(
+        'RevisionRound',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='reviews',
+        help_text="The revision round this review is for (if applicable)"
+    )
+    
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -288,6 +302,8 @@ class Review(models.Model):
             models.Index(fields=['reviewer']),
             models.Index(fields=['submitted_at']),
             models.Index(fields=['assignment']),
+            models.Index(fields=['submission', 'review_round']),
+            models.Index(fields=['revision_round']),
         ]
     
     def __str__(self):
@@ -300,6 +316,7 @@ class Review(models.Model):
             self.due_date = self.assignment.due_date
             self.submission = self.assignment.submission
             self.reviewer = self.assignment.reviewer
+            self.review_round = self.assignment.review_round
         
         is_new = self._state.adding
         super().save(*args, **kwargs)

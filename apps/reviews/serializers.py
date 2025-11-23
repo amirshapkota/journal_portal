@@ -137,11 +137,12 @@ class ReviewSerializer(serializers.ModelSerializer):
             'review_text', 'confidential_comments',
             'attached_files', 'auto_summary',
             'quality_score', 'is_anonymous', 'is_published',
+            'review_round', 'revision_round',
             'review_time_days', 'created_at', 'updated_at'
         ]
         read_only_fields = [
             'id', 'assigned_at', 'due_date', 'submitted_at',
-            'auto_summary', 'quality_score',
+            'auto_summary', 'quality_score', 'review_round',
             'created_at', 'updated_at'
         ]
 
@@ -172,11 +173,8 @@ class ReviewCreateSerializer(serializers.ModelSerializer):
                 "This assignment is not in a reviewable state."
             )
         
-        # Check if review already exists
-        if hasattr(value, 'review'):
-            raise serializers.ValidationError(
-                "A review has already been submitted for this assignment."
-            )
+        # Note: Removed OneToOne check to allow multiple reviews per assignment
+        # This supports revision rounds where reviewers submit multiple reviews
         
         return value
     
@@ -496,11 +494,8 @@ class ReviewSubmitSerializer(serializers.ModelSerializer):
                 "Cannot submit review for assignment that is not accepted."
             )
         
-        # Check if review already exists
-        if hasattr(value, 'review'):
-            raise serializers.ValidationError(
-                "A review has already been submitted for this assignment."
-            )
+        # Note: Removed OneToOne check to allow multiple reviews per assignment
+        # This supports revision rounds where reviewers submit multiple reviews
         
         return value
     

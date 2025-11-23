@@ -535,7 +535,9 @@ def sync_journal_reviews(self, journal_id):
                             )
                             
                             # Create or update Review if completed
-                            if review_assignment.get('dateCompleted') and not hasattr(assignment, 'review'):
+                            # Note: Changed from hasattr(assignment, 'review') to checking reviews.exists()
+                            # because assignment now uses ForeignKey instead of OneToOneField
+                            if review_assignment.get('dateCompleted') and not assignment.reviews.exists():
                                 Review.objects.create(
                                     assignment=assignment,
                                     submission=submission,

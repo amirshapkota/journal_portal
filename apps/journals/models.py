@@ -122,6 +122,7 @@ class JournalStaff(models.Model):
         ('ASSOCIATE_EDITOR', 'Associate Editor'),
         ('GUEST_EDITOR', 'Guest Editor'),
         ('SECTION_EDITOR', 'Section Editor'),
+        ('REVIEWER', 'Reviewer'),
         ('COPY_EDITOR', 'Copy Editor'),
         ('LAYOUT_EDITOR', 'Layout Editor'),
         ('PROOFREADER', 'Proofreader'),
