@@ -378,9 +378,11 @@ class SuperDocViewSet(viewsets.ViewSet):
         
         # Import DocumentVersion model
         from .models import DocumentVersion
+        from django.core.files.base import ContentFile
         import hashlib
+        import os
         
-        # Read file and calculate hash
+        # Read file content and calculate hash
         document.original_file.seek(0)
         file_content = document.original_file.read()
         file_hash = hashlib.sha256(file_content).hexdigest()
@@ -392,18 +394,23 @@ class SuperDocViewSet(viewsets.ViewSet):
         ).order_by('-version_number').first()
         version_number = (last_version.version_number + 1) if last_version else 1
         
-        # Create new version
-        version = DocumentVersion.objects.create(
+        # Create new version with a copy of the file
+        version = DocumentVersion(
             document=document,
             version_number=version_number,
             change_summary=change_summary,
-            file=document.original_file,
             file_name=document.file_name,
             file_size=document.file_size,
             file_hash=file_hash,
             is_current=True,
             created_by=request.user.profile
         )
+        
+        # Save a copy of the file with versioned filename
+        file_extension = os.path.splitext(document.file_name)[1]
+        versioned_filename = f"{os.path.splitext(document.file_name)[0]}_v{version_number}{file_extension}"
+        version.file.save(versioned_filename, ContentFile(file_content), save=False)
+        version.save()
         
         return Response({
             'status': 'created',
@@ -454,6 +461,104 @@ class SuperDocViewSet(viewsets.ViewSet):
             content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
         )
         response['Content-Disposition'] = f'attachment; filename="{document.file_name}"'
+        
+        return response
+    
+    @extend_schema(
+        summary="Get document versions",
+        description="Get all versions for a document",
+        responses={
+            200: OpenApiResponse(description="List of versions"),
+            403: OpenApiResponse(description="No access to this document"),
+        }
+    )
+    @action(detail=True, methods=['get'], url_path='versions')
+    def get_versions(self, request, pk=None):
+        """
+        Get all versions for a document.
+        Returns version history ordered by version number (newest first).
+        """
+        document = get_object_or_404(Document, pk=pk)
+        can_view, can_edit = can_access_document(request.user, document)
+        
+        if not can_view:
+            return Response(
+                {'error': 'You do not have permission to view this document'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        from .models import DocumentVersion
+        
+        versions = DocumentVersion.objects.filter(
+            document=document
+        ).select_related('created_by', 'created_by__user').order_by('-version_number')
+        
+        versions_data = []
+        for version in versions:
+            versions_data.append({
+                'id': str(version.id),
+                'version_number': version.version_number,
+                'change_summary': version.change_summary,
+                'file_name': version.file_name,
+                'file_size': version.file_size,
+                'file_hash': version.file_hash,
+                'file_url': request.build_absolute_uri(version.file.url) if version.file else None,
+                'is_current': version.is_current,
+                'immutable_flag': version.immutable_flag,
+                'created_by': {
+                    'id': str(version.created_by.id),
+                    'name': version.created_by.display_name,
+                    'email': version.created_by.user.email if version.created_by.user else None,
+                },
+                'created_at': version.created_at,
+            })
+        
+        return Response({
+            'document_id': str(document.id),
+            'document_title': document.title,
+            'total_versions': len(versions_data),
+            'versions': versions_data
+        }, status=status.HTTP_200_OK)
+    
+    @extend_schema(
+        summary="Download document version",
+        description="Download a specific version of the document",
+        responses={
+            200: OpenApiResponse(description="File downloaded"),
+            403: OpenApiResponse(description="No access to this document"),
+            404: OpenApiResponse(description="Version not found or no file available"),
+        }
+    )
+    @action(detail=False, methods=['get'], url_path='versions/(?P<version_id>[^/.]+)/download')
+    def download_version(self, request, version_id=None):
+        """
+        Download a specific version of a document.
+        """
+        from .models import DocumentVersion
+        
+        version = get_object_or_404(DocumentVersion, pk=version_id)
+        document = version.document
+        
+        can_view, can_edit = can_access_document(request.user, document)
+        
+        if not can_view:
+            return Response(
+                {'error': 'You do not have permission to view this document'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        if not version.file:
+            return Response(
+                {'error': 'No file available for download'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Return file response
+        response = FileResponse(
+            version.file.open('rb'),
+            content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        )
+        response['Content-Disposition'] = f'attachment; filename="{version.file_name}"'
         
         return response
     
