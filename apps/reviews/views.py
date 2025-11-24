@@ -120,6 +120,39 @@ class ReviewAssignmentViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(assignments, many=True)
         return Response(serializer.data)
     
+    @action(detail=False, methods=['get'])
+    def accepted(self, request):
+        """Get accepted review assignments for current user."""
+        assignments = ReviewAssignment.objects.filter(
+            reviewer=request.user.profile,
+            status='ACCEPTED'
+        ).select_related('submission', 'assigned_by').order_by('due_date')
+        
+        serializer = self.get_serializer(assignments, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def completed(self, request):
+        """Get completed review assignments for current user."""
+        assignments = ReviewAssignment.objects.filter(
+            reviewer=request.user.profile,
+            status='COMPLETED'
+        ).select_related('submission', 'assigned_by').order_by('-completed_at')
+        
+        serializer = self.get_serializer(assignments, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def declined(self, request):
+        """Get declined review assignments for current user."""
+        assignments = ReviewAssignment.objects.filter(
+            reviewer=request.user.profile,
+            status='DECLINED'
+        ).select_related('submission', 'assigned_by').order_by('-declined_at')
+        
+        serializer = self.get_serializer(assignments, many=True)
+        return Response(serializer.data)
+    
     @action(detail=True, methods=['post'])
     def accept(self, request, pk=None):
         """Accept a review invitation."""
