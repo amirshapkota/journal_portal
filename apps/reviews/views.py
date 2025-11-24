@@ -747,7 +747,7 @@ class EditorialDecisionViewSet(viewsets.ModelViewSet):
         # Automatically set decided_by to current user's profile
         decision = serializer.save(decided_by=self.request.user.profile)
         
-        # Update submission status based on decision type
+        # Update submission status based on editor's decision
         submission = decision.submission
         if decision.decision_type == 'ACCEPT':
             submission.status = 'ACCEPTED'

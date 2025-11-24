@@ -327,9 +327,18 @@ class Review(models.Model):
             self.assignment.completed_at = self.submitted_at
             self.assignment.save()
         
-        # DO NOT automatically update submission status here
-        # Status should only be updated when editor makes editorial decision
-        # This prevents authors from seeing status changes before editor reviews
+        # Update submission status based on reviewer's recommendation
+        # This provides immediate feedback to the system about the review outcome
+        # Reviewer sets REVISION_REQUESTED, editor will later set REVISION_REQUIRED
+        if is_new and self.submission:
+            if self.recommendation in ['MINOR_REVISION', 'MAJOR_REVISION']:
+                self.submission.status = 'REVISION_REQUESTED'
+            elif self.recommendation == 'ACCEPT':
+                self.submission.status = 'ACCEPTED'
+            elif self.recommendation == 'REJECT':
+                self.submission.status = 'REJECTED'
+            
+            self.submission.save()
     
     def get_overall_score(self):
         """Calculate overall score from individual scores."""

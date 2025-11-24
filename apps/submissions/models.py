@@ -19,7 +19,8 @@ class Submission(models.Model):
         ('DRAFT', 'Draft'),
         ('SUBMITTED', 'Submitted'),
         ('UNDER_REVIEW', 'Under Review'),
-        ('REVISION_REQUIRED', 'Revision Required'),
+        ('REVISION_REQUESTED', 'Revision Requested'),  # Set by reviewer
+        ('REVISION_REQUIRED', 'Revision Required'),    # Set by editor
         ('REVISED', 'Revised'),
         ('ACCEPTED', 'Accepted'),
         ('REJECTED', 'Rejected'),
@@ -151,15 +152,15 @@ class Submission(models.Model):
         return f"{self.title[:50]}... ({self.get_status_display()})"
     
     def save(self, *args, **kwargs):
-        # Generate submission number if not set
-        if not self.submission_number and self.status == 'SUBMITTED':
+        # Generate submission number if not set and status is being changed to SUBMITTED or REVISED
+        if not self.submission_number and self.status in ['SUBMITTED', 'REVISED']:
             from django.utils import timezone
             year = timezone.now().year
             count = Submission.objects.filter(
                 journal=self.journal,
                 created_at__year=year,
-                status__in=['SUBMITTED', 'UNDER_REVIEW', 'ACCEPTED', 'PUBLISHED']
-            ).count() + 1
+                submission_number__isnull=False
+            ).exclude(pk=self.pk).count() + 1
             self.submission_number = f"{self.journal.short_name}-{year}-{count:04d}"
         
         super().save(*args, **kwargs)

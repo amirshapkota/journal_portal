@@ -185,7 +185,7 @@ class SubmissionViewSet(viewsets.ModelViewSet):
         from django.db.models import Count
         
         queryset = self.get_queryset().filter(
-            status__in=['SUBMITTED', 'UNDER_REVIEW', 'REVISION_REQUIRED', 'REVISED', 'ACCEPTED']
+            status__in=['SUBMITTED', 'UNDER_REVIEW', 'REVISION_REQUIRED', 'REVISION_REQUESTED', 'REVISED', 'ACCEPTED']
         ).annotate(
             review_count=Count('review_assignments')
         ).filter(review_count__gt=0)
@@ -244,19 +244,24 @@ class SubmissionViewSet(viewsets.ModelViewSet):
         # Update status and set submission timestamp
         from django.utils import timezone
         
-        # If resubmitting after revision, set status to REVISED
-        # If submitting for first time, set status to SUBMITTED
+        # If resubmitting after revision
         if submission.status == 'REVISION_REQUIRED':
-            submission.status = 'REVISED'
+            # Check if there are active reviewers (assignments in ACCEPTED status)
+            has_active_reviewers = submission.review_assignments.filter(
+                status__in=['PENDING', 'ACCEPTED']
+            ).exists()
+            
+            # If reviewers are already assigned, set to UNDER_REVIEW
+            # Otherwise, set to REVISED (waiting for editor to assign reviewers)
+            submission.status = 'UNDER_REVIEW' if has_active_reviewers else 'REVISED'
         else:
+            # First time submission
             submission.status = 'SUBMITTED'
+            # Only set submitted_at for first-time submission
+            if not submission.submitted_at:
+                submission.submitted_at = timezone.now()
         
-        submission.submitted_at = timezone.now()
         submission.save()
-        
-        # Generate submission number if not set
-        if not submission.submission_number:
-            submission.save()  # Triggers submission number generation
         
         serializer = self.get_serializer(submission)
         return Response(serializer.data)
