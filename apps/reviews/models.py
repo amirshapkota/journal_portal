@@ -328,15 +328,14 @@ class Review(models.Model):
             self.assignment.save()
         
         # Update submission status based on reviewer's recommendation
-        # This provides immediate feedback to the system about the review outcome
-        # Reviewer sets REVISION_REQUESTED, editor will later set REVISION_REQUIRED
+        # Reviewer sets *_REQUESTED, editor will later set final status
         if is_new and self.submission:
             if self.recommendation in ['MINOR_REVISION', 'MAJOR_REVISION']:
                 self.submission.status = 'REVISION_REQUESTED'
             elif self.recommendation == 'ACCEPT':
-                self.submission.status = 'ACCEPTED'
+                self.submission.status = 'ACCEPTANCE_REQUESTED'
             elif self.recommendation == 'REJECT':
-                self.submission.status = 'REJECTED'
+                self.submission.status = 'REJECTION_REQUESTED'
             
             self.submission.save()
     

@@ -22,6 +22,8 @@ class Submission(models.Model):
         ('REVISION_REQUESTED', 'Revision Requested'),  # Set by reviewer
         ('REVISION_REQUIRED', 'Revision Required'),    # Set by editor
         ('REVISED', 'Revised'),
+        ('ACCEPTANCE_REQUESTED', 'Acceptance Requested'),  # Reviewer recommends accept
+        ('REJECTION_REQUESTED', 'Rejection Requested'),    # Reviewer recommends reject
         ('ACCEPTED', 'Accepted'),
         ('REJECTED', 'Rejected'),
         ('WITHDRAWN', 'Withdrawn'),
