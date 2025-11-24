@@ -855,6 +855,17 @@ class RevisionRoundCreateSerializer(serializers.ModelSerializer):
             ).order_by('-round_number').first()
             validated_data['round_number'] = (last_round.round_number + 1) if last_round else 1
         
+        # Use deadline from editorial decision if not provided
+        if 'deadline' not in validated_data or not validated_data['deadline']:
+            editorial_decision = validated_data.get('editorial_decision')
+            if editorial_decision and editorial_decision.revision_deadline:
+                validated_data['deadline'] = editorial_decision.revision_deadline
+            else:
+                # Fallback to default deadline (30 days from now)
+                from django.utils import timezone
+                from datetime import timedelta
+                validated_data['deadline'] = timezone.now() + timedelta(days=30)
+        
         # Create revision round
         reassigned_reviewers = validated_data.pop('reassigned_reviewers', [])
         revision_round = RevisionRound.objects.create(**validated_data)

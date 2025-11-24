@@ -233,6 +233,25 @@ class ReviewAssignmentViewSet(viewsets.ModelViewSet):
         logger.info(f"Review assignment cancelled: {assignment.id}")
         
         return Response(self.get_serializer(assignment).data)
+    
+    @action(detail=False, methods=['post'], permission_classes=[permissions.IsAdminUser])
+    def check_expired(self, request):
+        """Manually trigger check for expired review assignments (admin only)."""
+        expired_count = 0
+        expired_assignments = ReviewAssignment.objects.filter(
+            status__in=['PENDING', 'ACCEPTED'],
+            due_date__lt=timezone.now()
+        )
+        
+        for assignment in expired_assignments:
+            assignment.check_and_update_expired()
+            expired_count += 1
+        
+        return Response({
+            'status': 'success',
+            'message': f'Checked and updated {expired_count} expired assignments',
+            'expired_count': expired_count
+        })
 
 
 @extend_schema_view(
@@ -1093,3 +1112,22 @@ class RevisionRoundViewSet(viewsets.ModelViewSet):
         
         serializer = self.get_serializer(revisions, many=True)
         return Response(serializer.data)
+    
+    @action(detail=False, methods=['post'], permission_classes=[permissions.IsAdminUser])
+    def check_expired(self, request):
+        """Manually trigger check for expired revision rounds (admin only)."""
+        expired_count = 0
+        expired_revisions = RevisionRound.objects.filter(
+            status__in=['REQUESTED', 'IN_PROGRESS'],
+            deadline__lt=timezone.now()
+        )
+        
+        for revision in expired_revisions:
+            revision.check_and_update_expired()
+            expired_count += 1
+        
+        return Response({
+            'status': 'success',
+            'message': f'Checked and updated {expired_count} expired revision rounds',
+            'expired_count': expired_count
+        })

@@ -19,6 +19,7 @@ class ReviewAssignment(models.Model):
         ('ACCEPTED', 'Accepted'),
         ('COMPLETED', 'Completed'),
         ('OVERDUE', 'Overdue'),
+        ('EXPIRED', 'Expired'),
         ('CANCELLED', 'Cancelled'),
     ]
     
@@ -75,9 +76,10 @@ class ReviewAssignment(models.Model):
     def save(self, *args, **kwargs):
         # Set default due date if not provided
         if not self.due_date:
-            from django.conf import settings
-            days = getattr(settings, 'JOURNAL_PORTAL', {}).get('REVIEW_DEADLINE_DAYS', 30)
-            self.due_date = timezone.now() + timedelta(days=days)
+            # Try to get deadline from journal settings first
+            journal = self.submission.journal
+            deadline_days = journal.settings.get('review_deadline_days', 30) if journal else 30
+            self.due_date = timezone.now() + timedelta(days=deadline_days)
         
         # Track if status changed to ACCEPTED
         is_new = self._state.adding
@@ -103,6 +105,14 @@ class ReviewAssignment(models.Model):
             self.status in ['PENDING', 'ACCEPTED'] and
             timezone.now() > self.due_date
         )
+    
+    def check_and_update_expired(self):
+        """Check if assignment has expired and update status if needed."""
+        if self.status in ['PENDING', 'ACCEPTED'] and timezone.now() > self.due_date:
+            self.status = 'EXPIRED'
+            self.save()
+            return True
+        return False
     
     def days_remaining(self):
         """Calculate days remaining until due date."""
@@ -632,6 +642,7 @@ class RevisionRound(models.Model):
         ('UNDER_REVIEW', 'Under Review'),
         ('APPROVED', 'Approved'),
         ('REJECTED', 'Rejected'),
+        ('EXPIRED', 'Expired'),
     ]
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -735,6 +746,17 @@ class RevisionRound(models.Model):
             self.status in ['REQUESTED', 'IN_PROGRESS'] and
             timezone.now() > self.deadline
         )
+    
+    def check_and_update_expired(self):
+        """Check if revision round has expired and update status if needed."""
+        if self.status in ['REQUESTED', 'IN_PROGRESS'] and timezone.now() > self.deadline:
+            self.status = 'EXPIRED'
+            self.save()
+            # Update submission status
+            self.submission.status = 'REJECTED'
+            self.submission.save()
+            return True
+        return False
     
     def days_remaining(self):
         """Calculate days remaining until deadline."""
