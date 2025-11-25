@@ -419,7 +419,7 @@ class UserViewSet(ListModelMixin, RetrieveModelMixin, UpdateModelMixin, DestroyM
     permission_classes = [permissions.IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['username', 'email', 'first_name', 'last_name']
-    filterset_fields = ['is_active', 'is_staff', 'is_verified']
+    filterset_fields = ['is_active', 'is_staff']
     ordering_fields = ['date_joined', 'last_login', 'username', 'email']
     ordering = ['-date_joined']
     
