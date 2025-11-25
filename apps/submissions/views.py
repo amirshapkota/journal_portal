@@ -77,7 +77,7 @@ class SubmissionViewSet(viewsets.ModelViewSet):
     permission_classes = [SubmissionPermissions]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['title', 'abstract', 'submission_number', 'corresponding_author__user__first_name', 'corresponding_author__user__last_name', 'corresponding_author__user__email']
-    filterset_fields = ['status', 'journal', 'submission_type']
+    filterset_fields = ['status', 'journal']
     ordering_fields = ['title', 'created_at', 'submitted_at', 'updated_at', 'status']
     ordering = ['-created_at']
     

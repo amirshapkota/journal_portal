@@ -112,6 +112,11 @@ class ReviewAssignmentViewSet(viewsets.ModelViewSet):
             reviewer=request.user.profile
         ).select_related('submission', 'assigned_by').order_by('-invited_at')
         
+        page = self.paginate_queryset(assignments)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        
         serializer = self.get_serializer(assignments, many=True)
         return Response(serializer.data)
     
@@ -122,6 +127,11 @@ class ReviewAssignmentViewSet(viewsets.ModelViewSet):
             reviewer=request.user.profile,
             status='PENDING'
         ).select_related('submission', 'assigned_by').order_by('due_date')
+        
+        page = self.paginate_queryset(assignments)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
         
         serializer = self.get_serializer(assignments, many=True)
         return Response(serializer.data)
@@ -134,6 +144,11 @@ class ReviewAssignmentViewSet(viewsets.ModelViewSet):
             status='ACCEPTED'
         ).select_related('submission', 'assigned_by').order_by('due_date')
         
+        page = self.paginate_queryset(assignments)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        
         serializer = self.get_serializer(assignments, many=True)
         return Response(serializer.data)
     
@@ -145,6 +160,11 @@ class ReviewAssignmentViewSet(viewsets.ModelViewSet):
             status='COMPLETED'
         ).select_related('submission', 'assigned_by').order_by('-completed_at')
         
+        page = self.paginate_queryset(assignments)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        
         serializer = self.get_serializer(assignments, many=True)
         return Response(serializer.data)
     
@@ -155,6 +175,11 @@ class ReviewAssignmentViewSet(viewsets.ModelViewSet):
             reviewer=request.user.profile,
             status='DECLINED'
         ).select_related('submission', 'assigned_by').order_by('-declined_at')
+        
+        page = self.paginate_queryset(assignments)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
         
         serializer = self.get_serializer(assignments, many=True)
         return Response(serializer.data)
@@ -332,6 +357,11 @@ class ReviewViewSet(viewsets.ModelViewSet):
             reviewer=request.user.profile
         ).select_related('submission', 'assignment').order_by('-submitted_at')
         
+        page = self.paginate_queryset(reviews)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        
         serializer = self.get_serializer(reviews, many=True)
         return Response(serializer.data)
     
@@ -379,6 +409,11 @@ class ReviewViewSet(viewsets.ModelViewSet):
         reviews = Review.objects.filter(
             submission=submission
         ).select_related('reviewer', 'assignment').order_by('-submitted_at')
+        
+        page = self.paginate_queryset(reviews)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
         
         serializer = self.get_serializer(reviews, many=True)
         return Response(serializer.data)
