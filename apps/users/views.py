@@ -5,7 +5,7 @@ Provides JWT-based authentication, user registration, profile management,
 and comprehensive user account operations with email verification.
 """
 
-from rest_framework import status, permissions, generics
+from rest_framework import status, permissions, generics, filters
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -13,6 +13,7 @@ from rest_framework.viewsets import ModelViewSet, GenericViewSet
 from rest_framework.mixins import ListModelMixin, RetrieveModelMixin, UpdateModelMixin, DestroyModelMixin
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework_simplejwt.tokens import RefreshToken
+from django_filters.rest_framework import DjangoFilterBackend
 from django.contrib.auth import logout
 from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import send_mail
@@ -416,6 +417,11 @@ class UserViewSet(ListModelMixin, RetrieveModelMixin, UpdateModelMixin, DestroyM
     queryset = CustomUser.objects.all()
     serializer_class = UserSerializer
     permission_classes = [permissions.IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['username', 'email', 'first_name', 'last_name']
+    filterset_fields = ['is_active', 'is_staff', 'is_verified']
+    ordering_fields = ['date_joined', 'last_login', 'username', 'email']
+    ordering = ['-date_joined']
     
     def get_queryset(self):
         """Filter users based on permissions."""
@@ -456,6 +462,11 @@ class ProfileViewSet(ListModelMixin, RetrieveModelMixin, UpdateModelMixin, Destr
     queryset = Profile.objects.all()
     serializer_class = ProfileSerializer
     permission_classes = [permissions.IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['user__username', 'user__email', 'user__first_name', 'user__last_name', 'affiliation', 'orcid_id', 'bio']
+    filterset_fields = ['verification_status']
+    ordering_fields = ['created_at', 'updated_at']
+    ordering = ['-created_at']
     
     def get_queryset(self):
         """Filter profiles based on permissions."""

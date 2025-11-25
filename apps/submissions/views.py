@@ -8,6 +8,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import filters
+from django_filters.rest_framework import DjangoFilterBackend
 from django.shortcuts import get_object_or_404
 from django.db.models import Q
 from drf_spectacular.utils import extend_schema, OpenApiParameter
@@ -74,9 +75,10 @@ class SubmissionViewSet(viewsets.ModelViewSet):
     """
     queryset = Submission.objects.all()
     permission_classes = [SubmissionPermissions]
-    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
-    search_fields = ['title', 'abstract', 'submission_number']
-    ordering_fields = ['title', 'created_at', 'submitted_at', 'updated_at']
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['title', 'abstract', 'submission_number', 'corresponding_author__user__first_name', 'corresponding_author__user__last_name', 'corresponding_author__user__email']
+    filterset_fields = ['status', 'journal']
+    ordering_fields = ['title', 'created_at', 'submitted_at', 'updated_at', 'status']
     ordering = ['-created_at']
     
     def get_serializer_class(self):

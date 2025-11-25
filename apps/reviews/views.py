@@ -2,9 +2,10 @@
 Views for review management.
 Handles review assignments, submissions, and reviewer recommendations.
 """
-from rest_framework import viewsets, status, permissions
+from rest_framework import viewsets, status, permissions, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Q, Count, Avg, F
 from django.utils import timezone
 from django.shortcuts import get_object_or_404
@@ -70,6 +71,11 @@ class ReviewAssignmentViewSet(viewsets.ModelViewSet):
     """
     queryset = ReviewAssignment.objects.all()
     permission_classes = [permissions.IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['submission__title', 'reviewer__user__first_name', 'reviewer__user__last_name', 'reviewer__user__email']
+    filterset_fields = ['status', 'submission', 'reviewer']
+    ordering_fields = ['invited_at', 'due_date', 'accepted_at', 'completed_at', 'status']
+    ordering = ['-invited_at']
     
     def get_serializer_class(self):
         """Return appropriate serializer based on action."""
@@ -106,6 +112,11 @@ class ReviewAssignmentViewSet(viewsets.ModelViewSet):
             reviewer=request.user.profile
         ).select_related('submission', 'assigned_by').order_by('-invited_at')
         
+        page = self.paginate_queryset(assignments)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        
         serializer = self.get_serializer(assignments, many=True)
         return Response(serializer.data)
     
@@ -116,6 +127,11 @@ class ReviewAssignmentViewSet(viewsets.ModelViewSet):
             reviewer=request.user.profile,
             status='PENDING'
         ).select_related('submission', 'assigned_by').order_by('due_date')
+        
+        page = self.paginate_queryset(assignments)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
         
         serializer = self.get_serializer(assignments, many=True)
         return Response(serializer.data)
@@ -128,6 +144,11 @@ class ReviewAssignmentViewSet(viewsets.ModelViewSet):
             status='ACCEPTED'
         ).select_related('submission', 'assigned_by').order_by('due_date')
         
+        page = self.paginate_queryset(assignments)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        
         serializer = self.get_serializer(assignments, many=True)
         return Response(serializer.data)
     
@@ -139,6 +160,11 @@ class ReviewAssignmentViewSet(viewsets.ModelViewSet):
             status='COMPLETED'
         ).select_related('submission', 'assigned_by').order_by('-completed_at')
         
+        page = self.paginate_queryset(assignments)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        
         serializer = self.get_serializer(assignments, many=True)
         return Response(serializer.data)
     
@@ -149,6 +175,11 @@ class ReviewAssignmentViewSet(viewsets.ModelViewSet):
             reviewer=request.user.profile,
             status='DECLINED'
         ).select_related('submission', 'assigned_by').order_by('-declined_at')
+        
+        page = self.paginate_queryset(assignments)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
         
         serializer = self.get_serializer(assignments, many=True)
         return Response(serializer.data)
@@ -282,6 +313,11 @@ class ReviewViewSet(viewsets.ModelViewSet):
     queryset = Review.objects.all()
     permission_classes = [permissions.IsAuthenticated]
     http_method_names = ['get', 'post', 'head', 'options']  # No update/delete
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['submission__title', 'reviewer__user__first_name', 'reviewer__user__last_name', 'comments']
+    filterset_fields = ['recommendation', 'submission', 'reviewer', 'is_published']
+    ordering_fields = ['submitted_at', 'recommendation']
+    ordering = ['-submitted_at']
     
     def get_serializer_class(self):
         """Return appropriate serializer based on action."""
@@ -320,6 +356,11 @@ class ReviewViewSet(viewsets.ModelViewSet):
         reviews = Review.objects.filter(
             reviewer=request.user.profile
         ).select_related('submission', 'assignment').order_by('-submitted_at')
+        
+        page = self.paginate_queryset(reviews)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
         
         serializer = self.get_serializer(reviews, many=True)
         return Response(serializer.data)
@@ -368,6 +409,11 @@ class ReviewViewSet(viewsets.ModelViewSet):
         reviews = Review.objects.filter(
             submission=submission
         ).select_related('reviewer', 'assignment').order_by('-submitted_at')
+        
+        page = self.paginate_queryset(reviews)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
         
         serializer = self.get_serializer(reviews, many=True)
         return Response(serializer.data)
