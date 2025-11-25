@@ -2,9 +2,10 @@
 Views for review management.
 Handles review assignments, submissions, and reviewer recommendations.
 """
-from rest_framework import viewsets, status, permissions
+from rest_framework import viewsets, status, permissions, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Q, Count, Avg, F
 from django.utils import timezone
 from django.shortcuts import get_object_or_404
@@ -70,6 +71,11 @@ class ReviewAssignmentViewSet(viewsets.ModelViewSet):
     """
     queryset = ReviewAssignment.objects.all()
     permission_classes = [permissions.IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['submission__title', 'reviewer__user__first_name', 'reviewer__user__last_name', 'reviewer__user__email']
+    filterset_fields = ['status', 'submission', 'reviewer']
+    ordering_fields = ['invited_at', 'due_date', 'accepted_at', 'completed_at', 'status']
+    ordering = ['-invited_at']
     
     def get_serializer_class(self):
         """Return appropriate serializer based on action."""
@@ -282,6 +288,11 @@ class ReviewViewSet(viewsets.ModelViewSet):
     queryset = Review.objects.all()
     permission_classes = [permissions.IsAuthenticated]
     http_method_names = ['get', 'post', 'head', 'options']  # No update/delete
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['submission__title', 'reviewer__user__first_name', 'reviewer__user__last_name', 'comments']
+    filterset_fields = ['recommendation', 'submission', 'reviewer', 'is_published']
+    ordering_fields = ['submitted_at', 'recommendation']
+    ordering = ['-submitted_at']
     
     def get_serializer_class(self):
         """Return appropriate serializer based on action."""

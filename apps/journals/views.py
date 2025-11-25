@@ -8,6 +8,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import filters
+from django_filters.rest_framework import DjangoFilterBackend
 from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 from drf_spectacular.types import OpenApiTypes
@@ -83,8 +84,9 @@ class JournalViewSet(viewsets.ModelViewSet):
     """
     queryset = Journal.objects.all()
     permission_classes = [JournalPermissions]
-    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
-    search_fields = ['title', 'short_name', 'description']
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['title', 'short_name', 'description', 'issn', 'e_issn']
+    filterset_fields = ['is_active', 'is_accepting_submissions']
     ordering_fields = ['title', 'created_at', 'updated_at']
     ordering = ['-created_at']
     
