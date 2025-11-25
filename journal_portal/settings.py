@@ -9,6 +9,7 @@ import os
 import sys
 from pathlib import Path
 from decouple import config
+import sentry_sdk
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -411,3 +412,25 @@ JOURNAL_PORTAL = {
         'ALLOWED_DOWNLOAD_IPS': config('ALLOWED_DOWNLOAD_IPS', default='', cast=str).split(',') if config('ALLOWED_DOWNLOAD_IPS', default='') else [],
     }
 }
+
+from sentry_sdk.integrations.django import DjangoIntegration
+from sentry_sdk.integrations.logging import LoggingIntegration
+
+sentry_logging = LoggingIntegration(
+    level=None,  # Capture all levels by default
+    event_level="ERROR"  # Send errors and above as events
+)
+
+sentry_sdk.init(
+    dsn=config('SENTRY_DSN'),
+    integrations=[DjangoIntegration()],
+    send_default_pii=True,
+    enable_logs=True,
+    # Enable performance monitoring with a 10% sample rate.
+    # traces_sample_rate=0.1,
+
+    # These logs will be automatically sent to Sentry
+    # logger.info('This will be sent to Sentry')
+    # logger.warning('User login failed')
+    # logger.error('Something went wrong')
+)

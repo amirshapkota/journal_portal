@@ -1,8 +1,15 @@
-
 from .views import (
     OJSUserSyncAPIView, OJSUserDetailSyncAPIView,
     OJSReviewSyncAPIView, OJSReviewDetailSyncAPIView,
     OJSCommentSyncAPIView, OJSCommentDetailSyncAPIView,
+)
+from .sentry_views import (
+    SentryProjectListView,
+    SentryIssueListView,
+    SentryIssueDetailView,
+    SentryIssueEventsView,
+    SentryEventDetailView,
+    SentryProjectStatsView,
 )
 """
 URL configuration for integrations app.
@@ -85,4 +92,12 @@ urlpatterns = [
     # OJS Comment sync endpoints
     path('ojs/comments/', OJSCommentSyncAPIView.as_view(), name='ojs_comment_sync'),
     path('ojs/comments/<str:comment_id>/', OJSCommentDetailSyncAPIView.as_view(), name='ojs_comment_detail_sync'),
+    
+    # Sentry endpoints
+    path('sentry/projects/', SentryProjectListView.as_view(), name='sentry_project_list'),
+    path('sentry/projects/<str:project_slug>/issues/', SentryIssueListView.as_view(), name='sentry_issue_list'),
+    path('sentry/issues/<str:issue_id>/', SentryIssueDetailView.as_view(), name='sentry_issue_detail'),
+    path('sentry/issues/<str:issue_id>/events/', SentryIssueEventsView.as_view(), name='sentry_issue_events'),
+    path('sentry/projects/<str:project_slug>/events/<str:event_id>/', SentryEventDetailView.as_view(), name='sentry_event_detail'),
+    path('sentry/projects/<str:project_slug>/stats/', SentryProjectStatsView.as_view(), name='sentry_project_stats'),
 ]
