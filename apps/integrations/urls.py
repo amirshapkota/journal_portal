@@ -1,16 +1,4 @@
-from .views import (
-    OJSUserSyncAPIView, OJSUserDetailSyncAPIView,
-    OJSReviewSyncAPIView, OJSReviewDetailSyncAPIView,
-    OJSCommentSyncAPIView, OJSCommentDetailSyncAPIView,
-)
-from .sentry_views import (
-    SentryProjectListView,
-    SentryIssueListView,
-    SentryIssueDetailView,
-    SentryIssueEventsView,
-    SentryEventDetailView,
-    SentryProjectStatsView,
-)
+
 """
 URL configuration for integrations app.
 Handles ORCID/OJS connectors and external services.
@@ -44,6 +32,15 @@ from .views import (
     OJSSubmissionListView,
     OJSSubmissionCreateView,
     OJSSubmissionUpdateView,
+    SentryProjectListView,
+    SentryIssueListView,
+    SentryIssueDetailView,
+    SentryIssueEventsView,
+    SentryEventDetailView,
+    SentryProjectStatsView,
+    OJSUserSyncAPIView, OJSUserDetailSyncAPIView,
+    OJSReviewSyncAPIView, OJSReviewDetailSyncAPIView,
+    OJSCommentSyncAPIView, OJSCommentDetailSyncAPIView,
 )
 
 router = DefaultRouter()
