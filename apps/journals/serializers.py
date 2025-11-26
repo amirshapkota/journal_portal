@@ -154,6 +154,50 @@ class JournalSettingsSerializer(serializers.ModelSerializer):
             if key not in value:
                 value[key] = {}
         
+        # Initialize new array fields if not present
+        if 'coauthor_roles' not in value:
+            value['coauthor_roles'] = []
+        if 'author_guidelines' not in value:
+            value['author_guidelines'] = []
+        if 'submission_requirements' not in value:
+            value['submission_requirements'] = []
+        
+        # Validate coauthor_roles is an array of strings
+        if 'coauthor_roles' in value:
+            if not isinstance(value['coauthor_roles'], list):
+                raise serializers.ValidationError(
+                    "coauthor_roles must be an array of strings"
+                )
+            for role in value['coauthor_roles']:
+                if not isinstance(role, str):
+                    raise serializers.ValidationError(
+                        "All coauthor_roles must be strings"
+                    )
+        
+        # Validate author_guidelines is an array of strings
+        if 'author_guidelines' in value:
+            if not isinstance(value['author_guidelines'], list):
+                raise serializers.ValidationError(
+                    "author_guidelines must be an array of strings"
+                )
+            for guideline in value['author_guidelines']:
+                if not isinstance(guideline, str):
+                    raise serializers.ValidationError(
+                        "All author_guidelines must be strings"
+                    )
+        
+        # Validate submission_requirements is an array of strings
+        if 'submission_requirements' in value:
+            if not isinstance(value['submission_requirements'], list):
+                raise serializers.ValidationError(
+                    "submission_requirements must be an array of strings"
+                )
+            for requirement in value['submission_requirements']:
+                if not isinstance(requirement, str):
+                    raise serializers.ValidationError(
+                        "All submission_requirements must be strings"
+                    )
+        
         # Validate file requirements
         if 'file_requirements' in value:
             file_req = value['file_requirements']
