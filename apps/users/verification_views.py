@@ -149,6 +149,14 @@ class AdminVerificationViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAdminUser]
     serializer_class = VerificationRequestDetailSerializer
     queryset = VerificationRequest.objects.all()
+
+    def get_queryset(self):
+        """Optionally filter by status query param."""
+        queryset = super().get_queryset()
+        status_param = self.request.query_params.get('status')
+        if status_param:
+            queryset = queryset.filter(status=status_param)
+        return queryset
     
     @action(detail=False, methods=['get'])
     def pending_review(self, request):
