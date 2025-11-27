@@ -1,7 +1,8 @@
 """
 API views for email notifications and preferences.
 """
-from rest_framework import viewsets, status
+from rest_framework import viewsets, status, filters
+from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -27,17 +28,24 @@ class EmailPreferenceViewSet(viewsets.ModelViewSet):
     
     serializer_class = EmailNotificationPreferenceSerializer
     permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['user__email']
+    filterset_fields = ['user']
+    ordering_fields = ['id']
+    ordering = ['id']
     
     def get_queryset(self):
         """Return only current user's preferences."""
         return EmailNotificationPreference.objects.filter(user=self.request.user)
     
     def list(self, request):
-        """Get or create preferences for current user."""
-        preference, created = EmailNotificationPreference.objects.get_or_create(
-            user=request.user
-        )
-        serializer = EmailNotificationPreferenceSerializer(preference)
+        """List preferences for current user with pagination/filtering."""
+        queryset = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
     
     @action(detail=False, methods=['post'])
@@ -129,6 +137,10 @@ class EmailLogViewSet(viewsets.ReadOnlyModelViewSet):
     
     serializer_class = EmailLogSerializer
     permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['subject', 'to_email']
+    ordering_fields = ['created_at', 'status']
+    ordering = ['-created_at']
     
     def get_queryset(self):
         """Return email logs for current user only."""
@@ -196,22 +208,29 @@ class EmailLogViewSet(viewsets.ReadOnlyModelViewSet):
     
     @action(detail=False, methods=['get'])
     def user_stats(self, request):
-        """Get email statistics for current user."""
-        queryset = self.get_queryset()
-        
+        """Get email statistics for current user, with pagination and filtering."""
+        queryset = self.filter_queryset(self.get_queryset())
+
         total = queryset.count()
         sent = queryset.filter(status='SENT').count()
         pending = queryset.filter(status='PENDING').count()
         failed = queryset.filter(status='FAILED').count()
-        
-        # Recent emails (last 7 days)
+
+        # Recent emails (last 7 days, paginated)
         seven_days_ago = timezone.now() - timedelta(days=7)
-        recent_emails = queryset.filter(created_at__gte=seven_days_ago)[:5]
-        
-        return Response({
+        recent_emails_qs = queryset.filter(created_at__gte=seven_days_ago)
+        page = self.paginate_queryset(recent_emails_qs)
+        if page is not None:
+            recent_emails = self.get_serializer(page, many=True).data
+        else:
+            recent_emails = self.get_serializer(recent_emails_qs, many=True).data
+
+        # Custom paginated response: stats + paginated recent_emails
+        paginated = self.get_paginated_response(recent_emails)
+        paginated.data.update({
             'total': total,
             'sent': sent,
             'pending': pending,
             'failed': failed,
-            'recent_emails': self.get_serializer(recent_emails, many=True).data,
         })
+        return paginated
