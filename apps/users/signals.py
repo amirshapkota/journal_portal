@@ -35,6 +35,21 @@ def create_user_profile(sender, instance, created, **kwargs):
                 description='Default role for registered users with read access'
             )
             profile.roles.add(reader_role)
+        # Log user creation
+        try:
+            from apps.common.utils.activity_logger import log_system_action
+            log_system_action(
+                action_type='CREATE',
+                resource_type='USER',
+                resource_id=instance.id,
+                metadata={
+                    'email': instance.email,
+                    'is_staff': instance.is_staff,
+                    'is_superuser': instance.is_superuser
+                }
+            )
+        except Exception:
+            pass  # Don't fail user creation if logging fails
 
 
 @receiver(post_save, sender=CustomUser)
@@ -50,3 +65,25 @@ def save_user_profile(sender, instance, **kwargs):
         if not instance.profile.display_name or instance.profile.display_name == current_display:
             instance.profile.display_name = current_display
             instance.profile.save()
+
+
+@receiver(post_save, sender=Profile)
+def log_profile_update(sender, instance, created, **kwargs):
+    """
+    Log profile updates.
+    """
+    if not created:  # Only log updates, not creation
+        try:
+            from apps.common.utils.activity_logger import log_user_action
+            log_user_action(
+                user=instance.user,
+                action_type='UPDATE',
+                resource_type='PROFILE',
+                resource_id=instance.id,
+                metadata={
+                    'display_name': instance.display_name,
+                    'affiliation': instance.affiliation,
+                }
+            )
+        except Exception:
+            pass  # Don't fail profile update if logging fails

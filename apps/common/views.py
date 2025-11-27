@@ -10,15 +10,18 @@ from django.contrib.auth.decorators import login_required
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_control
 from django.db import models
-from rest_framework import viewsets, status, permissions
+from rest_framework import viewsets, status, permissions, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 from drf_spectacular.types import OpenApiTypes
+from django_filters.rest_framework import DjangoFilterBackend
 
 from apps.submissions.models import Document, DocumentVersion
 from apps.submissions.serializers import DocumentSerializer, DocumentVersionSerializer
+from .models import ActivityLog
+from .serializers import ActivityLogSerializer
 from .storage import SecureFileStorage, FileTypeDetector
 
 
@@ -479,3 +482,135 @@ class DocumentVersionManagementViewSet(viewsets.ReadOnlyModelViewSet):
                 {'error': 'One or both versions not found'}, 
                 status=status.HTTP_404_NOT_FOUND
             )
+
+
+class ActivityLogViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet for viewing system activity logs.
+    
+    Admin-only endpoint for monitoring all system events including:
+    - User logins and logouts
+    - Submission creation and updates
+    - Review submissions and approvals
+    - Publishing and withdrawal actions
+    - And all other tracked system activities
+    
+    Provides comprehensive filtering and search capabilities.
+    """
+    serializer_class = ActivityLogSerializer
+    permission_classes = [permissions.IsAdminUser]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = {
+        'user': ['exact'],
+        'action_type': ['exact', 'in'],
+        'resource_type': ['exact', 'in'],
+        'actor_type': ['exact', 'in'],
+        'created_at': ['gte', 'lte', 'exact', 'date'],
+        'ip_address': ['exact'],
+    }
+    search_fields = ['resource_id', 'metadata', 'user__email', 'user_agent']
+    ordering_fields = ['created_at', 'action_type', 'resource_type']
+    ordering = ['-created_at']  # Default ordering: newest first
+    
+    def get_queryset(self):
+        """
+        Get all activity logs.
+        Only accessible by admin users (enforced by permission_classes).
+        """
+        return ActivityLog.objects.all().select_related('user').order_by('-created_at')
+    
+    @extend_schema(
+        summary="List all system events",
+        description="""
+        Retrieve a paginated list of all system activity logs.
+        
+        **Filtering Options:**
+        - `user`: Filter by user ID
+        - `action_type`: Filter by action (LOGIN, SUBMIT, REVIEW, etc.)
+        - `resource_type`: Filter by resource (USER, SUBMISSION, REVIEW, etc.)
+        - `actor_type`: Filter by actor (USER, SYSTEM, API, INTEGRATION)
+        - `created_at__gte`: Filter events after this date
+        - `created_at__lte`: Filter events before this date
+        - `ip_address`: Filter by IP address
+        
+        **Search:**
+        Search across resource_id, metadata, user email, and user agent.
+        
+        **Ordering:**
+        Order by created_at, action_type, or resource_type (prefix with - for descending).
+        
+        **Examples:**
+        - Get all login events: `?action_type=LOGIN`
+        - Get all submission events: `?resource_type=SUBMISSION`
+        - Get events from specific user: `?user=<user_id>`
+        - Get events in date range: `?created_at__gte=2025-11-01&created_at__lte=2025-11-30`
+        - Search for specific resource: `?search=<resource_id>`
+        """,
+        parameters=[
+            OpenApiParameter(
+                name='user',
+                type=OpenApiTypes.UUID,
+                location=OpenApiParameter.QUERY,
+                description='Filter by user ID'
+            ),
+            OpenApiParameter(
+                name='action_type',
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description='Filter by action type (LOGIN, SUBMIT, REVIEW, etc.)'
+            ),
+            OpenApiParameter(
+                name='resource_type',
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description='Filter by resource type (USER, SUBMISSION, REVIEW, etc.)'
+            ),
+            OpenApiParameter(
+                name='actor_type',
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description='Filter by actor type (USER, SYSTEM, API, INTEGRATION)'
+            ),
+            OpenApiParameter(
+                name='created_at__gte',
+                type=OpenApiTypes.DATETIME,
+                location=OpenApiParameter.QUERY,
+                description='Filter events created after this date'
+            ),
+            OpenApiParameter(
+                name='created_at__lte',
+                type=OpenApiTypes.DATETIME,
+                location=OpenApiParameter.QUERY,
+                description='Filter events created before this date'
+            ),
+            OpenApiParameter(
+                name='ip_address',
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description='Filter by IP address'
+            ),
+            OpenApiParameter(
+                name='search',
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description='Search in resource_id, metadata, user email, user agent'
+            ),
+            OpenApiParameter(
+                name='ordering',
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description='Order by field (prefix with - for descending). Options: created_at, action_type, resource_type'
+            ),
+        ]
+    )
+    def list(self, request, *args, **kwargs):
+        """List all activity logs with filtering and pagination."""
+        return super().list(request, *args, **kwargs)
+    
+    @extend_schema(
+        summary="Retrieve a specific activity log",
+        description="Get detailed information about a specific system event by its ID."
+    )
+    def retrieve(self, request, *args, **kwargs):
+        """Retrieve a specific activity log entry."""
+        return super().retrieve(request, *args, **kwargs)
