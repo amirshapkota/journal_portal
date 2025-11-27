@@ -127,12 +127,14 @@ class ReviewAssignmentViewSet(viewsets.ModelViewSet):
             reviewer=request.user.profile,
             status='PENDING'
         ).select_related('submission', 'assigned_by').order_by('due_date')
-        
+
+        # Set page size to 6
+        self.paginator.page_size = 6
         page = self.paginate_queryset(assignments)
         if page is not None:
             serializer = self.get_serializer(page, many=True)
             return self.get_paginated_response(serializer.data)
-        
+
         serializer = self.get_serializer(assignments, many=True)
         return Response(serializer.data)
     
@@ -143,12 +145,14 @@ class ReviewAssignmentViewSet(viewsets.ModelViewSet):
             reviewer=request.user.profile,
             status='ACCEPTED'
         ).select_related('submission', 'assigned_by').order_by('due_date')
-        
+
+        # Set page size to 6
+        self.paginator.page_size = 6
         page = self.paginate_queryset(assignments)
         if page is not None:
             serializer = self.get_serializer(page, many=True)
             return self.get_paginated_response(serializer.data)
-        
+
         serializer = self.get_serializer(assignments, many=True)
         return Response(serializer.data)
     
@@ -159,12 +163,14 @@ class ReviewAssignmentViewSet(viewsets.ModelViewSet):
             reviewer=request.user.profile,
             status='COMPLETED'
         ).select_related('submission', 'assigned_by').order_by('-completed_at')
-        
+
+        # Set page size to 6
+        self.paginator.page_size = 6
         page = self.paginate_queryset(assignments)
         if page is not None:
             serializer = self.get_serializer(page, many=True)
             return self.get_paginated_response(serializer.data)
-        
+
         serializer = self.get_serializer(assignments, many=True)
         return Response(serializer.data)
     
@@ -175,12 +181,14 @@ class ReviewAssignmentViewSet(viewsets.ModelViewSet):
             reviewer=request.user.profile,
             status='DECLINED'
         ).select_related('submission', 'assigned_by').order_by('-declined_at')
-        
+
+        # Set page size to 6
+        self.paginator.page_size = 6
         page = self.paginate_queryset(assignments)
         if page is not None:
             serializer = self.get_serializer(page, many=True)
             return self.get_paginated_response(serializer.data)
-        
+
         serializer = self.get_serializer(assignments, many=True)
         return Response(serializer.data)
     

@@ -37,6 +37,7 @@ from .serializers import (
     PasswordResetConfirmSerializer,
     EmailVerificationSerializer
 )
+from apps.common.utils.activity_logger import log_activity
 import logging
 
 logger = logging.getLogger(__name__)
@@ -53,7 +54,26 @@ class CustomTokenObtainPairView(TokenObtainPairView):
         response = super().post(request, *args, **kwargs)
         
         if response.status_code == 200:
-            logger.info(f"Successful login for user: {request.data.get('email')}")
+            # Try to get email from request data (could be 'email' or 'username')
+            email = request.data.get('email') or request.data.get('username')
+            logger.info(f"Successful login for user: {email}")
+            
+            # Log activity
+            if email:
+                try:
+                    user = CustomUser.objects.get(email=email)
+                    log_activity(
+                        user=user,
+                        action_type='LOGIN',
+                        resource_type='USER',
+                        resource_id=user.id,
+                        metadata={'email': email, 'login_method': 'jwt'},
+                        request=request
+                    )
+                except CustomUser.DoesNotExist:
+                    logger.warning(f"Could not find user for logging: {email}")
+            else:
+                logger.warning("Could not extract email/username for logging")
             
             # Extract refresh token from response data
             refresh_token = response.data.get('refresh')
@@ -143,6 +163,17 @@ class LogoutView(APIView):
         )
         
         logger.info(f"User logged out: {request.user.email}")
+        
+        # Log activity
+        log_activity(
+            user=request.user,
+            action_type='LOGOUT',
+            resource_type='USER',
+            resource_id=request.user.id,
+            metadata={'email': request.user.email, 'logout_method': 'jwt'},
+            request=request
+        )
+        
         return response
 
 
