@@ -246,10 +246,10 @@ class UserSerializer(serializers.ModelSerializer):
         fields = (
             'id', 'email', 'first_name', 'last_name', 
             'is_active', 'date_joined', 'last_login',
-            'profile', 'roles'
+            'profile', 'roles', 'email_verified'
         )
         read_only_fields = (
-            'id', 'date_joined', 'last_login'
+            'id', 'date_joined', 'last_login', 'email_verified'
         )
 
     def update(self, instance, validated_data):

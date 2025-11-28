@@ -87,7 +87,11 @@ class SubmissionViewSet(viewsets.ModelViewSet):
             return SubmissionListSerializer
         elif self.action in ['update_status', 'submit', 'withdraw']:
             return SubmissionStatusUpdateSerializer
-        return SubmissionSerializer
+        # Dynamically create a serializer that includes staff_members in journal
+        from apps.journals.serializers import JournalSerializer, JournalStaffSerializer
+        class SubmissionWithJournalStaffSerializer(SubmissionSerializer):
+            journal = JournalSerializer(read_only=True)
+        return SubmissionWithJournalStaffSerializer
     
     def get_queryset(self):
         """Filter queryset based on user permissions."""
