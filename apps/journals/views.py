@@ -85,7 +85,7 @@ class JournalViewSet(viewsets.ModelViewSet):
     queryset = Journal.objects.all()
     permission_classes = [JournalPermissions]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    search_fields = ['title', 'short_name', 'description', 'issn', 'e_issn']
+    search_fields = ['title', 'short_name', 'description', 'issn_print', 'issn_online']
     filterset_fields = ['is_active', 'is_accepting_submissions']
     ordering_fields = ['title', 'created_at', 'updated_at']
     ordering = ['-created_at']

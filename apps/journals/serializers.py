@@ -79,7 +79,7 @@ class JournalSerializer(serializers.ModelSerializer):
         """Validate ISSN format."""
         if value:
             import re
-            if not re.match(r'^\d{4}-\d{4}$', value):
+            if not re.match(r'^[A-Za-z0-9]{4}-[A-Za-z0-9]{4}$', value):
                 raise serializers.ValidationError(
                     "ISSN must be in format: 1234-5678"
                 )
@@ -89,7 +89,7 @@ class JournalSerializer(serializers.ModelSerializer):
         """Validate online ISSN format."""
         if value:
             import re
-            if not re.match(r'^\d{4}-\d{4}$', value):
+            if not re.match(r'^[A-Za-z0-9]{4}-[A-Za-z0-9]{4}$', value):
                 raise serializers.ValidationError(
                     "Online ISSN must be in format: 1234-5678"
                 )
