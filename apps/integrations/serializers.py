@@ -148,39 +148,111 @@ class DOAJJournalSerializer(serializers.Serializer):
     id = serializers.CharField()
     title = serializers.CharField()
     publisher = serializers.CharField(allow_null=True, required=False)
-    issn = serializers.ListField(child=serializers.CharField(), required=False)
+    issn_print = serializers.CharField(allow_null=True, required=False)
+    issn_online = serializers.CharField(allow_null=True, required=False)
     country = serializers.CharField(allow_null=True, required=False)
     subjects = serializers.ListField(child=serializers.CharField(), required=False)
-    # Add more fields as needed
+    keywords = serializers.ListField(child=serializers.CharField(), required=False)
+    language = serializers.CharField(allow_null=True, required=False)
+    license = serializers.CharField(allow_null=True, required=False)
+    urls = serializers.ListField(child=serializers.CharField(), required=False)
+    start_year = serializers.CharField(allow_null=True, required=False)
+    end_year = serializers.CharField(allow_null=True, required=False)
+    author_pays = serializers.CharField(allow_null=True, required=False)
+    apc = serializers.CharField(allow_null=True, required=False)
+    submission_charges = serializers.CharField(allow_null=True, required=False)
+    editorial_board_url = serializers.CharField(allow_null=True, required=False)
+    aims_scope = serializers.CharField(allow_null=True, required=False)
+    homepage_url = serializers.CharField(allow_null=True, required=False)
+    urls = serializers.ListField(child=serializers.CharField(), required=False)
+    other_raw = serializers.JSONField(required=False)
 
     @staticmethod
     def from_doaj_result(result):
         bibjson = result.get('bibjson', {})
-        # ISSN: try bibjson['issn'], then bibjson['identifier'] (type: 'issn')
-        issn_list = []
+        issn_print = None
+        issn_online = None
+        # Try bibjson['pissn'] and bibjson['eissn'] first
+        if bibjson.get('pissn'):
+            issn_print = bibjson['pissn']
+        if bibjson.get('eissn'):
+            issn_online = bibjson['eissn']
+        # Try bibjson['identifier'] for more
+        for ident in bibjson.get('identifier', []):
+            if ident.get('type') == 'pissn' and ident.get('id'):
+                issn_print = issn_print or ident['id']
+            if ident.get('type') == 'eissn' and ident.get('id'):
+                issn_online = issn_online or ident['id']
+            if ident.get('type') == 'issn' and ident.get('id'):
+                # If not already set, assign to print
+                if not issn_print:
+                    issn_print = ident['id']
+        # Try bibjson['issn'] (sometimes a list)
         issn_raw = bibjson.get('issn', [])
-        for i in issn_raw:
-            if isinstance(i, str):
-                issn_list.append(i)
-            elif isinstance(i, dict) and 'value' in i:
-                issn_list.append(i['value'])
-        # If still empty, try bibjson['identifier']
-        if not issn_list:
-            for ident in bibjson.get('identifier', []):
-                if ident.get('type') == 'issn' and ident.get('id'):
-                    issn_list.append(ident['id'])
-        # Country: try bibjson['country'], then publisher['country']
+        if isinstance(issn_raw, list):
+            for i in issn_raw:
+                if isinstance(i, str):
+                    if not issn_print:
+                        issn_print = i
+                elif isinstance(i, dict) and 'value' in i:
+                    if not issn_print:
+                        issn_print = i['value']
+        # Try bibjson['journal']['issn'] if exists
+        journal = bibjson.get('journal', {})
+        if isinstance(journal, dict):
+            if journal.get('issn') and not issn_print:
+                issn_print = journal['issn']
+        # If still empty, log bibjson for debugging
+        if not issn_print and not issn_online:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"DOAJJournalSerializer: ISSN not found for journal {result.get('id')}, bibjson: {bibjson}")
         country = bibjson.get('country')
         publisher = bibjson.get('publisher')
         if not country and isinstance(publisher, dict):
             country = publisher.get('country')
+        keywords = bibjson.get('keywords', [])
+        language = bibjson.get('language')
+        license = bibjson.get('license', {}).get('type') if isinstance(bibjson.get('license'), dict) else None
+        # Extract homepage and other URLs
+        homepage_url = bibjson.get('homepage_url')
+        urls = []
+        # bibjson['link'] is usually a list of dicts with 'url' and 'type'
+        for u in bibjson.get('link', []):
+            if u.get('url'):
+                urls.append(u['url'])
+        # Add homepage_url if not already in urls
+        if homepage_url and homepage_url not in urls:
+            urls.insert(0, homepage_url)
+        start_year = bibjson.get('start_year')
+        end_year = bibjson.get('end_year')
+        author_pays = bibjson.get('author_pays')
+        apc = bibjson.get('apc')
+        submission_charges = bibjson.get('submission_charges')
+        editorial_board_url = bibjson.get('editorial_board_url')
+        aims_scope = bibjson.get('aims_scope')
+        subjects = [s.get('term') for s in bibjson.get('subject', []) if s.get('term')]
         return {
             'id': result.get('id'),
             'title': bibjson.get('title'),
             'publisher': publisher,
-            'issn': issn_list,
+            'issn_print': issn_print,
+            'issn_online': issn_online,
             'country': country,
-            'subjects': [s.get('term') for s in bibjson.get('subject', []) if s.get('term')],
+            'subjects': subjects,
+            'keywords': keywords,
+            'language': language,
+            'license': license,
+            'urls': urls,
+            'start_year': start_year,
+            'end_year': end_year,
+            'author_pays': author_pays,
+            'apc': apc,
+            'submission_charges': submission_charges,
+            'editorial_board_url': editorial_board_url,
+            'aims_scope': aims_scope,
+            'homepage_url': homepage_url,
+            'other_raw': bibjson,
         }
 
 
