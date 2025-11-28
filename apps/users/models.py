@@ -62,6 +62,8 @@ class CustomUser(AbstractUser):
     first_name = models.CharField(max_length=150, blank=True)
     last_name = models.CharField(max_length=150, blank=True)
     
+    # Email verification status
+    email_verified = models.BooleanField(default=False, help_text="Has the user verified their email address?")
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

@@ -267,7 +267,7 @@ class EmailVerificationView(APIView):
                 user = CustomUser.objects.get(pk=user_id)
                 
                 if default_token_generator.check_token(user, token):
-                    user.is_verified = True
+                    user.email_verified = True
                     user.save()
                     
                     logger.info(f"Email verified for user: {user.email}")
