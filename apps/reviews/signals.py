@@ -5,7 +5,7 @@ Automatically logs review-related activities.
 """
 from django.db.models.signals import post_save
 from django.dispatch import receiver
-from apps.reviews.models import ReviewAssignment, Review
+from apps.reviews.models import ReviewAssignment, Review, EditorialDecision
 from apps.common.utils.activity_logger import log_user_action, log_system_action
 import logging
 
@@ -71,7 +71,8 @@ def log_review_activity(sender, instance, created, **kwargs):
     Log review submission.
     """
     try:
-        user = instance.assignment.reviewer.user if instance.assignment and instance.assignment.reviewer else None
+        # Use the direct reviewer field from the Review model
+        user = instance.reviewer.user if instance.reviewer else None
         
         if created:
             # Log review submission
@@ -82,12 +83,13 @@ def log_review_activity(sender, instance, created, **kwargs):
                 resource_id=instance.id,
                 metadata={
                     'recommendation': instance.recommendation,
-                    'submission_id': str(instance.assignment.submission.id) if instance.assignment else None,
-                    'submission_title': instance.assignment.submission.title if instance.assignment else None,
-                    'overall_score': instance.overall_score
+                    'submission_id': str(instance.submission.id) if instance.submission else None,
+                    'submission_title': instance.submission.title if instance.submission else None,
+                    'overall_score': instance.scores.get('overall') if instance.scores else None,
+                    'reviewer_email': user.email if user else None
                 }
             )
-            logger.info(f"Logged SUBMIT REVIEW for {instance.id}")
+            logger.info(f"Logged SUBMIT REVIEW for {instance.id} by {user.email if user else 'Unknown'}")
         else:
             # Log review update
             log_user_action(
@@ -97,12 +99,49 @@ def log_review_activity(sender, instance, created, **kwargs):
                 resource_id=instance.id,
                 metadata={
                     'recommendation': instance.recommendation,
-                    'overall_score': instance.overall_score
+                    'overall_score': instance.scores.get('overall') if instance.scores else None
                 }
             )
             logger.info(f"Logged UPDATE REVIEW for {instance.id}")
     except Exception as e:
         logger.error(f"Failed to log review activity: {e}")
+
+
+@receiver(post_save, sender=EditorialDecision)
+def log_editorial_decision_activity(sender, instance, created, **kwargs):
+    """
+    Log editorial decision creation.
+    This logs the EDITOR who made the decision, not the submission author.
+    """
+    try:
+        if created:
+            editor = instance.decided_by.user if instance.decided_by else None
+            
+            # Map decision type to action type
+            action_type_map = {
+                'ACCEPT': 'APPROVE',
+                'REJECT': 'REJECT',
+                'MINOR_REVISION': 'UPDATE',
+                'MAJOR_REVISION': 'UPDATE',
+            }
+            action_type = action_type_map.get(instance.decision_type, 'UPDATE')
+            
+            log_user_action(
+                user=editor,
+                action_type=action_type,
+                resource_type='SUBMISSION',
+                resource_id=instance.submission.id,
+                metadata={
+                    'decision_type': instance.decision_type,
+                    'decision_display': instance.get_decision_type_display(),
+                    'submission_title': instance.submission.title,
+                    'submission_author': instance.submission.corresponding_author.user.email if instance.submission.corresponding_author else None,
+                    'decision_id': str(instance.id)
+                }
+            )
+            logger.info(f"Logged {action_type} EDITORIAL_DECISION for submission {instance.submission.id} by editor {editor.email if editor else 'Unknown'}")
+    except Exception as e:
+        logger.error(f"Failed to log editorial decision activity: {e}")
 
 
 # Track status changes for review assignments

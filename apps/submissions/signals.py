@@ -41,6 +41,12 @@ def log_submission_activity(sender, instance, created, **kwargs):
                 new_status = instance.status
                 
                 if old_status != new_status:
+                    # Skip logging ACCEPTED/REJECTED status changes
+                    # These are logged by the EditorialDecision signal with the correct editor
+                    if new_status in ['ACCEPTED', 'REJECTED']:
+                        logger.info(f"Skipping submission status log for {instance.id} - handled by EditorialDecision signal")
+                        return
+                    
                     # Map status changes to actions
                     if new_status == 'SUBMITTED':
                         action_type = 'SUBMIT'
@@ -48,10 +54,6 @@ def log_submission_activity(sender, instance, created, **kwargs):
                         action_type = 'PUBLISH'
                     elif new_status == 'WITHDRAWN':
                         action_type = 'WITHDRAW'
-                    elif new_status == 'ACCEPTED':
-                        action_type = 'APPROVE'
-                    elif new_status == 'REJECTED':
-                        action_type = 'REJECT'
                     else:
                         action_type = 'UPDATE'
                     
