@@ -254,38 +254,124 @@ class EmailVerificationView(APIView):
     
     permission_classes = [permissions.AllowAny]
     
-    def post(self, request):
-        """Verify email with token."""
-        serializer = EmailVerificationSerializer(data=request.data)
+    def post(self, request, uid=None, token=None):
+        """Verify email with token from URL params or body."""
+        # Accept uid and token from URL path or request body
+        uid = uid or request.data.get('uid')
+        token = token or request.data.get('token')
         
-        if serializer.is_valid():
-            uid = request.data.get('uid')
-            token = serializer.validated_data['token']
+        if not uid or not token:
+            return Response({
+                'error': 'Both uid and token are required.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            user_id = force_str(urlsafe_base64_decode(uid))
+            user = CustomUser.objects.get(pk=user_id)
             
-            try:
-                user_id = force_str(urlsafe_base64_decode(uid))
-                user = CustomUser.objects.get(pk=user_id)
-                
-                if default_token_generator.check_token(user, token):
-                    user.email_verified = True
-                    user.save()
-                    
-                    logger.info(f"Email verified for user: {user.email}")
-                    
-                    return Response({
-                        'message': 'Email verification successful.'
-                    }, status=status.HTTP_200_OK)
-                else:
-                    return Response({
-                        'error': 'Invalid or expired verification token.'
-                    }, status=status.HTTP_400_BAD_REQUEST)
-                    
-            except (TypeError, ValueError, OverflowError, CustomUser.DoesNotExist):
+            if user.email_verified:
                 return Response({
-                    'error': 'Invalid verification link.'
+                    'message': 'Email already verified.'
+                }, status=status.HTTP_200_OK)
+            
+            if default_token_generator.check_token(user, token):
+                user.email_verified = True
+                user.save()
+                
+                logger.info(f"Email verified for user: {user.email}")
+                
+                return Response({
+                    'message': 'Email verification successful.'
+                }, status=status.HTTP_200_OK)
+            else:
+                logger.warning(f"Invalid verification token for user: {user.email}")
+                return Response({
+                    'error': 'Invalid or expired verification token.'
                 }, status=status.HTTP_400_BAD_REQUEST)
+                
+        except (TypeError, ValueError, OverflowError, CustomUser.DoesNotExist) as e:
+            logger.error(f"Email verification error: {str(e)}")
+            return Response({
+                'error': 'Invalid verification link.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+
+@extend_schema_view(
+    post=extend_schema(
+        summary="Resend verification email",
+        description="Resend verification email to user's registered email address."
+    )
+)
+class ResendVerificationEmailView(APIView):
+    """Handle resending verification emails."""
+    
+    permission_classes = [permissions.AllowAny]
+    
+    @method_decorator(ratelimit(key='ip', rate='3/h', method='POST'))
+    def post(self, request):
+        """Resend verification email."""
+        email = request.data.get('email')
         
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        if not email:
+            return Response({
+                'error': 'Email address is required.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            user = CustomUser.objects.get(email=email, is_active=True)
+            
+            if user.email_verified:
+                return Response({
+                    'message': 'Email is already verified.'
+                }, status=status.HTTP_200_OK)
+            
+            # Send verification email
+            self.send_verification_email(user)
+            
+            logger.info(f"Verification email resent to: {user.email}")
+            
+            return Response({
+                'message': 'Verification email has been sent. Please check your inbox.'
+            }, status=status.HTTP_200_OK)
+            
+        except CustomUser.DoesNotExist:
+            # Don't reveal if user exists for security
+            return Response({
+                'message': 'If an account with this email exists and is not verified, a verification email has been sent.'
+            }, status=status.HTTP_200_OK)
+    
+    def send_verification_email(self, user):
+        """Send email verification link using new EmailTemplate system."""
+        from apps.notifications.tasks import send_email_verification_email
+        
+        token = default_token_generator.make_token(user)
+        uid = urlsafe_base64_encode(force_bytes(user.pk))
+        
+        verification_url = f"{settings.FRONTEND_URL}/verify-email/{uid}/{token}/"
+        
+        # Use new email system with Celery task and tracking
+        try:
+            send_email_verification_email(str(user.id), verification_url)
+        except Exception as exc:
+            logger.error(f"Error queueing verification email: {exc}")
+            # Fallback to direct send if Celery fails
+            from django.core.mail import send_mail
+            context = {
+                'user': user,
+                'verification_url': verification_url,
+                'site_name': 'Journal Publication Portal'
+            }
+            subject = 'Verify your email address'
+            message = render_to_string('emails/email_verification.txt', context)
+            html_message = render_to_string('emails/email_verification.html', context)
+            send_mail(
+                subject,
+                message,
+                settings.DEFAULT_FROM_EMAIL,
+                [user.email],
+                html_message=html_message,
+                fail_silently=False,
+            )
 
 
 @extend_schema_view(

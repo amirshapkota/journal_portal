@@ -29,6 +29,8 @@ urlpatterns = [
     # Registration and verification
     path('auth/register/', views.UserRegistrationView.as_view(), name='register'),
     path('auth/verify-email/', views.EmailVerificationView.as_view(), name='verify_email'),
+    path('auth/verify-email/<str:uid>/<str:token>/', views.EmailVerificationView.as_view(), name='verify_email_with_params'),
+    path('auth/resend-verification/', views.ResendVerificationEmailView.as_view(), name='resend_verification'),
     
     # Password management
     path('auth/password/change/', views.PasswordChangeView.as_view(), name='password_change'),
