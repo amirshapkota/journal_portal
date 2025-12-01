@@ -159,10 +159,24 @@ class SubmissionSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     review_type_display = serializers.CharField(source='get_review_type_display', read_only=True)
     
+    # Taxonomy fields
+    section = serializers.SerializerMethodField()
+    category = serializers.SerializerMethodField()
+    research_type = serializers.SerializerMethodField()
+    area = serializers.SerializerMethodField()
+    
+    # Write-only IDs for taxonomy
+    section_id = serializers.UUIDField(write_only=True, required=False, allow_null=True)
+    category_id = serializers.UUIDField(write_only=True, required=False, allow_null=True)
+    research_type_id = serializers.UUIDField(write_only=True, required=False, allow_null=True)
+    area_id = serializers.UUIDField(write_only=True, required=False, allow_null=True)
+    
     class Meta:
         model = Submission
         fields = (
             'id', 'journal', 'journal_id', 'title', 'abstract',
+            'section', 'section_id', 'category', 'category_id',
+            'research_type', 'research_type_id', 'area', 'area_id',
             'corresponding_author', 'author_contributions', 'documents',
             'review_assignments', 'status', 'status_display', 
             'submission_number', 'review_type', 'review_type_display', 
@@ -173,6 +187,59 @@ class SubmissionSerializer(serializers.ModelSerializer):
             'id', 'corresponding_author', 'submission_number',
             'compliance_score', 'submitted_at', 'created_at', 'updated_at'
         )
+    
+    def get_section(self, obj):
+        """Get section details with full hierarchy."""
+        if obj.section:
+            section_data = {
+                'id': str(obj.section.id),
+                'name': obj.section.name,
+                'code': obj.section.code,
+                'description': obj.section.description
+            }
+            
+            # Add category if it exists
+            if obj.category and obj.category.section_id == obj.section.id:
+                section_data['category'] = {
+                    'id': str(obj.category.id),
+                    'name': obj.category.name,
+                    'code': obj.category.code,
+                    'description': obj.category.description
+                }
+                
+                # Add research_type if it exists
+                if obj.research_type and obj.research_type.category_id == obj.category.id:
+                    section_data['category']['research_type'] = {
+                        'id': str(obj.research_type.id),
+                        'name': obj.research_type.name,
+                        'code': obj.research_type.code,
+                        'description': obj.research_type.description
+                    }
+                    
+                    # Add area if it exists
+                    if obj.area and obj.area.research_type_id == obj.research_type.id:
+                        section_data['category']['research_type']['area'] = {
+                            'id': str(obj.area.id),
+                            'name': obj.area.name,
+                            'code': obj.area.code,
+                            'description': obj.area.description,
+                            'keywords': obj.area.keywords
+                        }
+            
+            return section_data
+        return None
+    
+    def get_category(self, obj):
+        """Get category details - not needed when using tree structure."""
+        return None
+    
+    def get_research_type(self, obj):
+        """Get research type details - not needed when using tree structure."""
+        return None
+    
+    def get_area(self, obj):
+        """Get area details - not needed when using tree structure."""
+        return None
     
     def validate_journal_id(self, value):
         """Validate that journal exists and is accepting submissions."""
@@ -188,7 +255,13 @@ class SubmissionSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Journal does not exist.")
     
     def create(self, validated_data):
-        """Create submission with corresponding author."""
+        """Create submission with corresponding author and taxonomy."""
+        # Extract taxonomy IDs
+        section_id = validated_data.pop('section_id', None)
+        category_id = validated_data.pop('category_id', None)
+        research_type_id = validated_data.pop('research_type_id', None)
+        area_id = validated_data.pop('area_id', None)
+        
         # Set corresponding author from request user
         user = self.context['request'].user
         if hasattr(user, 'profile'):
@@ -198,7 +271,83 @@ class SubmissionSerializer(serializers.ModelSerializer):
                 "User must have a profile to create submissions."
             )
         
+        # Set taxonomy relationships
+        from apps.journals.models import Section, Category, ResearchType, Area
+        
+        if section_id:
+            try:
+                validated_data['section'] = Section.objects.get(id=section_id)
+            except Section.DoesNotExist:
+                raise serializers.ValidationError({"section_id": "Section does not exist."})
+        
+        if category_id:
+            try:
+                validated_data['category'] = Category.objects.get(id=category_id)
+            except Category.DoesNotExist:
+                raise serializers.ValidationError({"category_id": "Category does not exist."})
+        
+        if research_type_id:
+            try:
+                validated_data['research_type'] = ResearchType.objects.get(id=research_type_id)
+            except ResearchType.DoesNotExist:
+                raise serializers.ValidationError({"research_type_id": "ResearchType does not exist."})
+        
+        if area_id:
+            try:
+                validated_data['area'] = Area.objects.get(id=area_id)
+            except Area.DoesNotExist:
+                raise serializers.ValidationError({"area_id": "Area does not exist."})
+        
         return super().create(validated_data)
+    
+    def update(self, instance, validated_data):
+        """Update submission with taxonomy."""
+        # Extract taxonomy IDs
+        section_id = validated_data.pop('section_id', None)
+        category_id = validated_data.pop('category_id', None)
+        research_type_id = validated_data.pop('research_type_id', None)
+        area_id = validated_data.pop('area_id', None)
+        
+        # Update taxonomy relationships
+        from apps.journals.models import Section, Category, ResearchType, Area
+        
+        if section_id is not None:
+            if section_id:
+                try:
+                    instance.section = Section.objects.get(id=section_id)
+                except Section.DoesNotExist:
+                    raise serializers.ValidationError({"section_id": "Section does not exist."})
+            else:
+                instance.section = None
+        
+        if category_id is not None:
+            if category_id:
+                try:
+                    instance.category = Category.objects.get(id=category_id)
+                except Category.DoesNotExist:
+                    raise serializers.ValidationError({"category_id": "Category does not exist."})
+            else:
+                instance.category = None
+        
+        if research_type_id is not None:
+            if research_type_id:
+                try:
+                    instance.research_type = ResearchType.objects.get(id=research_type_id)
+                except ResearchType.DoesNotExist:
+                    raise serializers.ValidationError({"research_type_id": "ResearchType does not exist."})
+            else:
+                instance.research_type = None
+        
+        if area_id is not None:
+            if area_id:
+                try:
+                    instance.area = Area.objects.get(id=area_id)
+                except Area.DoesNotExist:
+                    raise serializers.ValidationError({"area_id": "Area does not exist."})
+            else:
+                instance.area = None
+        
+        return super().update(instance, validated_data)
 
 
 class SubmissionListSerializer(serializers.ModelSerializer):
@@ -211,12 +360,20 @@ class SubmissionListSerializer(serializers.ModelSerializer):
     review_assignment_count = serializers.SerializerMethodField()
     review_count = serializers.SerializerMethodField()
     
+    # Taxonomy fields
+    section = serializers.SerializerMethodField()
+    category = serializers.SerializerMethodField()
+    research_type = serializers.SerializerMethodField()
+    area = serializers.SerializerMethodField()
+    
     class Meta:
         model = Submission
         fields = (
             'id', 'title', 'journal_name', 'corresponding_author_name',
             'status', 'status_display', 'submission_number', 'document_count',
-            'review_assignment_count', 'review_count', 'created_at', 'submitted_at', 'updated_at'
+            'review_assignment_count', 'review_count',
+            'section', 'category', 'research_type', 'area',
+            'created_at', 'submitted_at', 'updated_at'
         )
     
     def get_journal_name(self, obj):
@@ -240,6 +397,59 @@ class SubmissionListSerializer(serializers.ModelSerializer):
     def get_review_count(self, obj):
         """Get count of completed reviews for this submission."""
         return obj.reviews.filter(is_published=True).count()
+    
+    def get_section(self, obj):
+        """Get section details with full hierarchy."""
+        if obj.section:
+            section_data = {
+                'id': str(obj.section.id),
+                'name': obj.section.name,
+                'code': obj.section.code,
+                'description': obj.section.description
+            }
+            
+            # Add category if it exists
+            if obj.category and obj.category.section_id == obj.section.id:
+                section_data['category'] = {
+                    'id': str(obj.category.id),
+                    'name': obj.category.name,
+                    'code': obj.category.code,
+                    'description': obj.category.description
+                }
+                
+                # Add research_type if it exists
+                if obj.research_type and obj.research_type.category_id == obj.category.id:
+                    section_data['category']['research_type'] = {
+                        'id': str(obj.research_type.id),
+                        'name': obj.research_type.name,
+                        'code': obj.research_type.code,
+                        'description': obj.research_type.description
+                    }
+                    
+                    # Add area if it exists
+                    if obj.area and obj.area.research_type_id == obj.research_type.id:
+                        section_data['category']['research_type']['area'] = {
+                            'id': str(obj.area.id),
+                            'name': obj.area.name,
+                            'code': obj.area.code,
+                            'description': obj.area.description,
+                            'keywords': obj.area.keywords
+                        }
+            
+            return section_data
+        return None
+    
+    def get_category(self, obj):
+        """Get category details - not needed when using tree structure."""
+        return None
+    
+    def get_research_type(self, obj):
+        """Get research type details - not needed when using tree structure."""
+        return None
+    
+    def get_area(self, obj):
+        """Get area details - not needed when using tree structure."""
+        return None
 
 
 class SubmissionStatusUpdateSerializer(serializers.Serializer):
@@ -361,11 +571,32 @@ class DocumentUploadSerializer(serializers.ModelSerializer):
             **validated_data
         )
         
+        # Anonymize file if required by journal settings
+        from apps.submissions.utils import DocumentAnonymizer
+        from django.core.files.uploadedfile import InMemoryUploadedFile
+        from io import BytesIO
+        
+        anonymized_content, was_anonymized = DocumentAnonymizer.anonymize_file(file, submission)
+        
+        # If anonymized, create a new file object with anonymized content
+        if was_anonymized:
+            anonymized_file = InMemoryUploadedFile(
+                BytesIO(anonymized_content),
+                field_name='file',
+                name=file.name,
+                content_type=file.content_type,
+                size=len(anonymized_content),
+                charset=file.charset
+            )
+            file_to_store = anonymized_file
+        else:
+            file_to_store = file
+        
         # Store file securely
         try:
             from apps.common.storage import SecureFileStorage
             storage_result = SecureFileStorage.store_file(
-                file,
+                file_to_store,
                 document.document_type,
                 str(document.id)
             )
@@ -379,8 +610,9 @@ class DocumentUploadSerializer(serializers.ModelSerializer):
                 file_size=storage_result['file_size'],
                 file_hash=storage_result['file_hash'],
                 created_by=user.profile,
-                change_summary="Initial upload",
-                is_current=True
+                change_summary="Initial upload" + (" (anonymized)" if was_anonymized else ""),
+                is_current=True,
+                metadata={'anonymized': was_anonymized} if was_anonymized else {}
             )
             
             # Set current version and also populate SuperDoc fields
