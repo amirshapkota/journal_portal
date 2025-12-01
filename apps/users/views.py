@@ -196,10 +196,14 @@ class UserRegistrationView(generics.CreateAPIView):
         response = super().post(request, *args, **kwargs)
         
         if response.status_code == 201:
+            # Get the fresh user instance from database
             user = CustomUser.objects.get(email=request.data.get('email'))
-            self.send_verification_email(user)
+            # Refresh from db to ensure we have the latest state
+            user.refresh_from_db()
             
-            logger.info(f"New user registered: {user.email}")
+            logger.info(f"New user registered: {user.email}, last_login: {user.last_login}, email_verified: {user.email_verified}")
+            
+            self.send_verification_email(user)
             
             return Response({
                 'message': 'Registration successful. Please check your email for verification.',
@@ -212,10 +216,19 @@ class UserRegistrationView(generics.CreateAPIView):
         """Send email verification link using new EmailTemplate system."""
         from apps.notifications.tasks import send_email_verification_email
         
+        # Refresh user from database to ensure latest state
+        user.refresh_from_db()
+        
+        logger.info(f"Generating token for new registration - user: {user.email}, last_login: {user.last_login}, email_verified: {user.email_verified}, password hash: {user.password[:20]}...")
+        
         token = default_token_generator.make_token(user)
         uid = urlsafe_base64_encode(force_bytes(user.pk))
         
+        logger.info(f"Generated token for {user.email}: {token} (UID: {uid})")
+        
         verification_url = f"{settings.FRONTEND_URL}/verify-email/{uid}/{token}/"
+        
+        logger.info(f"Full verification URL: {verification_url}")
         
         # Use new email system with Celery task and tracking
         # Call synchronously since Redis/Celery might not be running
@@ -260,6 +273,8 @@ class EmailVerificationView(APIView):
         uid = uid or request.data.get('uid')
         token = token or request.data.get('token')
         
+        logger.info(f"Email verification attempt - UID: {uid}, Token: {token[:20]}..." if token else "No token")
+        
         if not uid or not token:
             return Response({
                 'error': 'Both uid and token are required.'
@@ -269,12 +284,18 @@ class EmailVerificationView(APIView):
             user_id = force_str(urlsafe_base64_decode(uid))
             user = CustomUser.objects.get(pk=user_id)
             
+            logger.info(f"Verifying email for user: {user.email}, last_login: {user.last_login}, email_verified: {user.email_verified}")
+            
             if user.email_verified:
                 return Response({
                     'message': 'Email already verified.'
                 }, status=status.HTTP_200_OK)
             
-            if default_token_generator.check_token(user, token):
+            # Check token validity
+            is_valid = default_token_generator.check_token(user, token)
+            logger.info(f"Token validation result for {user.email}: {is_valid}")
+            
+            if is_valid:
                 user.email_verified = True
                 user.save()
                 
