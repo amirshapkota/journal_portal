@@ -361,11 +361,32 @@ class DocumentUploadSerializer(serializers.ModelSerializer):
             **validated_data
         )
         
+        # Anonymize file if required by journal settings
+        from apps.submissions.utils import DocumentAnonymizer
+        from django.core.files.uploadedfile import InMemoryUploadedFile
+        from io import BytesIO
+        
+        anonymized_content, was_anonymized = DocumentAnonymizer.anonymize_file(file, submission)
+        
+        # If anonymized, create a new file object with anonymized content
+        if was_anonymized:
+            anonymized_file = InMemoryUploadedFile(
+                BytesIO(anonymized_content),
+                field_name='file',
+                name=file.name,
+                content_type=file.content_type,
+                size=len(anonymized_content),
+                charset=file.charset
+            )
+            file_to_store = anonymized_file
+        else:
+            file_to_store = file
+        
         # Store file securely
         try:
             from apps.common.storage import SecureFileStorage
             storage_result = SecureFileStorage.store_file(
-                file,
+                file_to_store,
                 document.document_type,
                 str(document.id)
             )
@@ -379,8 +400,9 @@ class DocumentUploadSerializer(serializers.ModelSerializer):
                 file_size=storage_result['file_size'],
                 file_hash=storage_result['file_hash'],
                 created_by=user.profile,
-                change_summary="Initial upload",
-                is_current=True
+                change_summary="Initial upload" + (" (anonymized)" if was_anonymized else ""),
+                is_current=True,
+                metadata={'anonymized': was_anonymized} if was_anonymized else {}
             )
             
             # Set current version and also populate SuperDoc fields

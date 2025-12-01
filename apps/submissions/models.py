@@ -328,6 +328,13 @@ class DocumentVersion(models.Model):
         help_text="Diff or patch information compared to previous version"
     )
     
+    # Additional metadata
+    metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Additional version metadata (e.g., anonymization status)"
+    )
+    
     # Version management
     is_current = models.BooleanField(default=True)
     immutable_flag = models.BooleanField(
