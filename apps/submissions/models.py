@@ -79,7 +79,10 @@ class Submission(models.Model):
     corresponding_author = models.ForeignKey(
         'users.Profile',
         on_delete=models.CASCADE,
-        related_name='corresponding_submissions'
+        related_name='corresponding_submissions',
+        null=True,  # Allow null for OJS imports
+        blank=True,
+        help_text="Corresponding author profile (required for manual submissions, can be null for OJS imports)"
     )
     coauthors = models.ManyToManyField(
         'users.Profile',

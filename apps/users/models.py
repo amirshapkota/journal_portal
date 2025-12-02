@@ -141,11 +141,11 @@ class Profile(models.Model):
     
     # ORCID integration
     orcid_id = models.CharField(
-        max_length=19,
+        max_length=100,
         unique=True,
         null=True,
         blank=True,
-        help_text="ORCID identifier (e.g., 0000-0000-0000-0000)"
+        help_text="ORCID identifier (e.g., 0000-0000-0000-0000) or full ORCID URL"
     )
     orcid_token_encrypted = models.BinaryField(
         null=True,

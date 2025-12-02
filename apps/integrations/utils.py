@@ -159,7 +159,7 @@ def doaj_submit_or_update(data, api_key, endpoint="journals", method="POST", obj
 def get_ojs_headers(api_key):
     """Generate headers for OJS API requests."""
     return {
-        "Authorization": f"Token {api_key}",
+        "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
 

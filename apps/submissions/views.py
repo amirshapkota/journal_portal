@@ -141,6 +141,52 @@ class SubmissionViewSet(viewsets.ModelViewSet):
         
         return queryset.none()
     
+    def perform_create(self, serializer):
+        """
+        Create submission and optionally sync to OJS if connected.
+        """
+        submission = serializer.save()
+        
+        # Auto-sync to OJS if journal has OJS configured
+        if submission.journal.ojs_api_url and submission.journal.ojs_api_key:
+            try:
+                from apps.integrations.ojs_sync import sync_submission_to_ojs
+                result = sync_submission_to_ojs(submission)
+                
+                if result['success']:
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.info(f"Submission {submission.id} auto-synced to OJS: {result['ojs_id']}")
+            except Exception as e:
+                # Log error but don't fail the submission creation
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"Failed to auto-sync submission {submission.id} to OJS: {str(e)}")
+    
+    def perform_update(self, serializer):
+        """
+        Update submission and optionally sync to OJS if connected.
+        """
+        submission = serializer.save()
+        
+        # Auto-sync to OJS if journal has OJS configured and submission is already linked
+        if submission.journal.ojs_api_url and submission.journal.ojs_api_key:
+            try:
+                # Only sync if already linked to OJS
+                if hasattr(submission, 'ojs_mapping'):
+                    from apps.integrations.ojs_sync import sync_submission_to_ojs
+                    result = sync_submission_to_ojs(submission)
+                    
+                    if result['success']:
+                        import logging
+                        logger = logging.getLogger(__name__)
+                        logger.info(f"Submission {submission.id} auto-synced to OJS: {result['ojs_id']}")
+            except Exception as e:
+                # Log error but don't fail the update
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"Failed to auto-sync submission {submission.id} to OJS: {str(e)}")
+    
     @extend_schema(
         summary="List draft submissions",
         description="Get all submissions in DRAFT status.",
