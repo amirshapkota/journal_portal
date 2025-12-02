@@ -11,6 +11,7 @@ class OJSMapping(models.Model):
     """
     Mapping model for OJS (Open Journal Systems) integration.
     Tracks synchronization between local submissions and OJS.
+    Now uses Journal's OJS connection details instead of global settings.
     """
     SYNC_DIRECTION_CHOICES = [
         ('TO_OJS', 'To OJS'),
@@ -35,14 +36,10 @@ class OJSMapping(models.Model):
         related_name='ojs_mapping'
     )
     
-    # OJS reference
+    # OJS reference (now derived from journal's OJS settings)
     ojs_submission_id = models.CharField(
         max_length=100,
         help_text="OJS submission ID"
-    )
-    ojs_instance_url = models.URLField(
-        validators=[URLValidator()],
-        help_text="OJS instance URL"
     )
     
     # Synchronization details
@@ -83,13 +80,29 @@ class OJSMapping(models.Model):
     
     class Meta:
         indexes = [
-            models.Index(fields=['ojs_submission_id', 'ojs_instance_url']),
+            models.Index(fields=['ojs_submission_id']),
             models.Index(fields=['sync_status', 'last_synced_at']),
             models.Index(fields=['local_submission']),
         ]
     
     def __str__(self):
         return f"OJS mapping: {self.local_submission.title[:30]}... <-> {self.ojs_submission_id}"
+    
+    @property
+    def journal(self):
+        """Get the journal from the submission."""
+        return self.local_submission.journal
+    
+    def get_ojs_credentials(self):
+        """Get OJS API credentials from the journal."""
+        journal = self.journal
+        if not journal.ojs_enabled:
+            return None
+        return {
+            'api_url': journal.ojs_api_url,
+            'api_key': journal.ojs_api_key,
+            'journal_id': journal.ojs_journal_id
+        }
 
 
 class ORCIDIntegration(models.Model):
