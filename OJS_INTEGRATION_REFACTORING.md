@@ -111,9 +111,7 @@ Configure OJS connection for a journal (Editor-in-Chief or Managing Editor only)
   "ojs_api_url": "https://journal.com/index.php/journal/api/v1",
   "ojs_api_key": "your-api-key-here",
   "ojs_journal_id": 1,
-  "ojs_enabled": true,
-  "sync_enabled": true,
-  "sync_interval_hours": 1
+  "ojs_enabled": true
 }
 ```
 
@@ -124,9 +122,7 @@ Configure OJS connection for a journal (Editor-in-Chief or Managing Editor only)
   "detail": "OJS connection configured successfully",
   "ojs_enabled": true,
   "ojs_api_url": "https://journal.com/index.php/journal/api/v1",
-  "ojs_journal_id": 1,
-  "sync_enabled": true,
-  "sync_interval_hours": 1
+  "ojs_journal_id": 1
 }
 ```
 
@@ -143,10 +139,7 @@ Get current OJS connection configuration and status.
   "ojs_enabled": true,
   "ojs_configured": true,
   "ojs_api_url": "https://journal.com/index.php/journal/api/v1",
-  "ojs_journal_id": 1,
-  "sync_enabled": true,
-  "sync_interval_hours": 1,
-  "last_synced_at": "2025-12-01T10:30:00Z"
+  "ojs_journal_id": 1
 }
 ```
 
@@ -203,26 +196,15 @@ Disable and clear OJS connection (Editor-in-Chief or Managing Editor only).
 
 ### 2. Test Connection
 
-Before enabling sync, editor can test the connection:
+Before enabling the connection, editor can test it:
 
 ```bash
 POST /api/v1/journals/{journal_id}/test-ojs-connection/
 ```
 
-### 3. Enable Sync
+### 3. Manual Sync to OJS
 
-Once connection is verified, editor enables automatic synchronization:
-
-```json
-{
-  "sync_enabled": true,
-  "sync_interval_hours": 1
-}
-```
-
-### 4. Sync Submissions
-
-When syncing submissions to OJS:
+OJS integration supports **manual sync only**. To sync submissions to OJS:
 
 ```python
 from apps.integrations.utils import ojs_create_submission
@@ -258,16 +240,18 @@ OJSMapping.objects.create(
 
 ## Migration
 
-Run the migration to update the database schema:
+Run the migrations to update the database schema:
 
 ```bash
 python manage.py migrate integrations
+python manage.py migrate journals
 ```
 
 This will:
 
 - Remove `ojs_instance_url` field from `OJSMapping`
 - Update indexes on `OJSMapping` model
+- Remove automatic sync fields (`last_synced_at`, `sync_enabled`, `sync_interval_hours`) from `Journal` model
 
 ## Security Considerations
 
@@ -310,52 +294,30 @@ def decrypt_api_key(encrypted_key):
 4. **Security**: Credentials isolated per journal
 5. **Maintainability**: Cleaner separation of concerns
 6. **Control**: Journal editors manage their own integrations
+7. **Manual Control**: No automatic background sync - all OJS operations are explicit and controlled
 
-## Next Steps
+## Implementation Notes
+
+### Manual Sync Only
+
+The OJS integration is designed for **manual synchronization only**. There is no automatic background sync functionality. This means:
+
+- Editors must explicitly trigger OJS operations (create, update, sync submissions)
+- No background Celery tasks or scheduled jobs for OJS sync
+- Full control over when data is sent to/from OJS
+- Easier to debug and monitor OJS interactions
+- No risk of automatic sync conflicts or failures
+
+### Future Enhancements
 
 1. ✅ Update `OJSMapping` model
 2. ✅ Refactor utility functions to accept credentials
 3. ✅ Add journal OJS management endpoints
-4. ✅ Create migration
-5. ⏳ Update existing views to use new utility function signatures
-6. ⏳ Add API key encryption
-7. ⏳ Implement background sync worker (Celery task)
+4. ✅ Create migrations
+5. ✅ Remove automatic sync functionality
+6. ⏳ Update existing views to use new utility function signatures
+7. ⏳ Add API key encryption
 8. ⏳ Add comprehensive error handling and retry logic
 9. ⏳ Create admin interface for OJS configuration
 10. ⏳ Add detailed audit logging
-
-## Example: Background Sync Task (Future)
-
-```python
-from celery import shared_task
-from apps.journals.models import Journal
-from apps.integrations.utils import ojs_list_submissions
-from django.utils import timezone
-
-@shared_task
-def sync_journal_with_ojs(journal_id):
-    """Background task to sync journal submissions with OJS."""
-    try:
-        journal = Journal.objects.get(id=journal_id)
-
-        if not journal.ojs_enabled or not journal.sync_enabled:
-            return
-
-        # Fetch submissions from OJS
-        ojs_submissions = ojs_list_submissions(
-            api_url=journal.ojs_api_url,
-            api_key=journal.ojs_api_key,
-            journal_id=journal.ojs_journal_id
-        )
-
-        # Process and sync submissions
-        # ... sync logic here ...
-
-        # Update last sync time
-        journal.last_synced_at = timezone.now()
-        journal.save()
-
-    except Exception as e:
-        # Log error
-        logger.error(f"OJS sync failed for journal {journal_id}: {str(e)}")
-```
+11. ⏳ Add manual sync endpoints for submissions

@@ -641,104 +641,375 @@ class DOAJSubmitUpdateView(APIView):
 		
 # --- OJS Review Sync APIViews ---
 class OJSReviewSyncAPIView(APIView):
+	permission_classes = [IsAuthenticated]
+
 	def get(self, request):
-		reviews = ojs_list_reviews()
-		data = [OJSReviewSerializer.from_ojs_result(r) for r in reviews]
-		return Response(data)
+		from apps.journals.models import Journal
+		journal_id = request.query_params.get('journal_id')
+		if not journal_id:
+			return Response({'detail': 'journal_id parameter is required.'}, status=status.HTTP_400_BAD_REQUEST)
+		
+		try:
+			journal = Journal.objects.get(id=journal_id)
+		except Journal.DoesNotExist:
+			return Response({'detail': 'Journal not found.'}, status=status.HTTP_404_NOT_FOUND)
+		
+		if not journal.ojs_api_url or not journal.ojs_api_key:
+			return Response({'detail': 'OJS not configured for this journal.'}, status=status.HTTP_400_BAD_REQUEST)
+		
+		try:
+			reviews = ojs_list_reviews(journal.ojs_api_url, journal.ojs_api_key)
+			data = [OJSReviewSerializer.from_ojs_result(r) for r in reviews]
+			return Response(data)
+		except Exception as e:
+			return Response({'detail': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
 
 	def post(self, request):
+		from apps.journals.models import Journal
+		journal_id = request.data.get('journal_id')
+		if not journal_id:
+			return Response({'detail': 'journal_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
+		
+		try:
+			journal = Journal.objects.get(id=journal_id)
+		except Journal.DoesNotExist:
+			return Response({'detail': 'Journal not found.'}, status=status.HTTP_404_NOT_FOUND)
+		
+		if not journal.ojs_api_url or not journal.ojs_api_key:
+			return Response({'detail': 'OJS not configured for this journal.'}, status=status.HTTP_400_BAD_REQUEST)
+		
 		serializer = OJSReviewSerializer(data=request.data)
 		serializer.is_valid(raise_exception=True)
-		review = ojs_create_review(serializer.validated_data)
-		return Response(OJSReviewSerializer.from_ojs_result(review), status=201)
+		
+		try:
+			review = ojs_create_review(journal.ojs_api_url, journal.ojs_api_key, serializer.validated_data)
+			return Response(OJSReviewSerializer.from_ojs_result(review), status=201)
+		except Exception as e:
+			return Response({'detail': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
 
 class OJSReviewDetailSyncAPIView(APIView):
+	permission_classes = [IsAuthenticated]
+
 	def get(self, request, review_id):
-		review = ojs_get_review(review_id)
-		if not review:
-			return Response({'detail': 'Not found.'}, status=404)
-		return Response(OJSReviewSerializer.from_ojs_result(review))
+		from apps.journals.models import Journal
+		journal_id = request.query_params.get('journal_id')
+		if not journal_id:
+			return Response({'detail': 'journal_id parameter is required.'}, status=status.HTTP_400_BAD_REQUEST)
+		
+		try:
+			journal = Journal.objects.get(id=journal_id)
+		except Journal.DoesNotExist:
+			return Response({'detail': 'Journal not found.'}, status=status.HTTP_404_NOT_FOUND)
+		
+		if not journal.ojs_api_url or not journal.ojs_api_key:
+			return Response({'detail': 'OJS not configured for this journal.'}, status=status.HTTP_400_BAD_REQUEST)
+		
+		try:
+			review = ojs_get_review(journal.ojs_api_url, journal.ojs_api_key, review_id)
+			if not review:
+				return Response({'detail': 'Not found.'}, status=404)
+			return Response(OJSReviewSerializer.from_ojs_result(review))
+		except Exception as e:
+			return Response({'detail': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
 
 	def put(self, request, review_id):
+		from apps.journals.models import Journal
+		journal_id = request.data.get('journal_id')
+		if not journal_id:
+			return Response({'detail': 'journal_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
+		
+		try:
+			journal = Journal.objects.get(id=journal_id)
+		except Journal.DoesNotExist:
+			return Response({'detail': 'Journal not found.'}, status=status.HTTP_404_NOT_FOUND)
+		
+		if not journal.ojs_api_url or not journal.ojs_api_key:
+			return Response({'detail': 'OJS not configured for this journal.'}, status=status.HTTP_400_BAD_REQUEST)
+		
 		serializer = OJSReviewSerializer(data=request.data)
 		serializer.is_valid(raise_exception=True)
-		review = ojs_update_review(review_id, serializer.validated_data)
-		return Response(OJSReviewSerializer.from_ojs_result(review))
+		
+		try:
+			review = ojs_update_review(journal.ojs_api_url, journal.ojs_api_key, review_id, serializer.validated_data)
+			return Response(OJSReviewSerializer.from_ojs_result(review))
+		except Exception as e:
+			return Response({'detail': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
 
 	def delete(self, request, review_id):
-		ojs_delete_review(review_id)
-		return Response(status=204)
+		from apps.journals.models import Journal
+		journal_id = request.data.get('journal_id') or request.query_params.get('journal_id')
+		if not journal_id:
+			return Response({'detail': 'journal_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
+		
+		try:
+			journal = Journal.objects.get(id=journal_id)
+		except Journal.DoesNotExist:
+			return Response({'detail': 'Journal not found.'}, status=status.HTTP_404_NOT_FOUND)
+		
+		if not journal.ojs_api_url or not journal.ojs_api_key:
+			return Response({'detail': 'OJS not configured for this journal.'}, status=status.HTTP_400_BAD_REQUEST)
+		
+		try:
+			ojs_delete_review(journal.ojs_api_url, journal.ojs_api_key, review_id)
+			return Response(status=204)
+		except Exception as e:
+			return Response({'detail': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
 
 # --- OJS Comment Sync APIViews ---
 class OJSCommentSyncAPIView(APIView):
+	permission_classes = [IsAuthenticated]
+
 	def get(self, request):
-		comments = ojs_list_comments()
-		data = [OJSCommentSerializer.from_ojs_result(c) for c in comments]
-		return Response(data)
+		from apps.journals.models import Journal
+		journal_id = request.query_params.get('journal_id')
+		if not journal_id:
+			return Response({'detail': 'journal_id parameter is required.'}, status=status.HTTP_400_BAD_REQUEST)
+		
+		try:
+			journal = Journal.objects.get(id=journal_id)
+		except Journal.DoesNotExist:
+			return Response({'detail': 'Journal not found.'}, status=status.HTTP_404_NOT_FOUND)
+		
+		if not journal.ojs_api_url or not journal.ojs_api_key:
+			return Response({'detail': 'OJS not configured for this journal.'}, status=status.HTTP_400_BAD_REQUEST)
+		
+		try:
+			comments = ojs_list_comments(journal.ojs_api_url, journal.ojs_api_key)
+			data = [OJSCommentSerializer.from_ojs_result(c) for c in comments]
+			return Response(data)
+		except Exception as e:
+			return Response({'detail': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
 
 	def post(self, request):
+		from apps.journals.models import Journal
+		journal_id = request.data.get('journal_id')
+		if not journal_id:
+			return Response({'detail': 'journal_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
+		
+		try:
+			journal = Journal.objects.get(id=journal_id)
+		except Journal.DoesNotExist:
+			return Response({'detail': 'Journal not found.'}, status=status.HTTP_404_NOT_FOUND)
+		
+		if not journal.ojs_api_url or not journal.ojs_api_key:
+			return Response({'detail': 'OJS not configured for this journal.'}, status=status.HTTP_400_BAD_REQUEST)
+		
 		serializer = OJSCommentSerializer(data=request.data)
 		serializer.is_valid(raise_exception=True)
-		comment = ojs_create_comment(serializer.validated_data)
-		return Response(OJSCommentSerializer.from_ojs_result(comment), status=201)
+		
+		try:
+			comment = ojs_create_comment(journal.ojs_api_url, journal.ojs_api_key, serializer.validated_data)
+			return Response(OJSCommentSerializer.from_ojs_result(comment), status=201)
+		except Exception as e:
+			return Response({'detail': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
 
 class OJSCommentDetailSyncAPIView(APIView):
+	permission_classes = [IsAuthenticated]
+
 	def get(self, request, comment_id):
-		comment = ojs_get_comment(comment_id)
-		if not comment:
-			return Response({'detail': 'Not found.'}, status=404)
-		return Response(OJSCommentSerializer.from_ojs_result(comment))
+		from apps.journals.models import Journal
+		journal_id = request.query_params.get('journal_id')
+		if not journal_id:
+			return Response({'detail': 'journal_id parameter is required.'}, status=status.HTTP_400_BAD_REQUEST)
+		
+		try:
+			journal = Journal.objects.get(id=journal_id)
+		except Journal.DoesNotExist:
+			return Response({'detail': 'Journal not found.'}, status=status.HTTP_404_NOT_FOUND)
+		
+		if not journal.ojs_api_url or not journal.ojs_api_key:
+			return Response({'detail': 'OJS not configured for this journal.'}, status=status.HTTP_400_BAD_REQUEST)
+		
+		try:
+			comment = ojs_get_comment(journal.ojs_api_url, journal.ojs_api_key, comment_id)
+			if not comment:
+				return Response({'detail': 'Not found.'}, status=404)
+			return Response(OJSCommentSerializer.from_ojs_result(comment))
+		except Exception as e:
+			return Response({'detail': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
 
 	def put(self, request, comment_id):
+		from apps.journals.models import Journal
+		journal_id = request.data.get('journal_id')
+		if not journal_id:
+			return Response({'detail': 'journal_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
+		
+		try:
+			journal = Journal.objects.get(id=journal_id)
+		except Journal.DoesNotExist:
+			return Response({'detail': 'Journal not found.'}, status=status.HTTP_404_NOT_FOUND)
+		
+		if not journal.ojs_api_url or not journal.ojs_api_key:
+			return Response({'detail': 'OJS not configured for this journal.'}, status=status.HTTP_400_BAD_REQUEST)
+		
 		serializer = OJSCommentSerializer(data=request.data)
 		serializer.is_valid(raise_exception=True)
-		comment = ojs_update_comment(comment_id, serializer.validated_data)
-		return Response(OJSCommentSerializer.from_ojs_result(comment))
+		
+		try:
+			comment = ojs_update_comment(journal.ojs_api_url, journal.ojs_api_key, comment_id, serializer.validated_data)
+			return Response(OJSCommentSerializer.from_ojs_result(comment))
+		except Exception as e:
+			return Response({'detail': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
 
 	def delete(self, request, comment_id):
-		ojs_delete_comment(comment_id)
-		return Response(status=204)
+		from apps.journals.models import Journal
+		journal_id = request.data.get('journal_id') or request.query_params.get('journal_id')
+		if not journal_id:
+			return Response({'detail': 'journal_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
+		
+		try:
+			journal = Journal.objects.get(id=journal_id)
+		except Journal.DoesNotExist:
+			return Response({'detail': 'Journal not found.'}, status=status.HTTP_404_NOT_FOUND)
+		
+		if not journal.ojs_api_url or not journal.ojs_api_key:
+			return Response({'detail': 'OJS not configured for this journal.'}, status=status.HTTP_400_BAD_REQUEST)
+		
+		try:
+			ojs_delete_comment(journal.ojs_api_url, journal.ojs_api_key, comment_id)
+			return Response(status=204)
+		except Exception as e:
+			return Response({'detail': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
 	
 # --- OJS User Sync APIViews ---
 class OJSUserSyncAPIView(APIView):
 	"""List and create OJS users via sync."""
+	permission_classes = [IsAuthenticated]
+
 	def get(self, request):
-		users = ojs_list_users()
-		data = [OJSUserSerializer.from_ojs_result(u) for u in users]
-		return Response(data)
+		from apps.journals.models import Journal
+		journal_id = request.query_params.get('journal_id')
+		if not journal_id:
+			return Response({'detail': 'journal_id parameter is required.'}, status=status.HTTP_400_BAD_REQUEST)
+		
+		try:
+			journal = Journal.objects.get(id=journal_id)
+		except Journal.DoesNotExist:
+			return Response({'detail': 'Journal not found.'}, status=status.HTTP_404_NOT_FOUND)
+		
+		if not journal.ojs_api_url or not journal.ojs_api_key:
+			return Response({'detail': 'OJS not configured for this journal.'}, status=status.HTTP_400_BAD_REQUEST)
+		
+		try:
+			users = ojs_list_users(journal.ojs_api_url, journal.ojs_api_key)
+			data = [OJSUserSerializer.from_ojs_result(u) for u in users]
+			return Response(data)
+		except Exception as e:
+			return Response({'detail': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
 
 	def post(self, request):
+		from apps.journals.models import Journal
+		journal_id = request.data.get('journal_id')
+		if not journal_id:
+			return Response({'detail': 'journal_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
+		
+		try:
+			journal = Journal.objects.get(id=journal_id)
+		except Journal.DoesNotExist:
+			return Response({'detail': 'Journal not found.'}, status=status.HTTP_404_NOT_FOUND)
+		
+		if not journal.ojs_api_url or not journal.ojs_api_key:
+			return Response({'detail': 'OJS not configured for this journal.'}, status=status.HTTP_400_BAD_REQUEST)
+		
 		serializer = OJSUserSerializer(data=request.data)
 		serializer.is_valid(raise_exception=True)
-		user = ojs_create_user(serializer.validated_data)
-		return Response(OJSUserSerializer.from_ojs_result(user), status=201)
+		
+		try:
+			user = ojs_create_user(journal.ojs_api_url, journal.ojs_api_key, serializer.validated_data)
+			return Response(OJSUserSerializer.from_ojs_result(user), status=201)
+		except Exception as e:
+			return Response({'detail': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
 
 
 class OJSUserDetailSyncAPIView(APIView):
 	"""Retrieve, update, or delete a single OJS user via sync."""
+	permission_classes = [IsAuthenticated]
+
 	def get(self, request, user_id):
-		user = ojs_get_user(user_id)
-		if not user:
-			return Response({'detail': 'Not found.'}, status=404)
-		return Response(OJSUserSerializer.from_ojs_result(user))
+		from apps.journals.models import Journal
+		journal_id = request.query_params.get('journal_id')
+		if not journal_id:
+			return Response({'detail': 'journal_id parameter is required.'}, status=status.HTTP_400_BAD_REQUEST)
+		
+		try:
+			journal = Journal.objects.get(id=journal_id)
+		except Journal.DoesNotExist:
+			return Response({'detail': 'Journal not found.'}, status=status.HTTP_404_NOT_FOUND)
+		
+		if not journal.ojs_api_url or not journal.ojs_api_key:
+			return Response({'detail': 'OJS not configured for this journal.'}, status=status.HTTP_400_BAD_REQUEST)
+		
+		try:
+			user = ojs_get_user(journal.ojs_api_url, journal.ojs_api_key, user_id)
+			if not user:
+				return Response({'detail': 'Not found.'}, status=404)
+			return Response(OJSUserSerializer.from_ojs_result(user))
+		except Exception as e:
+			return Response({'detail': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
 
 	def put(self, request, user_id):
+		from apps.journals.models import Journal
+		journal_id = request.data.get('journal_id')
+		if not journal_id:
+			return Response({'detail': 'journal_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
+		
+		try:
+			journal = Journal.objects.get(id=journal_id)
+		except Journal.DoesNotExist:
+			return Response({'detail': 'Journal not found.'}, status=status.HTTP_404_NOT_FOUND)
+		
+		if not journal.ojs_api_url or not journal.ojs_api_key:
+			return Response({'detail': 'OJS not configured for this journal.'}, status=status.HTTP_400_BAD_REQUEST)
+		
 		serializer = OJSUserSerializer(data=request.data)
 		serializer.is_valid(raise_exception=True)
-		user = ojs_update_user(user_id, serializer.validated_data)
-		return Response(OJSUserSerializer.from_ojs_result(user))
+		
+		try:
+			user = ojs_update_user(journal.ojs_api_url, journal.ojs_api_key, user_id, serializer.validated_data)
+			return Response(OJSUserSerializer.from_ojs_result(user))
+		except Exception as e:
+			return Response({'detail': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
 
 	def delete(self, request, user_id):
-		ojs_delete_user(user_id)
-		return Response(status=204)
+		from apps.journals.models import Journal
+		journal_id = request.data.get('journal_id') or request.query_params.get('journal_id')
+		if not journal_id:
+			return Response({'detail': 'journal_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
+		
+		try:
+			journal = Journal.objects.get(id=journal_id)
+		except Journal.DoesNotExist:
+			return Response({'detail': 'Journal not found.'}, status=status.HTTP_404_NOT_FOUND)
+		
+		if not journal.ojs_api_url or not journal.ojs_api_key:
+			return Response({'detail': 'OJS not configured for this journal.'}, status=status.HTTP_400_BAD_REQUEST)
+		
+		try:
+			ojs_delete_user(journal.ojs_api_url, journal.ojs_api_key, user_id)
+			return Response(status=204)
+		except Exception as e:
+			return Response({'detail': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
 
 # --- OJS Article Sync API Views ---
 class OJSArticleListView(APIView):
 	permission_classes = [IsAuthenticated]
 
 	def get(self, request):
+		from apps.journals.models import Journal
+		journal_id = request.query_params.get('journal_id')
+		if not journal_id:
+			return Response({'detail': 'journal_id parameter is required.'}, status=status.HTTP_400_BAD_REQUEST)
+		
 		try:
-			data = ojs_list_articles()
+			journal = Journal.objects.get(id=journal_id)
+		except Journal.DoesNotExist:
+			return Response({'detail': 'Journal not found.'}, status=status.HTTP_404_NOT_FOUND)
+		
+		if not journal.ojs_api_url or not journal.ojs_api_key:
+			return Response({'detail': 'OJS not configured for this journal.'}, status=status.HTTP_400_BAD_REQUEST)
+		
+		try:
+			data = ojs_list_articles(journal.ojs_api_url, journal.ojs_api_key)
 			results = data.get('items', data)
 			serialized = [OJSArticleSerializer.from_ojs_result(a) for a in results]
 			return Response({'results': serialized})
@@ -746,8 +1017,21 @@ class OJSArticleListView(APIView):
 			return Response({'detail': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
 
 	def post(self, request):
+		from apps.journals.models import Journal
+		journal_id = request.data.get('journal_id')
+		if not journal_id:
+			return Response({'detail': 'journal_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
+		
 		try:
-			resp = ojs_create_article(request.data)
+			journal = Journal.objects.get(id=journal_id)
+		except Journal.DoesNotExist:
+			return Response({'detail': 'Journal not found.'}, status=status.HTTP_404_NOT_FOUND)
+		
+		if not journal.ojs_api_url or not journal.ojs_api_key:
+			return Response({'detail': 'OJS not configured for this journal.'}, status=status.HTTP_400_BAD_REQUEST)
+		
+		try:
+			resp = ojs_create_article(journal.ojs_api_url, journal.ojs_api_key, request.data)
 			return Response({'status': 'success', 'result': resp})
 		except Exception as e:
 			return Response({'status': 'error', 'message': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
@@ -757,23 +1041,62 @@ class OJSArticleDetailView(APIView):
 	permission_classes = [IsAuthenticated]
 
 	def get(self, request, article_id):
+		from apps.journals.models import Journal
+		journal_id = request.query_params.get('journal_id')
+		if not journal_id:
+			return Response({'detail': 'journal_id parameter is required.'}, status=status.HTTP_400_BAD_REQUEST)
+		
 		try:
-			data = ojs_get_article(article_id)
+			journal = Journal.objects.get(id=journal_id)
+		except Journal.DoesNotExist:
+			return Response({'detail': 'Journal not found.'}, status=status.HTTP_404_NOT_FOUND)
+		
+		if not journal.ojs_api_url or not journal.ojs_api_key:
+			return Response({'detail': 'OJS not configured for this journal.'}, status=status.HTTP_400_BAD_REQUEST)
+		
+		try:
+			data = ojs_get_article(journal.ojs_api_url, journal.ojs_api_key, article_id)
 			serialized = OJSArticleSerializer.from_ojs_result(data)
 			return Response(serialized)
 		except Exception as e:
 			return Response({'detail': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
 
 	def put(self, request, article_id):
+		from apps.journals.models import Journal
+		journal_id = request.data.get('journal_id')
+		if not journal_id:
+			return Response({'detail': 'journal_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
+		
 		try:
-			resp = ojs_update_article(article_id, request.data)
+			journal = Journal.objects.get(id=journal_id)
+		except Journal.DoesNotExist:
+			return Response({'detail': 'Journal not found.'}, status=status.HTTP_404_NOT_FOUND)
+		
+		if not journal.ojs_api_url or not journal.ojs_api_key:
+			return Response({'detail': 'OJS not configured for this journal.'}, status=status.HTTP_400_BAD_REQUEST)
+		
+		try:
+			resp = ojs_update_article(journal.ojs_api_url, journal.ojs_api_key, article_id, request.data)
 			return Response({'status': 'success', 'result': resp})
 		except Exception as e:
 			return Response({'status': 'error', 'message': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
 
 	def delete(self, request, article_id):
+		from apps.journals.models import Journal
+		journal_id = request.data.get('journal_id') or request.query_params.get('journal_id')
+		if not journal_id:
+			return Response({'detail': 'journal_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
+		
 		try:
-			success = ojs_delete_article(article_id)
+			journal = Journal.objects.get(id=journal_id)
+		except Journal.DoesNotExist:
+			return Response({'detail': 'Journal not found.'}, status=status.HTTP_404_NOT_FOUND)
+		
+		if not journal.ojs_api_url or not journal.ojs_api_key:
+			return Response({'detail': 'OJS not configured for this journal.'}, status=status.HTTP_400_BAD_REQUEST)
+		
+		try:
+			success = ojs_delete_article(journal.ojs_api_url, journal.ojs_api_key, article_id)
 			return Response({'status': 'success', 'deleted': success})
 		except Exception as e:
 			return Response({'status': 'error', 'message': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
@@ -783,8 +1106,21 @@ class OJSJournalListView(APIView):
 	permission_classes = [IsAuthenticated]
 
 	def get(self, request):
+		from apps.journals.models import Journal
+		journal_id = request.query_params.get('journal_id')
+		if not journal_id:
+			return Response({'detail': 'journal_id parameter is required.'}, status=status.HTTP_400_BAD_REQUEST)
+		
 		try:
-			data = ojs_list_journals()
+			journal = Journal.objects.get(id=journal_id)
+		except Journal.DoesNotExist:
+			return Response({'detail': 'Journal not found.'}, status=status.HTTP_404_NOT_FOUND)
+		
+		if not journal.ojs_api_url or not journal.ojs_api_key:
+			return Response({'detail': 'OJS not configured for this journal.'}, status=status.HTTP_400_BAD_REQUEST)
+		
+		try:
+			data = ojs_list_journals(journal.ojs_api_url, journal.ojs_api_key)
 			results = data.get('items', data)  # OJS API may return list or dict
 			serialized = [OJSJournalSerializer.from_ojs_result(j) for j in results]
 			return Response({'results': serialized})
@@ -795,8 +1131,22 @@ class OJSSubmissionListView(APIView):
 	permission_classes = [IsAuthenticated]
 
 	def get(self, request):
+		from apps.journals.models import Journal
+		journal_id = request.query_params.get('journal_id')
+		if not journal_id:
+			return Response({'detail': 'journal_id parameter is required.'}, status=status.HTTP_400_BAD_REQUEST)
+		
 		try:
-			data = ojs_list_submissions()
+			journal = Journal.objects.get(id=journal_id)
+		except Journal.DoesNotExist:
+			return Response({'detail': 'Journal not found.'}, status=status.HTTP_404_NOT_FOUND)
+		
+		if not journal.ojs_api_url or not journal.ojs_api_key:
+			return Response({'detail': 'OJS not configured for this journal.'}, status=status.HTTP_400_BAD_REQUEST)
+		
+		try:
+			ojs_journal_id = journal.ojs_journal_id if journal.ojs_journal_id else None
+			data = ojs_list_submissions(journal.ojs_api_url, journal.ojs_api_key, journal_id=ojs_journal_id)
 			results = data.get('items', data)
 			serialized = [OJSSubmissionSerializer.from_ojs_result(s) for s in results]
 			return Response({'results': serialized})
@@ -807,8 +1157,21 @@ class OJSSubmissionCreateView(APIView):
 	permission_classes = [IsAuthenticated]
 
 	def post(self, request):
+		from apps.journals.models import Journal
+		journal_id = request.data.get('journal_id')
+		if not journal_id:
+			return Response({'detail': 'journal_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
+		
 		try:
-			resp = ojs_create_submission(request.data)
+			journal = Journal.objects.get(id=journal_id)
+		except Journal.DoesNotExist:
+			return Response({'detail': 'Journal not found.'}, status=status.HTTP_404_NOT_FOUND)
+		
+		if not journal.ojs_api_url or not journal.ojs_api_key:
+			return Response({'detail': 'OJS not configured for this journal.'}, status=status.HTTP_400_BAD_REQUEST)
+		
+		try:
+			resp = ojs_create_submission(journal.ojs_api_url, journal.ojs_api_key, request.data)
 			return Response({'status': 'success', 'result': resp})
 		except Exception as e:
 			return Response({'status': 'error', 'message': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
@@ -817,8 +1180,21 @@ class OJSSubmissionUpdateView(APIView):
 	permission_classes = [IsAuthenticated]
 
 	def put(self, request, submission_id):
+		from apps.journals.models import Journal
+		journal_id = request.data.get('journal_id')
+		if not journal_id:
+			return Response({'detail': 'journal_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
+		
 		try:
-			resp = ojs_update_submission(submission_id, request.data)
+			journal = Journal.objects.get(id=journal_id)
+		except Journal.DoesNotExist:
+			return Response({'detail': 'Journal not found.'}, status=status.HTTP_404_NOT_FOUND)
+		
+		if not journal.ojs_api_url or not journal.ojs_api_key:
+			return Response({'detail': 'OJS not configured for this journal.'}, status=status.HTTP_400_BAD_REQUEST)
+		
+		try:
+			resp = ojs_update_submission(journal.ojs_api_url, journal.ojs_api_key, submission_id, request.data)
 			return Response({'status': 'success', 'result': resp})
 		except Exception as e:
 			return Response({'status': 'error', 'message': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
