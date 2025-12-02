@@ -357,6 +357,143 @@ class JournalViewSet(viewsets.ModelViewSet):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
     @extend_schema(
+        summary="Configure OJS connection",
+        description="Configure OJS (Open Journal Systems) connection for this journal. Requires Editor-in-Chief or Managing Editor role.",
+        request={
+            'application/json': {
+                'type': 'object',
+                'properties': {
+                    'ojs_api_url': {'type': 'string', 'format': 'uri', 'description': 'OJS API base URL'},
+                    'ojs_api_key': {'type': 'string', 'description': 'OJS API key'},
+                    'ojs_journal_id': {'type': 'integer', 'description': 'Journal ID in OJS system'},
+                    'ojs_enabled': {'type': 'boolean', 'description': 'Enable OJS sync'},
+                    'sync_enabled': {'type': 'boolean', 'description': 'Enable automatic sync'},
+                    'sync_interval_hours': {'type': 'integer', 'description': 'Sync interval in hours'}
+                }
+            }
+        }
+    )
+    @action(detail=True, methods=['post', 'put'], url_path='ojs-connection', permission_classes=[IsAuthenticated])
+    def configure_ojs(self, request, pk=None):
+        """Configure OJS connection for this journal."""
+        journal = self.get_object()
+        
+        # Check if user has permission (Editor-in-Chief or Managing Editor)
+        if hasattr(request.user, 'profile'):
+            staff_member = journal.staff_members.filter(
+                profile=request.user.profile,
+                role__in=['EDITOR_IN_CHIEF', 'MANAGING_EDITOR'],
+                is_active=True
+            ).first()
+            
+            if not staff_member and not request.user.is_superuser:
+                return Response(
+                    {'detail': 'Only Editor-in-Chief or Managing Editor can configure OJS connection.'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        
+        # Update OJS settings
+        journal.ojs_enabled = request.data.get('ojs_enabled', journal.ojs_enabled)
+        journal.ojs_api_url = request.data.get('ojs_api_url', journal.ojs_api_url)
+        journal.ojs_api_key = request.data.get('ojs_api_key', journal.ojs_api_key)
+        journal.ojs_journal_id = request.data.get('ojs_journal_id', journal.ojs_journal_id)
+        journal.sync_enabled = request.data.get('sync_enabled', journal.sync_enabled)
+        journal.sync_interval_hours = request.data.get('sync_interval_hours', journal.sync_interval_hours)
+        
+        journal.save()
+        
+        return Response({
+            'detail': 'OJS connection configured successfully',
+            'ojs_enabled': journal.ojs_enabled,
+            'ojs_api_url': journal.ojs_api_url,
+            'ojs_journal_id': journal.ojs_journal_id,
+            'sync_enabled': journal.sync_enabled,
+            'sync_interval_hours': journal.sync_interval_hours
+        })
+    
+    @extend_schema(
+        summary="Get OJS connection status",
+        description="Get current OJS connection configuration and status."
+    )
+    @action(detail=True, methods=['get'], url_path='ojs-status')
+    def ojs_status(self, request, pk=None):
+        """Get OJS connection status."""
+        journal = self.get_object()
+        
+        return Response({
+            'ojs_enabled': journal.ojs_enabled,
+            'ojs_configured': bool(journal.ojs_api_url and journal.ojs_api_key),
+            'ojs_api_url': journal.ojs_api_url if journal.ojs_enabled else None,
+            'ojs_journal_id': journal.ojs_journal_id if journal.ojs_enabled else None,
+            'sync_enabled': journal.sync_enabled,
+            'sync_interval_hours': journal.sync_interval_hours,
+            'last_synced_at': journal.last_synced_at
+        })
+    
+    @extend_schema(
+        summary="Test OJS connection",
+        description="Test the OJS API connection with current credentials."
+    )
+    @action(detail=True, methods=['post'], url_path='test-ojs-connection', permission_classes=[IsAuthenticated])
+    def test_ojs_connection(self, request, pk=None):
+        """Test OJS connection."""
+        journal = self.get_object()
+        
+        if not journal.ojs_enabled or not journal.ojs_api_url or not journal.ojs_api_key:
+            return Response(
+                {'detail': 'OJS connection not configured'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            from apps.integrations.utils import ojs_list_journals
+            result = ojs_list_journals(journal.ojs_api_url, journal.ojs_api_key)
+            
+            return Response({
+                'success': True,
+                'message': 'OJS connection successful',
+                'journals_found': len(result.get('items', result if isinstance(result, list) else []))
+            })
+        except Exception as e:
+            return Response({
+                'success': False,
+                'message': f'OJS connection failed: {str(e)}'
+            }, status=status.HTTP_502_BAD_GATEWAY)
+    
+    @extend_schema(
+        summary="Disconnect OJS",
+        description="Disable and clear OJS connection for this journal."
+    )
+    @action(detail=True, methods=['post'], url_path='disconnect-ojs', permission_classes=[IsAuthenticated])
+    def disconnect_ojs(self, request, pk=None):
+        """Disconnect OJS."""
+        journal = self.get_object()
+        
+        # Check permission
+        if hasattr(request.user, 'profile'):
+            staff_member = journal.staff_members.filter(
+                profile=request.user.profile,
+                role__in=['EDITOR_IN_CHIEF', 'MANAGING_EDITOR'],
+                is_active=True
+            ).first()
+            
+            if not staff_member and not request.user.is_superuser:
+                return Response(
+                    {'detail': 'Only Editor-in-Chief or Managing Editor can disconnect OJS.'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        
+        # Clear OJS settings
+        journal.ojs_enabled = False
+        journal.ojs_api_url = ''
+        journal.ojs_api_key = ''
+        journal.ojs_journal_id = None
+        journal.sync_enabled = False
+        journal.save()
+        
+        return Response({'detail': 'OJS disconnected successfully'})
+    
+    @extend_schema(
         summary="Get journal statistics",
         description="Get statistics for a journal (submissions, reviews, etc.)."
     )

@@ -155,187 +155,220 @@ def doaj_submit_or_update(data, api_key, endpoint="journals", method="POST", obj
     resp.raise_for_status()
     return resp.json()
 
-# OJS API base URL and key from settings
-OJS_API_BASE = getattr(settings, 'OJS_API_BASE_URL', '')
-OJS_API_KEY = getattr(settings, 'OJS_API_KEY', '')
+# OJS API utilities - now journal-specific
+def get_ojs_headers(api_key):
+    """Generate headers for OJS API requests."""
+    return {
+        "Authorization": f"Token {api_key}",
+        "Content-Type": "application/json"
+    }
 
 # --- OJS → Django ---
-def ojs_list_journals():
-    url = f"{OJS_API_BASE}/api/v1/journals"
-    headers = {"Authorization": f"Token {OJS_API_KEY}"}
+def ojs_list_journals(api_url, api_key):
+    """List journals from a specific OJS instance."""
+    url = f"{api_url}/journals"
+    headers = get_ojs_headers(api_key)
     resp = requests.get(url, headers=headers)
     resp.raise_for_status()
     return resp.json()
 
-def ojs_list_submissions():
-    url = f"{OJS_API_BASE}/api/v1/submissions"
-    headers = {"Authorization": f"Token {OJS_API_KEY}"}
+def ojs_list_submissions(api_url, api_key, journal_id=None):
+    """List submissions from OJS instance, optionally filtered by journal."""
+    url = f"{api_url}/submissions"
+    if journal_id:
+        url += f"?journalId={journal_id}"
+    headers = get_ojs_headers(api_key)
     resp = requests.get(url, headers=headers)
     resp.raise_for_status()
     return resp.json()
 
 # --- Django → OJS ---
-def ojs_create_submission(data):
-    url = f"{OJS_API_BASE}/api/v1/submissions"
-    headers = {"Authorization": f"Token {OJS_API_KEY}", "Content-Type": "application/json"}
+def ojs_create_submission(api_url, api_key, data):
+    """Create submission in OJS instance."""
+    url = f"{api_url}/submissions"
+    headers = get_ojs_headers(api_key)
     resp = requests.post(url, json=data, headers=headers)
     resp.raise_for_status()
     return resp.json()
 
-def ojs_update_submission(submission_id, data):
-    url = f"{OJS_API_BASE}/api/v1/submissions/{submission_id}"
-    headers = {"Authorization": f"Token {OJS_API_KEY}", "Content-Type": "application/json"}
+def ojs_update_submission(api_url, api_key, submission_id, data):
+    """Update submission in OJS instance."""
+    url = f"{api_url}/submissions/{submission_id}"
+    headers = get_ojs_headers(api_key)
     resp = requests.put(url, json=data, headers=headers)
     resp.raise_for_status()
     return resp.json()
 
 # --- OJS Article (Submission) Sync Utilities ---
 
-def ojs_list_articles():
-    url = f"{OJS_API_BASE}/api/v1/articles"
-    headers = {"Authorization": f"Token {OJS_API_KEY}"}
+def ojs_list_articles(api_url, api_key):
+    """List articles from OJS instance."""
+    url = f"{api_url}/articles"
+    headers = get_ojs_headers(api_key)
     resp = requests.get(url, headers=headers)
     resp.raise_for_status()
     return resp.json()
 
-def ojs_get_article(article_id):
-    url = f"{OJS_API_BASE}/api/v1/articles/{article_id}"
-    headers = {"Authorization": f"Token {OJS_API_KEY}"}
+def ojs_get_article(api_url, api_key, article_id):
+    """Get article from OJS instance."""
+    url = f"{api_url}/articles/{article_id}"
+    headers = get_ojs_headers(api_key)
     resp = requests.get(url, headers=headers)
     resp.raise_for_status()
     return resp.json()
 
-def ojs_create_article(data):
-    url = f"{OJS_API_BASE}/api/v1/articles"
-    headers = {"Authorization": f"Token {OJS_API_KEY}", "Content-Type": "application/json"}
+def ojs_create_article(api_url, api_key, data):
+    """Create article in OJS instance."""
+    url = f"{api_url}/articles"
+    headers = get_ojs_headers(api_key)
     resp = requests.post(url, json=data, headers=headers)
     resp.raise_for_status()
     return resp.json()
 
-def ojs_update_article(article_id, data):
-    url = f"{OJS_API_BASE}/api/v1/articles/{article_id}"
-    headers = {"Authorization": f"Token {OJS_API_KEY}", "Content-Type": "application/json"}
+def ojs_update_article(api_url, api_key, article_id, data):
+    """Update article in OJS instance."""
+    url = f"{api_url}/articles/{article_id}"
+    headers = get_ojs_headers(api_key)
     resp = requests.put(url, json=data, headers=headers)
     resp.raise_for_status()
     return resp.json()
 
-def ojs_delete_article(article_id):
-    url = f"{OJS_API_BASE}/api/v1/articles/{article_id}"
-    headers = {"Authorization": f"Token {OJS_API_KEY}"}
+def ojs_delete_article(api_url, api_key, article_id):
+    """Delete article from OJS instance."""
+    url = f"{api_url}/articles/{article_id}"
+    headers = get_ojs_headers(api_key)
     resp = requests.delete(url, headers=headers)
     resp.raise_for_status()
     return resp.status_code == 204
 
 # --- OJS User Sync Utilities ---
 
-def ojs_list_users():
-    url = f"{OJS_API_BASE}/api/v1/users"
-    headers = {"Authorization": f"Token {OJS_API_KEY}"}
+def ojs_list_users(api_url, api_key):
+    """List users from OJS instance."""
+    url = f"{api_url}/users"
+    headers = get_ojs_headers(api_key)
     resp = requests.get(url, headers=headers)
     resp.raise_for_status()
     return resp.json()
 
-def ojs_get_user(user_id):
-    url = f"{OJS_API_BASE}/api/v1/users/{user_id}"
-    headers = {"Authorization": f"Token {OJS_API_KEY}"}
+def ojs_get_user(api_url, api_key, user_id):
+    """Get user from OJS instance."""
+    url = f"{api_url}/users/{user_id}"
+    headers = get_ojs_headers(api_key)
     resp = requests.get(url, headers=headers)
     resp.raise_for_status()
     return resp.json()
 
-def ojs_create_user(data):
-    url = f"{OJS_API_BASE}/api/v1/users"
-    headers = {"Authorization": f"Token {OJS_API_KEY}", "Content-Type": "application/json"}
+def ojs_create_user(api_url, api_key, data):
+    """Create user in OJS instance."""
+    url = f"{api_url}/users"
+    headers = get_ojs_headers(api_key)
     resp = requests.post(url, json=data, headers=headers)
     resp.raise_for_status()
     return resp.json()
 
-def ojs_update_user(user_id, data):
-    url = f"{OJS_API_BASE}/api/v1/users/{user_id}"
-    headers = {"Authorization": f"Token {OJS_API_KEY}", "Content-Type": "application/json"}
+def ojs_update_user(api_url, api_key, user_id, data):
+    """Update user in OJS instance."""
+    url = f"{api_url}/users/{user_id}"
+    headers = get_ojs_headers(api_key)
     resp = requests.put(url, json=data, headers=headers)
     resp.raise_for_status()
     return resp.json()
 
-def ojs_delete_user(user_id):
-    url = f"{OJS_API_BASE}/api/v1/users/{user_id}"
-    headers = {"Authorization": f"Token {OJS_API_KEY}"}
+def ojs_delete_user(api_url, api_key, user_id):
+    """Delete user from OJS instance."""
+    url = f"{api_url}/users/{user_id}"
+    headers = get_ojs_headers(api_key)
     resp = requests.delete(url, headers=headers)
     resp.raise_for_status()
     return resp.status_code == 204
 
 # --- OJS Review Sync Utilities ---
 
-def ojs_list_reviews():
-    url = f"{OJS_API_BASE}/api/v1/reviews"
-    headers = {"Authorization": f"Token {OJS_API_KEY}"}
+def ojs_list_reviews(api_url, api_key):
+    """List reviews from OJS instance."""
+    url = f"{api_url}/reviews"
+    headers = get_ojs_headers(api_key)
     resp = requests.get(url, headers=headers)
     resp.raise_for_status()
     return resp.json()
 
-def ojs_get_review(review_id):
-    url = f"{OJS_API_BASE}/api/v1/reviews/{review_id}"
-    headers = {"Authorization": f"Token {OJS_API_KEY}"}
+def ojs_get_review(api_url, api_key, review_id):
+    """Get review from OJS instance."""
+    url = f"{api_url}/reviews/{review_id}"
+    headers = get_ojs_headers(api_key)
     resp = requests.get(url, headers=headers)
     resp.raise_for_status()
     return resp.json()
 
-def ojs_create_review(data):
-    url = f"{OJS_API_BASE}/api/v1/reviews"
-    headers = {"Authorization": f"Token {OJS_API_KEY}", "Content-Type": "application/json"}
+def ojs_create_review(api_url, api_key, data):
+    """Create review in OJS instance."""
+    url = f"{api_url}/reviews"
+    headers = get_ojs_headers(api_key)
     resp = requests.post(url, json=data, headers=headers)
     resp.raise_for_status()
     return resp.json()
 
-def ojs_update_review(review_id, data):
-    url = f"{OJS_API_BASE}/api/v1/reviews/{review_id}"
-    headers = {"Authorization": f"Token {OJS_API_KEY}", "Content-Type": "application/json"}
+def ojs_update_review(api_url, api_key, review_id, data):
+    """Update review in OJS instance."""
+    url = f"{api_url}/reviews/{review_id}"
+    headers = get_ojs_headers(api_key)
     resp = requests.put(url, json=data, headers=headers)
     resp.raise_for_status()
     return resp.json()
 
-def ojs_delete_review(review_id):
-    url = f"{OJS_API_BASE}/api/v1/reviews/{review_id}"
-    headers = {"Authorization": f"Token {OJS_API_KEY}"}
+def ojs_delete_review(api_url, api_key, review_id):
+    """Delete review from OJS instance."""
+    url = f"{api_url}/reviews/{review_id}"
+    headers = get_ojs_headers(api_key)
     resp = requests.delete(url, headers=headers)
     resp.raise_for_status()
     return resp.status_code == 204
 
 # --- OJS Comment Sync Utilities ---
 
-def ojs_list_comments():
-    url = f"{OJS_API_BASE}/api/v1/comments"
-    headers = {"Authorization": f"Token {OJS_API_KEY}"}
+def ojs_list_comments(api_url, api_key):
+    """List comments from OJS instance."""
+    url = f"{api_url}/comments"
+    headers = get_ojs_headers(api_key)
     resp = requests.get(url, headers=headers)
     resp.raise_for_status()
     return resp.json()
 
-def ojs_get_comment(comment_id):
-    url = f"{OJS_API_BASE}/api/v1/comments/{comment_id}"
-    headers = {"Authorization": f"Token {OJS_API_KEY}"}
+def ojs_get_comment(api_url, api_key, comment_id):
+    """Get comment from OJS instance."""
+    url = f"{api_url}/comments/{comment_id}"
+    headers = get_ojs_headers(api_key)
     resp = requests.get(url, headers=headers)
     resp.raise_for_status()
     return resp.json()
 
-def ojs_create_comment(data):
-    url = f"{OJS_API_BASE}/api/v1/comments"
-    headers = {"Authorization": f"Token {OJS_API_KEY}", "Content-Type": "application/json"}
+def ojs_create_comment(api_url, api_key, data):
+    """Create comment in OJS instance."""
+    url = f"{api_url}/comments"
+    headers = get_ojs_headers(api_key)
     resp = requests.post(url, json=data, headers=headers)
     resp.raise_for_status()
     return resp.json()
 
-def ojs_update_comment(comment_id, data):
-    url = f"{OJS_API_BASE}/api/v1/comments/{comment_id}"
-    headers = {"Authorization": f"Token {OJS_API_KEY}", "Content-Type": "application/json"}
+def ojs_update_comment(api_url, api_key, comment_id, data):
+    """Update comment in OJS instance."""
+    url = f"{api_url}/comments/{comment_id}"
+    headers = get_ojs_headers(api_key)
     resp = requests.put(url, json=data, headers=headers)
     resp.raise_for_status()
     return resp.json()
 
-def ojs_delete_comment(comment_id):
-    url = f"{OJS_API_BASE}/api/v1/comments/{comment_id}"
-    headers = {"Authorization": f"Token {OJS_API_KEY}"}
+def ojs_delete_comment(api_url, api_key, comment_id):
+    """Delete comment from OJS instance."""
+    url = f"{api_url}/comments/{comment_id}"
+    headers = get_ojs_headers(api_key)
     resp = requests.delete(url, headers=headers)
     resp.raise_for_status()
     return resp.status_code == 204
+
+# Sentry integration utilities
+SENTRY_AUTH_TOKEN = getattr(settings, 'SENTRY_AUTH_TOKEN', '')
 
 # --- Sentry API Utilities ---
 from decouple import config
