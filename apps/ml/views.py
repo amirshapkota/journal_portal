@@ -421,7 +421,7 @@ class SubmissionAnomaliesView(APIView):
         return Response({
             'submission_id': str(submission.id),
             'submission_title': submission.title,
-            'author': submission.corresponding_author.user.email,
+            'author': submission.corresponding_author.user.email if submission.corresponding_author else 'Unknown',
             'anomaly_count': len(anomalies),
             'anomalies': anomalies
         })

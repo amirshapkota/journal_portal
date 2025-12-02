@@ -172,13 +172,30 @@ def ojs_list_journals(api_url, api_key):
     resp.raise_for_status()
     return resp.json()
 
-def ojs_list_submissions(api_url, api_key, journal_id=None):
-    """List submissions from OJS instance, optionally filtered by journal."""
+def ojs_list_submissions(api_url, api_key, journal_id=None, offset=0, count=100):
+    """
+    List submissions from OJS instance, optionally filtered by journal.
+    
+    Args:
+        api_url: OJS API base URL
+        api_key: OJS API key
+        journal_id: Optional journal ID filter
+        offset: Pagination offset (default 0)
+        count: Number of items to fetch (default 100)
+        
+    Returns:
+        dict: Response with 'items' and 'itemsMax'
+    """
     url = f"{api_url}/submissions"
+    params = {
+        'offset': offset,
+        'count': count
+    }
     if journal_id:
-        url += f"?journalId={journal_id}"
+        params['journalId'] = journal_id
+    
     headers = get_ojs_headers(api_key)
-    resp = requests.get(url, headers=headers)
+    resp = requests.get(url, headers=headers, params=params)
     resp.raise_for_status()
     return resp.json()
 
