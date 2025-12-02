@@ -60,19 +60,6 @@ class Journal(models.Model):
         blank=True,
         help_text="Journal ID in OJS system"
     )
-    last_synced_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text="Last successful sync with OJS"
-    )
-    sync_enabled = models.BooleanField(
-        default=True,
-        help_text="Enable automatic background sync for this journal"
-    )
-    sync_interval_hours = models.IntegerField(
-        default=1,
-        help_text="Sync interval in hours (default: 1 hour)"
-    )
     
     # Journal settings and configuration
     settings = models.JSONField(

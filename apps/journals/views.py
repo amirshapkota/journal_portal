@@ -366,9 +366,7 @@ class JournalViewSet(viewsets.ModelViewSet):
                     'ojs_api_url': {'type': 'string', 'format': 'uri', 'description': 'OJS API base URL'},
                     'ojs_api_key': {'type': 'string', 'description': 'OJS API key'},
                     'ojs_journal_id': {'type': 'integer', 'description': 'Journal ID in OJS system'},
-                    'ojs_enabled': {'type': 'boolean', 'description': 'Enable OJS sync'},
-                    'sync_enabled': {'type': 'boolean', 'description': 'Enable automatic sync'},
-                    'sync_interval_hours': {'type': 'integer', 'description': 'Sync interval in hours'}
+                    'ojs_enabled': {'type': 'boolean', 'description': 'Enable OJS connection'}
                 }
             }
         }
@@ -397,8 +395,6 @@ class JournalViewSet(viewsets.ModelViewSet):
         journal.ojs_api_url = request.data.get('ojs_api_url', journal.ojs_api_url)
         journal.ojs_api_key = request.data.get('ojs_api_key', journal.ojs_api_key)
         journal.ojs_journal_id = request.data.get('ojs_journal_id', journal.ojs_journal_id)
-        journal.sync_enabled = request.data.get('sync_enabled', journal.sync_enabled)
-        journal.sync_interval_hours = request.data.get('sync_interval_hours', journal.sync_interval_hours)
         
         journal.save()
         
@@ -406,9 +402,7 @@ class JournalViewSet(viewsets.ModelViewSet):
             'detail': 'OJS connection configured successfully',
             'ojs_enabled': journal.ojs_enabled,
             'ojs_api_url': journal.ojs_api_url,
-            'ojs_journal_id': journal.ojs_journal_id,
-            'sync_enabled': journal.sync_enabled,
-            'sync_interval_hours': journal.sync_interval_hours
+            'ojs_journal_id': journal.ojs_journal_id
         })
     
     @extend_schema(
@@ -424,10 +418,7 @@ class JournalViewSet(viewsets.ModelViewSet):
             'ojs_enabled': journal.ojs_enabled,
             'ojs_configured': bool(journal.ojs_api_url and journal.ojs_api_key),
             'ojs_api_url': journal.ojs_api_url if journal.ojs_enabled else None,
-            'ojs_journal_id': journal.ojs_journal_id if journal.ojs_enabled else None,
-            'sync_enabled': journal.sync_enabled,
-            'sync_interval_hours': journal.sync_interval_hours,
-            'last_synced_at': journal.last_synced_at
+            'ojs_journal_id': journal.ojs_journal_id if journal.ojs_enabled else None
         })
     
     @extend_schema(
@@ -488,7 +479,6 @@ class JournalViewSet(viewsets.ModelViewSet):
         journal.ojs_api_url = ''
         journal.ojs_api_key = ''
         journal.ojs_journal_id = None
-        journal.sync_enabled = False
         journal.save()
         
         return Response({'detail': 'OJS disconnected successfully'})
