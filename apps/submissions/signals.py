@@ -29,7 +29,7 @@ def log_submission_activity(sender, instance, created, **kwargs):
                 resource_id=instance.id,
                 metadata={
                     'title': instance.title,
-                    'journal': instance.journal.name if instance.journal else None,
+                    'journal': instance.journal.title if instance.journal else None,
                     'status': instance.status
                 }
             )

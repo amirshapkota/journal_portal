@@ -483,6 +483,94 @@ class JournalViewSet(viewsets.ModelViewSet):
         
         return Response({'detail': 'OJS disconnected successfully'})
     
+    @action(detail=True, methods=['post'], url_path='import-from-ojs', permission_classes=[IsAuthenticated])
+    def import_from_ojs(self, request, pk=None):
+        """
+        Import all submissions from OJS into Django database.
+        This creates new Submission records from OJS data.
+        """
+        journal = self.get_object()
+        
+        # Check permission
+        if hasattr(request.user, 'profile'):
+            staff_member = journal.staff_members.filter(
+                profile=request.user.profile,
+                role__in=['EDITOR_IN_CHIEF', 'MANAGING_EDITOR'],
+                is_active=True
+            ).first()
+            
+            if not staff_member and not request.user.is_superuser:
+                return Response(
+                    {'detail': 'Only Editor-in-Chief or Managing Editor can import from OJS.'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        
+        # Check OJS configuration
+        if not journal.ojs_api_url or not journal.ojs_api_key:
+            return Response(
+                {'detail': 'OJS is not configured for this journal.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Perform import
+        try:
+            from apps.integrations.ojs_sync import import_ojs_data_for_journal
+            summary = import_ojs_data_for_journal(journal)
+            
+            return Response({
+                'detail': 'OJS import completed',
+                'summary': summary
+            })
+        except Exception as e:
+            return Response(
+                {'detail': f'Import failed: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    @action(detail=True, methods=['post'], url_path='import-users-from-ojs', permission_classes=[IsAuthenticated])
+    def import_users_from_ojs(self, request, pk=None):
+        """
+        Import users from OJS into Django database.
+        Creates user accounts and profiles.
+        """
+        journal = self.get_object()
+        
+        # Check permission
+        if hasattr(request.user, 'profile'):
+            staff_member = journal.staff_members.filter(
+                profile=request.user.profile,
+                role__in=['EDITOR_IN_CHIEF', 'MANAGING_EDITOR'],
+                is_active=True
+            ).first()
+            
+            if not staff_member and not request.user.is_superuser:
+                return Response(
+                    {'detail': 'Only Editor-in-Chief or Managing Editor can import users from OJS.'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        
+        # Check OJS configuration
+        if not journal.ojs_api_url or not journal.ojs_api_key:
+            return Response(
+                {'detail': 'OJS is not configured for this journal.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Perform import
+        try:
+            from apps.integrations.ojs_sync import import_users_from_ojs
+            summary = import_users_from_ojs(journal)
+            
+            return Response({
+                'detail': 'OJS user import completed',
+                'summary': summary
+            })
+        except Exception as e:
+            return Response(
+                {'detail': f'User import failed: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
     @extend_schema(
         summary="Get journal statistics",
         description="Get statistics for a journal (submissions, reviews, etc.)."
