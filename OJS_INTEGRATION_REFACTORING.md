@@ -32,17 +32,16 @@ def get_ojs_credentials(self):
     }
 ```
 
-### 2. Journal Model (Already Exists in `apps/journals/models.py`)
+### 2. Journal Model (`apps/journals/models.py`)
 
-The Journal model already has these OJS fields:
+The Journal model has these OJS fields:
 
-- `ojs_enabled` - Enable/disable OJS sync
+- `ojs_enabled` - Enable/disable OJS connection
 - `ojs_api_url` - OJS API base URL
 - `ojs_api_key` - API key for authentication
 - `ojs_journal_id` - Journal ID in OJS system
-- `last_synced_at` - Last sync timestamp
-- `sync_enabled` - Enable automatic background sync
-- `sync_interval_hours` - Sync frequency
+
+**Note:** Automatic background sync is **not supported**. All OJS operations must be triggered manually.
 
 ### 3. Utility Functions (`apps/integrations/utils.py`)
 
