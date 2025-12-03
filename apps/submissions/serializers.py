@@ -264,8 +264,10 @@ class SubmissionSerializer(serializers.ModelSerializer):
         
         # Set corresponding author from request user
         user = self.context['request'].user
+        corresponding_author_profile = None
         if hasattr(user, 'profile'):
             validated_data['corresponding_author'] = user.profile
+            corresponding_author_profile = user.profile
         else:
             raise serializers.ValidationError(
                 "User must have a profile to create submissions."
@@ -298,7 +300,95 @@ class SubmissionSerializer(serializers.ModelSerializer):
             except Area.DoesNotExist:
                 raise serializers.ValidationError({"area_id": "Area does not exist."})
         
-        return super().create(validated_data)
+        # Create the submission
+        submission = super().create(validated_data)
+        
+        # Automatically create AuthorContribution for the corresponding author
+        if corresponding_author_profile:
+            AuthorContribution.objects.create(
+                submission=submission,
+                profile=corresponding_author_profile,
+                order=1,
+                contrib_role='FIRST',
+                contribution_details={},
+                has_agreed=True  # Corresponding author implicitly agrees
+            )
+        
+        # Create AuthorContribution records for co-authors from metadata_json
+        self._create_coauthor_contributions(submission)
+        
+        return submission
+    
+    def _create_coauthor_contributions(self, submission):
+        """Create AuthorContribution records from metadata_json co_authors."""
+        from apps.users.models import CustomUser, Profile
+        
+        metadata = submission.metadata_json or {}
+        co_authors = metadata.get('co_authors', [])
+        
+        if not co_authors:
+            return
+        
+        # Start order from 2 (order 1 is corresponding author)
+        current_order = 2
+        
+        for co_author_data in co_authors:
+            email = co_author_data.get('email')
+            name = co_author_data.get('name', '')
+            orcid = co_author_data.get('orcid', '')
+            institution = co_author_data.get('institution', '')
+            affiliation_ror_id = co_author_data.get('affiliation_ror_id', '')
+            
+            if not email:
+                # Skip co-authors without email
+                continue
+            
+            # Try to find existing user by email
+            try:
+                user = CustomUser.objects.get(email=email)
+                profile = user.profile
+            except CustomUser.DoesNotExist:
+                # Create a new user for the co-author
+                name_parts = name.split(' ', 1)
+                first_name = name_parts[0] if name_parts else ''
+                last_name = name_parts[1] if len(name_parts) > 1 else ''
+                
+                user = CustomUser.objects.create(
+                    email=email,
+                    username=email,
+                    first_name=first_name,
+                    last_name=last_name,
+                )
+                user.set_unusable_password()
+                user.save()
+                
+                # Create profile for the new user
+                profile = Profile.objects.create(
+                    user=user,
+                    display_name=name,
+                    orcid_id=orcid if orcid else None,
+                    affiliation_name=institution,
+                    affiliation_ror_id=affiliation_ror_id
+                )
+            
+            # Create AuthorContribution if it doesn't already exist
+            AuthorContribution.objects.get_or_create(
+                submission=submission,
+                profile=profile,
+                defaults={
+                    'order': current_order,
+                    'contrib_role': 'CO_AUTHOR',
+                    'contribution_details': {
+                        'contribution_role': co_author_data.get('contribution_role', 'Co-Author'),
+                        'institution': institution,
+                        'orcid': orcid,
+                        'affiliation_ror_id': affiliation_ror_id
+                    },
+                    'has_agreed': False
+                }
+            )
+            
+            current_order += 1
     
     def update(self, instance, validated_data):
         """Update submission with taxonomy."""
@@ -347,7 +437,21 @@ class SubmissionSerializer(serializers.ModelSerializer):
             else:
                 instance.area = None
         
-        return super().update(instance, validated_data)
+        # Update the submission
+        submission = super().update(instance, validated_data)
+        
+        # Update AuthorContribution records for co-authors if metadata_json changed
+        if 'metadata_json' in validated_data:
+            # Remove existing co-author contributions (keep corresponding author)
+            AuthorContribution.objects.filter(
+                submission=submission,
+                contrib_role__in=['CO_AUTHOR', 'SENIOR', 'LAST']
+            ).delete()
+            
+            # Recreate co-author contributions from updated metadata
+            self._create_coauthor_contributions(submission)
+        
+        return submission
 
 
 class SubmissionListSerializer(serializers.ModelSerializer):
