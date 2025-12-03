@@ -69,6 +69,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
                 'first_name': user.first_name,
                 'last_name': user.last_name,
                 'is_verified': is_verified,
+                'email_verified': user.email_verified,
                 'roles': roles,
                 'date_joined': user.date_joined,
             }
