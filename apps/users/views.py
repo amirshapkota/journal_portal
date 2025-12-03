@@ -536,6 +536,169 @@ class PasswordResetConfirmView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+@extend_schema(
+    summary="Setup password for imported user",
+    description="Allows imported OJS users to set their password for the first time using a token-based link",
+    request={
+        'application/json': {
+            'type': 'object',
+            'properties': {
+                'uid': {'type': 'string', 'description': 'Base64 encoded user ID'},
+                'token': {'type': 'string', 'description': 'Password setup token'},
+                'password': {'type': 'string', 'description': 'New password to set'}
+            },
+            'required': ['uid', 'token', 'password']
+        }
+    }
+)
+class PasswordSetupView(APIView):
+    """Handle password setup for imported users."""
+    
+    permission_classes = [permissions.AllowAny]
+    
+    def post(self, request):
+        """Set password for imported user with token."""
+        uid = request.data.get('uid')
+        token = request.data.get('token')
+        password = request.data.get('password')
+        
+        if not all([uid, token, password]):
+            return Response({
+                'error': 'uid, token, and password are required.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            user_id = force_str(urlsafe_base64_decode(uid))
+            user = CustomUser.objects.get(pk=user_id)
+            
+            # Verify user is imported and doesn't have a usable password
+            if not user.imported_from:
+                return Response({
+                    'error': 'This endpoint is only for imported users.'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Check token validity
+            if default_token_generator.check_token(user, token):
+                # Validate password strength (basic validation)
+                if len(password) < 8:
+                    return Response({
+                        'error': 'Password must be at least 8 characters long.'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                
+                # Set the password
+                user.set_password(password)
+                user.email_verified = True  # Auto-verify email for imported users
+                user.save()
+                
+                logger.info(f"Password setup completed for imported user: {user.email}")
+                
+                return Response({
+                    'message': 'Password has been set successfully. You can now log in.'
+                }, status=status.HTTP_200_OK)
+            else:
+                return Response({
+                    'error': 'Invalid or expired setup token.'
+                }, status=status.HTTP_400_BAD_REQUEST)
+                
+        except (TypeError, ValueError, OverflowError, CustomUser.DoesNotExist):
+            return Response({
+                'error': 'Invalid setup link.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+
+@extend_schema(
+    summary="Request password setup link for imported user",
+    description="Sends a password setup link to an imported OJS user's email",
+    request={
+        'application/json': {
+            'type': 'object',
+            'properties': {
+                'email': {'type': 'string', 'format': 'email', 'description': 'User email address'}
+            },
+            'required': ['email']
+        }
+    }
+)
+class PasswordSetupRequestView(APIView):
+    """Request password setup link for imported users."""
+    
+    permission_classes = [permissions.AllowAny]
+    
+    @method_decorator(ratelimit(key='ip', rate='3/h', method='POST'))
+    def post(self, request):
+        """Send password setup link to imported user."""
+        email = request.data.get('email')
+        
+        if not email:
+            return Response({
+                'error': 'Email is required.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            user = CustomUser.objects.get(email=email, is_active=True)
+            
+            # Validate that user is imported from OJS
+            if not user.imported_from:
+                logger.warning(f"Password setup requested for non-imported user: {user.email}")
+                # Don't reveal if user exists or not for security
+                return Response({
+                    'message': 'If an imported account exists with this email, a password setup link will be sent.'
+                }, status=status.HTTP_200_OK)
+            
+            # Check if user already has a usable password
+            if user.has_usable_password():
+                logger.info(f"Password setup requested for user with existing password: {user.email}")
+                # Don't reveal if user exists or not for security
+                return Response({
+                    'message': 'If an imported account exists with this email, a password setup link will be sent.'
+                }, status=status.HTTP_200_OK)
+            
+            # Generate token
+            token = default_token_generator.make_token(user)
+            uid = urlsafe_base64_encode(force_bytes(user.pk))
+            
+            # Build setup URL
+            frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
+            setup_url = f"{frontend_url}/setup-password/{uid}/{token}"
+            
+            # Send email
+            subject = 'Set Up Your Password - Journal Portal'
+            message = f"""
+Hello {user.first_name or user.email},
+
+Your account has been imported from OJS. To access the Journal Portal, you need to set up your password.
+
+Click the link below to set your password:
+{setup_url}
+
+This link will expire in 24 hours.
+
+If you did not request this, please ignore this email.
+
+Best regards,
+Journal Portal Team
+            """
+            
+            send_mail(
+                subject,
+                message,
+                settings.DEFAULT_FROM_EMAIL,
+                [user.email],
+                fail_silently=False,
+            )
+            
+            logger.info(f"Password setup link sent to imported user: {user.email}")
+            
+        except CustomUser.DoesNotExist:
+            logger.info(f"Password setup requested for non-existent email: {email}")
+            # Don't reveal if user exists
+            pass
+        
+        return Response({
+            'message': 'If an imported account exists with this email, a password setup link will be sent.'
+        }, status=status.HTTP_200_OK)
+
+
 @extend_schema_view(
     list=extend_schema(summary="List users", description="Get paginated list of users."),
     retrieve=extend_schema(summary="Get user", description="Get specific user details."),

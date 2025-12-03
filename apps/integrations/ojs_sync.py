@@ -279,8 +279,14 @@ class OJSSyncService:
                         'username': email,
                         'first_name': given_name,
                         'last_name': family_name,
+                        'imported_from': self.journal.id,
                     }
                 )
+                
+                # Set unusable password for newly created imported users
+                if user_created:
+                    user.set_unusable_password()
+                    user.save()
                 
                 # Try to find existing profile by ORCID first (since it's unique)
                 profile = None
@@ -911,13 +917,18 @@ class OJSSyncService:
                         summary['updated'] += 1
                         logger.info(f"Updated user: {email}")
                     else:
-                        # Create new user
+                        # Create new user without password (will need to set password later)
                         user = CustomUser.objects.create(
                             email=email,
                             username=username,
                             first_name=first_name,
                             last_name=last_name,
+                            imported_from=self.journal.id,
+                            email_verified=False
                         )
+                        # Set unusable password for imported users
+                        user.set_unusable_password()
+                        user.save()
                         
                         # Create profile
                         Profile.objects.create(
@@ -926,7 +937,7 @@ class OJSSyncService:
                         )
                         
                         summary['imported'] += 1
-                        logger.info(f"Created user: {email}")
+                        logger.info(f"Created user: {email} (imported from OJS, password required)")
                         
                 except Exception as e:
                     error_msg = f"Error importing user {ojs_user.get('id')}: {str(e)}"
