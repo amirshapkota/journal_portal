@@ -243,7 +243,8 @@ class OJSSyncService:
     
     def _create_authors_for_submission(self, submission, authors_data):
         """
-        Create author profiles and contributions from OJS authors data.
+        Link author profiles to submission from OJS authors data.
+        Matches existing users imported from OJS by email.
         
         Args:
             submission: Django Submission instance
@@ -272,44 +273,47 @@ class OJSSyncService:
                     else:
                         orcid = orcid_raw
                 
-                # Create or get user
-                user, user_created = CustomUser.objects.get_or_create(
-                    email=email,
+                # Try to find existing user (should have been imported in user import step)
+                user = CustomUser.objects.filter(email=email).first()
+                
+                # If user doesn't exist, create them (fallback for authors not in user list)
+                if not user:
+                    user = CustomUser.objects.create(
+                        email=email,
+                        username=email,
+                        first_name=given_name,
+                        last_name=family_name,
+                        imported_from=self.journal.id,
+                    )
+                    user.set_unusable_password()
+                    user.save()
+                    logger.info(f"Created missing user during submission import: {email}")
+                else:
+                    # User exists - update imported_from if not set
+                    if not user.imported_from:
+                        user.imported_from = self.journal.id
+                        user.save(update_fields=['imported_from'])
+                
+                # Get or create profile for this user
+                profile, profile_created = Profile.objects.get_or_create(
+                    user=user,
                     defaults={
-                        'username': email,
-                        'first_name': given_name,
-                        'last_name': family_name,
-                        'imported_from': self.journal.id,
+                        'affiliation_name': affiliation,
+                        'orcid_id': orcid if orcid else None,
                     }
                 )
                 
-                # Set unusable password for newly created imported users
-                if user_created:
-                    user.set_unusable_password()
-                    user.save()
-                
-                # Try to find existing profile by ORCID first (since it's unique)
-                profile = None
-                if orcid:
-                    profile = Profile.objects.filter(orcid_id=orcid).first()
-                
-                # If no profile found by ORCID, get or create by user
-                if not profile:
-                    profile, profile_created = Profile.objects.get_or_create(
-                        user=user,
-                        defaults={
-                            'affiliation_name': affiliation,
-                            'orcid_id': orcid if orcid else None,
-                        }
-                    )
-                    
-                    # Update profile if it was found (not created) and has new info
-                    if not profile_created:
-                        if affiliation and not profile.affiliation_name:
-                            profile.affiliation_name = affiliation
-                        # Only set ORCID if profile doesn't have one
-                        if orcid and not profile.orcid_id:
-                            profile.orcid_id = orcid
+                # Update profile if it exists and has new info
+                if not profile_created:
+                    updated = False
+                    if affiliation and not profile.affiliation_name:
+                        profile.affiliation_name = affiliation
+                        updated = True
+                    # Only set ORCID if profile doesn't have one
+                    if orcid and not profile.orcid_id:
+                        profile.orcid_id = orcid
+                        updated = True
+                    if updated:
                         profile.save()
                 
                 # Create author contribution (use get_or_create to avoid duplicates)
@@ -328,10 +332,10 @@ class OJSSyncService:
                     submission.corresponding_author = profile
                     submission.save(update_fields=['corresponding_author'])
             
-            logger.info(f"Created {len(sorted_authors)} authors for submission {submission.id}")
+            logger.info(f"Linked {len(sorted_authors)} authors to submission {submission.id}")
             
         except Exception as e:
-            logger.error(f"Failed to create authors for submission {submission.id}: {str(e)}")
+            logger.error(f"Failed to link authors to submission {submission.id}: {str(e)}")
             import traceback
             traceback.print_exc()
     
@@ -957,32 +961,39 @@ class OJSSyncService:
     
 
 
-def import_ojs_data_for_journal(journal):
+def import_all_ojs_data_for_journal(journal):
     """
-    Convenience function to import all OJS data for a journal.
+    Import all OJS data for a journal (users first, then submissions).
+    This ensures imported submissions are properly linked to imported users.
     
     Args:
         journal: Journal instance
         
     Returns:
-        dict: Import summary
+        dict: Combined import summary
     """
     sync_service = OJSSyncService(journal)
-    return sync_service.import_all_from_ojs()
-
-
-def import_users_from_ojs(journal):
-    """
-    Import users from OJS into Django database.
     
-    Args:
-        journal: Journal instance with OJS configuration
-        
-    Returns:
-        dict: Summary of import operation
-    """
-    sync_service = OJSSyncService(journal)
-    return sync_service.import_users()
+    # Import users first
+    logger.info("Step 1: Importing users from OJS...")
+    user_summary = sync_service.import_users()
+    
+    # Then import submissions (which will link to the imported users)
+    logger.info("Step 2: Importing submissions from OJS...")
+    submission_summary = sync_service.import_all_from_ojs()
+    
+    # Combine summaries
+    combined_summary = {
+        'users': user_summary,
+        'submissions': submission_summary,
+        'total_imported': {
+            'users': user_summary.get('imported', 0),
+            'submissions': submission_summary.get('imported', 0)
+        }
+    }
+    
+    logger.info(f"OJS import complete: {combined_summary['total_imported']}")
+    return combined_summary
 
 
 
