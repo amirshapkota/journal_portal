@@ -64,6 +64,14 @@ class CustomUser(AbstractUser):
     
     # Email verification status
     email_verified = models.BooleanField(default=False, help_text="Has the user verified their email address?")
+    
+    # OJS import tracking
+    imported_from = models.UUIDField(
+        null=True,
+        blank=True,
+        help_text="Journal ID from which this user was imported (OJS integration)"
+    )
+    
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

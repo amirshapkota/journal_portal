@@ -37,6 +37,10 @@ urlpatterns = [
     path('auth/password/reset/', views.PasswordResetRequestView.as_view(), name='password_reset'),
     path('auth/password/reset/confirm/', views.PasswordResetConfirmView.as_view(), name='password_reset_confirm'),
     
+    # Password setup for imported users
+    path('auth/password/setup/', views.PasswordSetupView.as_view(), name='password_setup'),
+    path('auth/password/setup/request/', views.PasswordSetupRequestView.as_view(), name='password_setup_request'),
+    
     # User information
     path('auth/me/', views.current_user, name='current_user'),
     

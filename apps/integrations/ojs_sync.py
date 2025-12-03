@@ -50,16 +50,34 @@ class OJSSyncService:
         }
         
         try:
-            # Fetch all submissions from OJS
+            # Fetch all submissions from OJS with pagination
             logger.info(f"Fetching submissions from OJS for journal {self.journal.title}")
-            data = ojs_list_submissions(self.api_url, self.api_key, journal_id=None)
-            items = data.get('items', [])
-            summary['total_ojs_submissions'] = data.get('itemsMax', len(items))
             
-            logger.info(f"Found {len(items)} submissions to process")
+            all_items = []
+            offset = 0
+            count = 100  # Fetch 100 items per page
+            
+            while True:
+                # Fetch page of submissions
+                data = ojs_list_submissions(self.api_url, self.api_key, journal_id=None, offset=offset, count=count)
+                items = data.get('items', [])
+                items_max = data.get('itemsMax', 0)
+                
+                all_items.extend(items)
+                
+                logger.info(f"Fetched {len(items)} submissions (offset {offset}), total so far: {len(all_items)}/{items_max}")
+                
+                # Check if we have all items
+                if len(items) < count or len(all_items) >= items_max:
+                    break
+                
+                offset += count
+            
+            summary['total_ojs_submissions'] = len(all_items)
+            logger.info(f"Found {len(all_items)} total submissions to process")
             
             # Process each OJS submission
-            for ojs_submission in items:
+            for ojs_submission in all_items:
                 try:
                     result = self._import_single_submission(ojs_submission)
                     if result == 'imported':
@@ -225,7 +243,8 @@ class OJSSyncService:
     
     def _create_authors_for_submission(self, submission, authors_data):
         """
-        Create author profiles and contributions from OJS authors data.
+        Link author profiles to submission from OJS authors data.
+        Matches existing users imported from OJS by email.
         
         Args:
             submission: Django Submission instance
@@ -254,38 +273,47 @@ class OJSSyncService:
                     else:
                         orcid = orcid_raw
                 
-                # Create or get user
-                user, user_created = CustomUser.objects.get_or_create(
-                    email=email,
+                # Try to find existing user (should have been imported in user import step)
+                user = CustomUser.objects.filter(email=email).first()
+                
+                # If user doesn't exist, create them (fallback for authors not in user list)
+                if not user:
+                    user = CustomUser.objects.create(
+                        email=email,
+                        username=email,
+                        first_name=given_name,
+                        last_name=family_name,
+                        imported_from=self.journal.id,
+                    )
+                    user.set_unusable_password()
+                    user.save()
+                    logger.info(f"Created missing user during submission import: {email}")
+                else:
+                    # User exists - update imported_from if not set
+                    if not user.imported_from:
+                        user.imported_from = self.journal.id
+                        user.save(update_fields=['imported_from'])
+                
+                # Get or create profile for this user
+                profile, profile_created = Profile.objects.get_or_create(
+                    user=user,
                     defaults={
-                        'username': email,
-                        'first_name': given_name,
-                        'last_name': family_name,
+                        'affiliation_name': affiliation,
+                        'orcid_id': orcid if orcid else None,
                     }
                 )
                 
-                # Try to find existing profile by ORCID first (since it's unique)
-                profile = None
-                if orcid:
-                    profile = Profile.objects.filter(orcid_id=orcid).first()
-                
-                # If no profile found by ORCID, get or create by user
-                if not profile:
-                    profile, profile_created = Profile.objects.get_or_create(
-                        user=user,
-                        defaults={
-                            'affiliation_name': affiliation,
-                            'orcid_id': orcid if orcid else None,
-                        }
-                    )
-                    
-                    # Update profile if it was found (not created) and has new info
-                    if not profile_created:
-                        if affiliation and not profile.affiliation_name:
-                            profile.affiliation_name = affiliation
-                        # Only set ORCID if profile doesn't have one
-                        if orcid and not profile.orcid_id:
-                            profile.orcid_id = orcid
+                # Update profile if it exists and has new info
+                if not profile_created:
+                    updated = False
+                    if affiliation and not profile.affiliation_name:
+                        profile.affiliation_name = affiliation
+                        updated = True
+                    # Only set ORCID if profile doesn't have one
+                    if orcid and not profile.orcid_id:
+                        profile.orcid_id = orcid
+                        updated = True
+                    if updated:
                         profile.save()
                 
                 # Create author contribution (use get_or_create to avoid duplicates)
@@ -304,10 +332,10 @@ class OJSSyncService:
                     submission.corresponding_author = profile
                     submission.save(update_fields=['corresponding_author'])
             
-            logger.info(f"Created {len(sorted_authors)} authors for submission {submission.id}")
+            logger.info(f"Linked {len(sorted_authors)} authors to submission {submission.id}")
             
         except Exception as e:
-            logger.error(f"Failed to create authors for submission {submission.id}: {str(e)}")
+            logger.error(f"Failed to link authors to submission {submission.id}: {str(e)}")
             import traceback
             traceback.print_exc()
     
@@ -367,51 +395,93 @@ class OJSSyncService:
                         if 'word' in mime_type.lower() or file_name.endswith('.docx'):
                             doc_type = 'MANUSCRIPT'
                         
-                        # For public downloads of published files
+                        # For downloading files from OJS
                         base_url = self.api_url.replace('/api/v1', '')
                         
                         # Try different download methods
-                        download_url = None
                         file_content = None
                         
-                        # First, try to get from publication galleys (for published files)
-                        sub_resp = requests.get(f"{self.api_url}/submissions/{ojs_submission_id}", headers=headers)
-                        if sub_resp.status_code == 200:
-                            sub_data = sub_resp.json()
-                            publications = sub_data.get('publications', [])
+                        # Method 1: Try using the file path directly (OJS stores files in files_dir)
+                        file_path = file_data.get('path')
+                        if file_path:
+                            # Try to access via OJS's files directory
+                            # OJS usually serves files from: /files/{path}
+                            direct_file_url = f"{base_url.rsplit('/', 2)[0]}/files/{file_path}"
                             
-                            if publications:
-                                pub = publications[0]
-                                galleys = pub.get('galleys', [])
+                            logger.info(f"Attempting direct file download: {direct_file_url}")
+                            
+                            file_resp = requests.get(direct_file_url, allow_redirects=True)
+                            
+                            if file_resp.status_code == 200 and len(file_resp.content) > 0:
+                                # Verify it's not an error page
+                                if not (len(file_resp.content) < 1000 and b'<html' in file_resp.content.lower()):
+                                    file_content = file_resp.content
+                                    logger.info(f"Successfully downloaded file via direct path: {len(file_content)} bytes")
+                        
+                        # Method 2: Try OJS file API (may not work due to permissions)
+                        if not file_content:
+                            file_stage_id = file_data.get('fileStage', 1)
+                            file_api_url = f"{base_url}/$$$call$$$/api/file/file-api/download-file"
+                            file_api_params = {
+                                'submissionFileId': file_id,
+                                'submissionId': ojs_submission_id,
+                                'stageId': file_stage_id
+                            }
+                            
+                            logger.info(f"Attempting to download file {file_id} ({file_name}) using file API")
+                            
+                            # Try with authorization header
+                            file_headers = {
+                                'Authorization': f'Bearer {self.api_key}',
+                            }
+                            
+                            file_resp = requests.get(
+                                file_api_url, 
+                                params=file_api_params, 
+                                headers=file_headers, 
+                                allow_redirects=True,
+                                stream=True
+                            )
+                            
+                            if file_resp.status_code == 200 and len(file_resp.content) > 0:
+                                # Verify it's not an error page
+                                content = file_resp.content
+                                if not (len(content) < 1000 and (b'<html' in content.lower() or b'"status":false' in content)):
+                                    file_content = content
+                                    logger.info(f"Successfully downloaded file via file API: {len(file_content)} bytes")
+                                else:
+                                    logger.warning(f"File API returned error: {content[:200]}")
+                        
+                        # Method 3: Try publication galleys (for published files)
+                        if not file_content:
+                            sub_resp = requests.get(f"{self.api_url}/submissions/{ojs_submission_id}", headers=headers)
+                            if sub_resp.status_code == 200:
+                                sub_data = sub_resp.json()
+                                publications = sub_data.get('publications', [])
                                 
-                                # Find matching galley by file ID
-                                for galley in galleys:
-                                    if galley.get('submissionFileId') == file_id:
-                                        galley_id = galley.get('id')
-                                        download_url = f"{base_url}/article/download/{ojs_submission_id}/{galley_id}"
-                                        break
+                                if publications:
+                                    pub = publications[0]
+                                    galleys = pub.get('galleys', [])
+                                    
+                                    # Find matching galley by file ID
+                                    for galley in galleys:
+                                        if galley.get('submissionFileId') == file_id:
+                                            galley_id = galley.get('id')
+                                            download_url = f"{base_url}/article/download/{ojs_submission_id}/{galley_id}"
+                                            
+                                            logger.info(f"Trying galley download from: {download_url}")
+                                            galley_resp = requests.get(download_url, allow_redirects=True)
+                                            
+                                            if galley_resp.status_code == 200:
+                                                if not (len(galley_resp.content) < 1000 and b'<html' in galley_resp.content.lower()):
+                                                    file_content = galley_resp.content
+                                                    logger.info(f"Successfully downloaded file via galley: {len(file_content)} bytes")
+                                            break
                         
-                        # If not found in galleys, file might not be publicly accessible
-                        # OJS API doesn't allow downloading non-public files via API
-                        if not download_url:
-                            logger.warning(f"File {file_id} ({file_name}) is not publicly accessible, skipping")
+                        # If still no file content, skip this file
+                        if not file_content:
+                            logger.warning(f"File {file_id} ({file_name}) could not be downloaded, skipping")
                             continue
-                        
-                        logger.info(f"Downloading file from: {download_url}")
-                        
-                        # Download the file
-                        file_resp = requests.get(download_url, allow_redirects=True)
-                        
-                        if file_resp.status_code != 200:
-                            logger.warning(f"Failed to download file {file_id}: {file_resp.status_code}")
-                            continue
-                        
-                        # Verify file is not an error page
-                        if len(file_resp.content) < 1000 and b'<html' in file_resp.content.lower():
-                            logger.warning(f"File {file_id} appears to be HTML, skipping")
-                            continue
-                        
-                        file_content = file_resp.content
                         
                         # Get or create the document creator
                         creator = submission.corresponding_author
@@ -770,24 +840,42 @@ class OJSSyncService:
         }
         
         try:
-            # Fetch users from OJS
+            # Fetch users from OJS with pagination
             headers = {
                 'Authorization': f'Bearer {self.api_key}',
                 'Content-Type': 'application/json'
             }
             
-            url = f"{self.api_url}/users"
-            logger.info(f"Fetching users from OJS: {url}")
-            resp = requests.get(url, headers=headers)
-            resp.raise_for_status()
+            all_users = []
+            offset = 0
+            count = 100
             
-            data = resp.json()
-            users = data.get('items', [])
-            summary['total_users'] = len(users)
+            while True:
+                url = f"{self.api_url}/users"
+                params = {'offset': offset, 'count': count}
+                
+                logger.info(f"Fetching users from OJS: {url} (offset {offset})")
+                resp = requests.get(url, headers=headers, params=params)
+                resp.raise_for_status()
+                
+                data = resp.json()
+                users = data.get('items', [])
+                items_max = data.get('itemsMax', 0)
+                
+                all_users.extend(users)
+                
+                logger.info(f"Fetched {len(users)} users (offset {offset}), total so far: {len(all_users)}/{items_max}")
+                
+                # Check if we have all items
+                if len(users) < count or len(all_users) >= items_max:
+                    break
+                
+                offset += count
             
-            logger.info(f"Found {len(users)} users in OJS")
+            summary['total_users'] = len(all_users)
+            logger.info(f"Found {len(all_users)} total users in OJS")
             
-            for ojs_user in users:
+            for ojs_user in all_users:
                 try:
                     email = ojs_user.get('email', '')
                     if not email:
@@ -833,13 +921,18 @@ class OJSSyncService:
                         summary['updated'] += 1
                         logger.info(f"Updated user: {email}")
                     else:
-                        # Create new user
+                        # Create new user without password (will need to set password later)
                         user = CustomUser.objects.create(
                             email=email,
                             username=username,
                             first_name=first_name,
                             last_name=last_name,
+                            imported_from=self.journal.id,
+                            email_verified=False
                         )
+                        # Set unusable password for imported users
+                        user.set_unusable_password()
+                        user.save()
                         
                         # Create profile
                         Profile.objects.create(
@@ -848,7 +941,7 @@ class OJSSyncService:
                         )
                         
                         summary['imported'] += 1
-                        logger.info(f"Created user: {email}")
+                        logger.info(f"Created user: {email} (imported from OJS, password required)")
                         
                 except Exception as e:
                     error_msg = f"Error importing user {ojs_user.get('id')}: {str(e)}"
@@ -868,32 +961,39 @@ class OJSSyncService:
     
 
 
-def import_ojs_data_for_journal(journal):
+def import_all_ojs_data_for_journal(journal):
     """
-    Convenience function to import all OJS data for a journal.
+    Import all OJS data for a journal (users first, then submissions).
+    This ensures imported submissions are properly linked to imported users.
     
     Args:
         journal: Journal instance
         
     Returns:
-        dict: Import summary
+        dict: Combined import summary
     """
     sync_service = OJSSyncService(journal)
-    return sync_service.import_all_from_ojs()
-
-
-def import_users_from_ojs(journal):
-    """
-    Import users from OJS into Django database.
     
-    Args:
-        journal: Journal instance with OJS configuration
-        
-    Returns:
-        dict: Summary of import operation
-    """
-    sync_service = OJSSyncService(journal)
-    return sync_service.import_users()
+    # Import users first
+    logger.info("Step 1: Importing users from OJS...")
+    user_summary = sync_service.import_users()
+    
+    # Then import submissions (which will link to the imported users)
+    logger.info("Step 2: Importing submissions from OJS...")
+    submission_summary = sync_service.import_all_from_ojs()
+    
+    # Combine summaries
+    combined_summary = {
+        'users': user_summary,
+        'submissions': submission_summary,
+        'total_imported': {
+            'users': user_summary.get('imported', 0),
+            'submissions': submission_summary.get('imported', 0)
+        }
+    }
+    
+    logger.info(f"OJS import complete: {combined_summary['total_imported']}")
+    return combined_summary
 
 
 

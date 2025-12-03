@@ -399,9 +399,20 @@ class ReviewViewSet(viewsets.ModelViewSet):
         
         # Check permission to view reviews
         user = request.user
+        
+        # Check if user is journal staff member
+        is_journal_staff = False
+        if hasattr(user, 'profile') and submission.journal:
+            is_journal_staff = submission.journal.staff_members.filter(
+                profile=user.profile,
+                is_active=True
+            ).exists()
+        
         can_view = (
             user.is_staff or
-            submission.corresponding_author.user == user or
+            user.is_superuser or
+            is_journal_staff or
+            (submission.corresponding_author and submission.corresponding_author.user == user) or
             ReviewAssignment.objects.filter(
                 submission=submission,
                 reviewer=user.profile
@@ -930,9 +941,20 @@ class EditorialDecisionViewSet(viewsets.ModelViewSet):
         
         # Check permission to view decisions
         user = request.user
+        
+        # Check if user is journal staff member
+        is_journal_staff = False
+        if hasattr(user, 'profile') and submission.journal:
+            is_journal_staff = submission.journal.staff_members.filter(
+                profile=user.profile,
+                is_active=True
+            ).exists()
+        
         can_view = (
             user.is_staff or
-            submission.corresponding_author.user == user
+            user.is_superuser or
+            is_journal_staff or
+            (submission.corresponding_author and submission.corresponding_author.user == user)
         )
         
         if not can_view:

@@ -113,7 +113,7 @@ class AnomalyDetectionEngine:
                 'severity': 'MEDIUM',
                 'submission_id': str(submission.id),
                 'submission_title': submission.title,
-                'author': submission.corresponding_author.user.email,
+                'author': submission.corresponding_author.user.email if submission.corresponding_author else 'Unknown',
                 'self_citation_count': self_citations,
                 'total_citations': len(references),
                 'rate': round(self_citation_rate, 2),
@@ -133,6 +133,10 @@ class AnomalyDetectionEngine:
         Returns:
             dict with anomaly details or None
         """
+        # Skip if no corresponding author
+        if not submission.corresponding_author:
+            return None
+        
         # Get other submissions by the same author
         other_submissions = Submission.objects.filter(
             corresponding_author=submission.corresponding_author

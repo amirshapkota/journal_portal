@@ -22,10 +22,11 @@ from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.conf import settings
 from django.shortcuts import get_object_or_404
+from django.db import transaction
 from django_ratelimit.decorators import ratelimit
 from django.utils.decorators import method_decorator
 from drf_spectacular.utils import extend_schema, extend_schema_view
-from .models import CustomUser, Profile, Role
+from .models import CustomUser, Profile, Role, VerificationRequest
 from .serializers import (
     CustomTokenObtainPairSerializer,
     UserRegistrationSerializer,
@@ -536,12 +537,175 @@ class PasswordResetConfirmView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+@extend_schema(
+    summary="Setup password for imported user",
+    description="Allows imported OJS users to set their password for the first time using a token-based link",
+    request={
+        'application/json': {
+            'type': 'object',
+            'properties': {
+                'uid': {'type': 'string', 'description': 'Base64 encoded user ID'},
+                'token': {'type': 'string', 'description': 'Password setup token'},
+                'password': {'type': 'string', 'description': 'New password to set'}
+            },
+            'required': ['uid', 'token', 'password']
+        }
+    }
+)
+class PasswordSetupView(APIView):
+    """Handle password setup for imported users."""
+    
+    permission_classes = [permissions.AllowAny]
+    
+    def post(self, request):
+        """Set password for imported user with token."""
+        uid = request.data.get('uid')
+        token = request.data.get('token')
+        password = request.data.get('password')
+        
+        if not all([uid, token, password]):
+            return Response({
+                'error': 'uid, token, and password are required.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            user_id = force_str(urlsafe_base64_decode(uid))
+            user = CustomUser.objects.get(pk=user_id)
+            
+            # Verify user is imported and doesn't have a usable password
+            if not user.imported_from:
+                return Response({
+                    'error': 'This endpoint is only for imported users.'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Check token validity
+            if default_token_generator.check_token(user, token):
+                # Validate password strength (basic validation)
+                if len(password) < 8:
+                    return Response({
+                        'error': 'Password must be at least 8 characters long.'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                
+                # Set the password
+                user.set_password(password)
+                user.email_verified = True  # Auto-verify email for imported users
+                user.save()
+                
+                logger.info(f"Password setup completed for imported user: {user.email}")
+                
+                return Response({
+                    'message': 'Password has been set successfully. You can now log in.'
+                }, status=status.HTTP_200_OK)
+            else:
+                return Response({
+                    'error': 'Invalid or expired setup token.'
+                }, status=status.HTTP_400_BAD_REQUEST)
+                
+        except (TypeError, ValueError, OverflowError, CustomUser.DoesNotExist):
+            return Response({
+                'error': 'Invalid setup link.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+
+@extend_schema(
+    summary="Request password setup link for imported user",
+    description="Sends a password setup link to an imported OJS user's email",
+    request={
+        'application/json': {
+            'type': 'object',
+            'properties': {
+                'email': {'type': 'string', 'format': 'email', 'description': 'User email address'}
+            },
+            'required': ['email']
+        }
+    }
+)
+class PasswordSetupRequestView(APIView):
+    """Request password setup link for imported users."""
+    
+    permission_classes = [permissions.AllowAny]
+    
+    @method_decorator(ratelimit(key='ip', rate='3/h', method='POST'))
+    def post(self, request):
+        """Send password setup link to imported user."""
+        email = request.data.get('email')
+        
+        if not email:
+            return Response({
+                'error': 'Email is required.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            user = CustomUser.objects.get(email=email, is_active=True)
+            
+            # Validate that user is imported from OJS
+            if not user.imported_from:
+                logger.warning(f"Password setup requested for non-imported user: {user.email}")
+                # Don't reveal if user exists or not for security
+                return Response({
+                    'message': 'If an imported account exists with this email, a password setup link will be sent.'
+                }, status=status.HTTP_200_OK)
+            
+            # Check if user already has a usable password
+            if user.has_usable_password():
+                logger.info(f"Password setup requested for user with existing password: {user.email}")
+                # Don't reveal if user exists or not for security
+                return Response({
+                    'message': 'If an imported account exists with this email, a password setup link will be sent.'
+                }, status=status.HTTP_200_OK)
+            
+            # Generate token
+            token = default_token_generator.make_token(user)
+            uid = urlsafe_base64_encode(force_bytes(user.pk))
+            
+            # Build setup URL
+            frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
+            setup_url = f"{frontend_url}/setup-password/{uid}/{token}"
+            
+            # Send email
+            subject = 'Set Up Your Password - Journal Portal'
+            message = f"""
+Hello {user.first_name or user.email},
+
+Your account has been imported from OJS. To access the Journal Portal, you need to set up your password.
+
+Click the link below to set your password:
+{setup_url}
+
+This link will expire in 24 hours.
+
+If you did not request this, please ignore this email.
+
+Best regards,
+Journal Portal Team
+            """
+            
+            send_mail(
+                subject,
+                message,
+                settings.DEFAULT_FROM_EMAIL,
+                [user.email],
+                fail_silently=False,
+            )
+            
+            logger.info(f"Password setup link sent to imported user: {user.email}")
+            
+        except CustomUser.DoesNotExist:
+            logger.info(f"Password setup requested for non-existent email: {email}")
+            # Don't reveal if user exists
+            pass
+        
+        return Response({
+            'message': 'If an imported account exists with this email, a password setup link will be sent.'
+        }, status=status.HTTP_200_OK)
+
+
 @extend_schema_view(
     list=extend_schema(summary="List users", description="Get paginated list of users."),
     retrieve=extend_schema(summary="Get user", description="Get specific user details."),
     update=extend_schema(summary="Update user", description="Update user information."),
     partial_update=extend_schema(summary="Partially update user", description="Partially update user information."),
-    destroy=extend_schema(summary="Delete user", description="Delete a user account."),
+    destroy=extend_schema(summary="Delete user", description="Delete a user account and all associated data."),
 )
 class UserViewSet(ListModelMixin, RetrieveModelMixin, UpdateModelMixin, DestroyModelMixin, GenericViewSet):
     """
@@ -580,6 +744,186 @@ class UserViewSet(ListModelMixin, RetrieveModelMixin, UpdateModelMixin, DestroyM
             queryset = queryset.filter(profile__roles__name=role)
         
         return queryset
+    
+    def destroy(self, request, *args, **kwargs):
+        """
+        Delete user and all associated data.
+        This includes:
+        - Profile and roles
+        - Submissions (as corresponding author and co-author)
+        - Documents created by user
+        - Review assignments (as reviewer and assigner)
+        - Reviews and decisions
+        - Comments
+        - Journal staff positions
+        - Verification requests
+        - Activity logs
+        - ORCID integrations
+        - All other related records
+        
+        Only superusers can delete users.
+        """
+        user = self.get_object()
+        
+        # Only superusers can delete users
+        if not request.user.is_superuser:
+            return Response(
+                {'detail': 'Only superusers can delete user accounts.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Prevent self-deletion
+        if user.id == request.user.id:
+            return Response(
+                {'detail': 'You cannot delete your own account.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            # Get profile if exists
+            profile = None
+            if hasattr(user, 'profile'):
+                profile = user.profile
+            
+            # Log what will be deleted
+            deletion_summary = {
+                'user': user.email,
+                'deleted_items': {}
+            }
+            
+            if profile:
+                # Count items before deletion
+                from apps.submissions.models import Submission, Document, AuthorContribution, Comment
+                from apps.reviews.models import ReviewAssignment, Review, EditorialDecision
+                from apps.journals.models import JournalStaff
+                
+                # Submissions where user is corresponding author
+                corresponding_submissions = Submission.objects.filter(corresponding_author=profile).count()
+                deletion_summary['deleted_items']['corresponding_submissions'] = corresponding_submissions
+                
+                # Author contributions (co-authored submissions)
+                coauthor_contributions = AuthorContribution.objects.filter(profile=profile).count()
+                deletion_summary['deleted_items']['author_contributions'] = coauthor_contributions
+                
+                # Documents created by user
+                documents = Document.objects.filter(created_by=profile).count()
+                deletion_summary['deleted_items']['documents'] = documents
+                
+                # Review assignments as reviewer
+                review_assignments_as_reviewer = ReviewAssignment.objects.filter(reviewer=profile).count()
+                deletion_summary['deleted_items']['review_assignments_as_reviewer'] = review_assignments_as_reviewer
+                
+                # Review assignments assigned by user
+                review_assignments_assigned = ReviewAssignment.objects.filter(assigned_by=profile).count()
+                deletion_summary['deleted_items']['review_assignments_assigned'] = review_assignments_assigned
+                
+                # Reviews
+                reviews = Review.objects.filter(reviewer=profile).count()
+                deletion_summary['deleted_items']['reviews'] = reviews
+                
+                # Editorial decisions
+                decisions = EditorialDecision.objects.filter(decided_by=profile).count()
+                deletion_summary['deleted_items']['editorial_decisions'] = decisions
+                
+                # Comments
+                comments = Comment.objects.filter(author=profile).count()
+                deletion_summary['deleted_items']['comments'] = comments
+                
+                # Journal staff positions
+                staff_positions = JournalStaff.objects.filter(profile=profile).count()
+                deletion_summary['deleted_items']['journal_staff_positions'] = staff_positions
+                
+                # Verification requests
+                verification_requests = VerificationRequest.objects.filter(profile=profile).count()
+                deletion_summary['deleted_items']['verification_requests'] = verification_requests
+            
+            # Verification requests reviewed by user
+            reviewed_verifications = VerificationRequest.objects.filter(reviewed_by=user).count()
+            deletion_summary['deleted_items']['reviewed_verifications'] = reviewed_verifications
+            
+            # Log the deletion attempt
+            logger.info(f"Deleting user {user.email} (ID: {user.id}) by {request.user.email}")
+            logger.info(f"Deletion summary: {deletion_summary}")
+            
+            # Perform deletion
+            # Django's CASCADE will handle most relationships automatically
+            # But we need to handle some special cases
+            
+            with transaction.atomic():
+                if profile:
+                    # Delete submissions where user is corresponding author
+                    # This will cascade delete related documents, reviews, etc.
+                    Submission.objects.filter(corresponding_author=profile).delete()
+                    
+                    # Remove author contributions (don't delete the submissions, just the contributions)
+                    AuthorContribution.objects.filter(profile=profile).delete()
+                    
+                    # Delete review assignments where user is reviewer or assigner
+                    ReviewAssignment.objects.filter(reviewer=profile).delete()
+                    ReviewAssignment.objects.filter(assigned_by=profile).delete()
+                    
+                    # Delete reviews by user
+                    Review.objects.filter(reviewer=profile).delete()
+                    
+                    # Delete editorial decisions by user
+                    EditorialDecision.objects.filter(decided_by=profile).delete()
+                    
+                    # Delete comments by user
+                    Comment.objects.filter(author=profile).delete()
+                    
+                    # Delete journal staff positions
+                    JournalStaff.objects.filter(profile=profile).delete()
+                    
+                    # Delete verification requests
+                    VerificationRequest.objects.filter(profile=profile).delete()
+                
+                # Set reviewed_by to NULL for verification requests reviewed by this user
+                VerificationRequest.objects.filter(reviewed_by=user).update(reviewed_by=None)
+                
+                # Delete activity logs
+                from apps.common.models import ActivityLog
+                ActivityLog.objects.filter(user=user).delete()
+                
+                # Delete ORCID integration
+                from apps.integrations.models import ORCIDIntegration
+                if profile:
+                    ORCIDIntegration.objects.filter(profile=profile).delete()
+                
+                # Finally delete the user (this will cascade delete the profile)
+                user_email = user.email
+                user.delete()
+            
+            logger.info(f"Successfully deleted user {user_email}")
+            
+            # Log activity for the admin who performed deletion
+            log_activity(
+                user=request.user,
+                action_type='DELETE',
+                resource_type='USER',
+                resource_id=None,
+                metadata={
+                    'deleted_user': user_email,
+                    'deletion_summary': deletion_summary
+                },
+                request=request
+            )
+            
+            return Response(
+                {
+                    'detail': f'User {user_email} and all associated data have been deleted successfully.',
+                    'deletion_summary': deletion_summary
+                },
+                status=status.HTTP_200_OK
+            )
+            
+        except Exception as e:
+            logger.error(f"Error deleting user {user.email}: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return Response(
+                {'detail': f'Error deleting user: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 
 @extend_schema_view(

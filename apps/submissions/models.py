@@ -268,6 +268,7 @@ class Document(models.Model):
     # Original DOCX file
     original_file = models.FileField(
         upload_to='documents/%Y/%m/%d/',
+        max_length=500,
         null=True,
         blank=True,
         help_text="Original uploaded DOCX file"

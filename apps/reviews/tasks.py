@@ -147,6 +147,11 @@ def send_expiration_notification_to_editor(assignment):
 def send_revision_expiration_notification(revision):
     """Send notification when revision deadline expires."""
     submission = revision.submission
+    
+    if not submission.corresponding_author:
+        logger.warning(f"Revision {revision.id} has no corresponding author, skipping expiration notification")
+        return
+    
     author_email = submission.corresponding_author.user.email
     
     # Notify author
@@ -222,6 +227,10 @@ def send_revision_deadline_reminder(revision):
     Best regards,
     Editorial Team
     """
+    
+    if not revision.submission.corresponding_author:
+        logger.warning(f"Revision {revision.id} has no corresponding author, skipping reminder")
+        return
     
     send_mail(
         subject,

@@ -439,9 +439,11 @@ def send_review_invitation_email(assignment_id):
         submission = assignment.submission
         
         # Format author list
-        authors = [submission.corresponding_author.user.get_full_name()]
+        authors = []
+        if submission.corresponding_author:
+            authors.append(submission.corresponding_author.user.get_full_name())
         authors += [co.user.get_full_name() for co in submission.coauthors.all()]
-        submission_authors = ', '.join(authors)
+        submission_authors = ', '.join(authors) if authors else 'Unknown Authors'
         
         context = {
             'reviewer_name': reviewer.get_full_name() or reviewer.email,
@@ -653,6 +655,10 @@ def send_decision_letter_email(decision_id):
             'letter_template'
         ).get(id=decision_id)
         
+        if not decision.submission.corresponding_author:
+            logger.warning(f"Decision {decision_id} has no corresponding author, skipping notification")
+            return {'status': 'skipped', 'reason': 'no_corresponding_author'}
+        
         author = decision.submission.corresponding_author.user
         
         # Map decision type to template type
@@ -727,6 +733,10 @@ def send_revision_request_email(revision_round_id):
             'editorial_decision__letter_template'
         ).prefetch_related('reassigned_reviewers__user').get(id=revision_round_id)
         
+        if not revision.submission.corresponding_author:
+            logger.warning(f"Revision {revision_round_id} has no corresponding author, skipping notification")
+            return {'status': 'skipped', 'reason': 'no_corresponding_author'}
+        
         author = revision.submission.corresponding_author.user
         decision = revision.editorial_decision
         
@@ -790,6 +800,10 @@ def send_revision_submitted_notification(revision_round_id):
             logger.warning(f"No editor assigned for revision {revision_round_id}")
             return {'status': 'skipped', 'reason': 'no_editor'}
         
+        if not revision.submission.corresponding_author:
+            logger.warning(f"Revision {revision_round_id} has no corresponding author, skipping notification")
+            return {'status': 'skipped', 'reason': 'no_corresponding_author'}
+        
         author = revision.submission.corresponding_author.user
         
         # Calculate submission time
@@ -841,6 +855,10 @@ def send_revision_approved_email(revision_round_id):
             'editorial_decision__decided_by__user'
         ).get(id=revision_round_id)
         
+        if not revision.submission.corresponding_author:
+            logger.warning(f"Revision {revision_round_id} has no corresponding author, skipping notification")
+            return {'status': 'skipped', 'reason': 'no_corresponding_author'}
+        
         author = revision.submission.corresponding_author.user
         editor = revision.editorial_decision.decided_by
         
@@ -880,6 +898,10 @@ def send_revision_rejected_email(revision_round_id):
             'submission__corresponding_author__user',
             'editorial_decision__decided_by__user'
         ).get(id=revision_round_id)
+        
+        if not revision.submission.corresponding_author:
+            logger.warning(f"Revision {revision_round_id} has no corresponding author, skipping notification")
+            return {'status': 'skipped', 'reason': 'no_corresponding_author'}
         
         author = revision.submission.corresponding_author.user
         editor = revision.editorial_decision.decided_by
