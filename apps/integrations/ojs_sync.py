@@ -27,7 +27,8 @@ class OJSSyncService:
         self.journal = journal
         self.api_url = journal.ojs_api_url
         self.api_key = journal.ojs_api_key
-        self.ojs_journal_id = journal.ojs_journal_id
+        # Ensure ojs_journal_id is an integer
+        self.ojs_journal_id = int(journal.ojs_journal_id) if journal.ojs_journal_id else None
         
         if not self.api_url or not self.api_key:
             raise ValueError("Journal does not have OJS configured")
@@ -101,10 +102,10 @@ class OJSSyncService:
             logger.error(error_msg)
             return summary
     
-    @transaction.atomic
     def _import_single_submission(self, ojs_submission):
         """
         Import a single submission from OJS.
+        Each submission is processed independently to prevent cascading failures.
         
         Args:
             ojs_submission: OJS submission data
@@ -114,37 +115,42 @@ class OJSSyncService:
         """
         ojs_id = ojs_submission.get('id')
         
-        # Check if already imported
-        existing_mapping = OJSMapping.objects.filter(
-            ojs_submission_id=ojs_id,
-            local_submission__journal=self.journal
-        ).first()
-        
-        if existing_mapping:
-            # Update existing submission
-            self._update_submission_from_ojs(existing_mapping.local_submission, ojs_submission)
-            existing_mapping.sync_metadata = ojs_submission
-            existing_mapping.last_synced_at = timezone.now()
-            existing_mapping.sync_status = 'COMPLETED'
-            existing_mapping.save()
-            return 'updated'
-        
-        # Create new submission from OJS data
-        submission = self._create_submission_from_ojs(ojs_submission)
-        
-        if submission:
-            # Create mapping
-            OJSMapping.objects.create(
-                local_submission=submission,
-                ojs_submission_id=str(ojs_id),
-                sync_direction='FROM_OJS',
-                sync_status='COMPLETED',
-                last_synced_at=timezone.now(),
-                sync_metadata=ojs_submission
-            )
-            return 'imported'
-        
-        return 'skipped'
+        try:
+            with transaction.atomic():
+                # Check if already imported
+                existing_mapping = OJSMapping.objects.filter(
+                    ojs_submission_id=ojs_id,
+                    local_submission__journal=self.journal
+                ).first()
+                
+                if existing_mapping:
+                    # Update existing submission
+                    self._update_submission_from_ojs(existing_mapping.local_submission, ojs_submission)
+                    existing_mapping.sync_metadata = ojs_submission
+                    existing_mapping.last_synced_at = timezone.now()
+                    existing_mapping.sync_status = 'COMPLETED'
+                    existing_mapping.save()
+                    return 'updated'
+                
+                # Create new submission from OJS data
+                submission = self._create_submission_from_ojs(ojs_submission)
+                
+                if submission:
+                    # Create mapping
+                    OJSMapping.objects.create(
+                        local_submission=submission,
+                        ojs_submission_id=str(ojs_id),
+                        sync_direction='FROM_OJS',
+                        sync_status='COMPLETED',
+                        last_synced_at=timezone.now(),
+                        sync_metadata=ojs_submission
+                    )
+                    return 'imported'
+                
+                return 'skipped'
+        except Exception as e:
+            logger.error(f"Error importing submission {ojs_id}: {str(e)}")
+            raise
     
     def _create_submission_from_ojs(self, ojs_data):
         """
@@ -273,48 +279,40 @@ class OJSSyncService:
                     else:
                         orcid = orcid_raw
                 
-                # Try to find existing user (should have been imported in user import step)
-                user = CustomUser.objects.filter(email=email).first()
+                # First, check if a profile with this ORCID already exists
+                profile = None
+                if orcid:
+                    profile = Profile.objects.filter(orcid_id=orcid).first()
+                    if profile:
+                        logger.info(f"Found existing profile with ORCID {orcid} for user {profile.user.email}")
                 
-                # If user doesn't exist, create them (fallback for authors not in user list)
-                if not user:
-                    user = CustomUser.objects.create(
-                        email=email,
-                        username=email,
-                        first_name=given_name,
-                        last_name=family_name,
-                        imported_from=self.journal.id,
+                # If no profile found by ORCID, try to find by email
+                if not profile:
+                    user = CustomUser.objects.filter(email=email).first()
+                    
+                    # If user doesn't exist, create them (fallback for authors not in user list)
+                    if not user:
+                        user = CustomUser.objects.create(
+                            email=email,
+                            username=email,
+                            first_name=given_name,
+                            last_name=family_name,
+                            imported_from=self.journal.id,
+                        )
+                        user.set_unusable_password()
+                        user.save()
+                        logger.info(f"Created missing user during submission import: {email}")
+                    # If user already exists, just use it without updating
+                    
+                    # Get or create profile for this user
+                    profile, profile_created = Profile.objects.get_or_create(
+                        user=user,
+                        defaults={
+                            'affiliation_name': affiliation,
+                            'orcid_id': orcid if orcid else None,
+                        }
                     )
-                    user.set_unusable_password()
-                    user.save()
-                    logger.info(f"Created missing user during submission import: {email}")
-                else:
-                    # User exists - update imported_from if not set
-                    if not user.imported_from:
-                        user.imported_from = self.journal.id
-                        user.save(update_fields=['imported_from'])
-                
-                # Get or create profile for this user
-                profile, profile_created = Profile.objects.get_or_create(
-                    user=user,
-                    defaults={
-                        'affiliation_name': affiliation,
-                        'orcid_id': orcid if orcid else None,
-                    }
-                )
-                
-                # Update profile if it exists and has new info
-                if not profile_created:
-                    updated = False
-                    if affiliation and not profile.affiliation_name:
-                        profile.affiliation_name = affiliation
-                        updated = True
-                    # Only set ORCID if profile doesn't have one
-                    if orcid and not profile.orcid_id:
-                        profile.orcid_id = orcid
-                        updated = True
-                    if updated:
-                        profile.save()
+                    # If profile already exists, just use it without updating
                 
                 # Create author contribution (use get_or_create to avoid duplicates)
                 AuthorContribution.objects.get_or_create(
@@ -744,6 +742,19 @@ class OJSSyncService:
                 result['success'] = True
                 result['ojs_id'] = mapping.ojs_submission_id
                 
+                # Upload/sync documents to OJS (also for updates)
+                try:
+                    uploaded_files = self._upload_submission_files_to_ojs(submission, result['ojs_id'])
+                    if uploaded_files > 0:
+                        logger.info(f"Successfully uploaded {uploaded_files} files to OJS submission {result['ojs_id']}")
+                    else:
+                        logger.info(f"No files to upload for submission {result['ojs_id']}")
+                except Exception as e:
+                    logger.error(f"Failed to upload files to OJS: {str(e)}")
+                    import traceback
+                    traceback.print_exc()
+                    # Don't fail the whole operation if file upload fails
+                
                 # Update mapping
                 mapping.last_synced_at = timezone.now()
                 mapping.sync_status = 'COMPLETED'
@@ -751,16 +762,78 @@ class OJSSyncService:
                 mapping.save()
                 
             except OJSMapping.DoesNotExist:
-                # Create new OJS submission
+                # Create new OJS submission with publication
                 result['action'] = 'create'
-                ojs_data = self._prepare_ojs_data(submission)
-                response = ojs_create_submission(
-                    self.api_url,
-                    self.api_key,
-                    ojs_data
-                )
-                result['success'] = True
-                result['ojs_id'] = response.get('id')
+                
+                import requests
+                headers = {
+                    'Authorization': f'Bearer {self.api_key}',
+                    'Content-Type': 'application/json'
+                }
+                
+                # Step 1: Create minimal submission first
+                submission_data = {
+                    'contextId': self.ojs_journal_id,
+                    'submissionProgress': 0,  # Mark as complete
+                }
+                
+                # If we have a section, add it
+                if submission.section:
+                    submission_data['sectionId'] = submission.section.id
+                
+                url = f"{self.api_url}/submissions"
+                
+                logger.info(f"Creating submission in OJS: {url}")
+                logger.info(f"Submission data: {submission_data}")
+                
+                response = requests.post(url, json=submission_data, headers=headers)
+                logger.info(f"Create submission response: {response.status_code}")
+                logger.info(f"Create submission body: {response.text}")
+                
+                if response.status_code not in [200, 201]:
+                    result['error'] = f"OJS API returned {response.status_code}: {response.text}"
+                    logger.error(result['error'])
+                    return result
+                
+                response.raise_for_status()
+                ojs_submission = response.json()
+                result['ojs_id'] = ojs_submission.get('id')
+                
+                logger.info(f"Created OJS submission ID: {result['ojs_id']}")
+                
+                # Step 2: Create publication for the submission
+                publication_data = self._prepare_publication_data(submission)
+                pub_url = f"{self.api_url}/submissions/{result['ojs_id']}/publications"
+                
+                logger.info(f"Creating publication in OJS: {pub_url}")
+                logger.info(f"Publication data: {publication_data}")
+                
+                pub_response = requests.post(pub_url, json=publication_data, headers=headers)
+                logger.info(f"Create publication response: {pub_response.status_code}")
+                logger.info(f"Create publication body: {pub_response.text}")
+                
+                if pub_response.status_code in [200, 201]:
+                    pub_data = pub_response.json()
+                    logger.info(f"Successfully created publication {pub_data.get('id')} for submission {result['ojs_id']}")
+                    result['success'] = True
+                else:
+                    logger.error(f"Failed to create publication: {pub_response.status_code} - {pub_response.text}")
+                    # Still mark as success since submission was created, just warn
+                    result['success'] = True
+                    result['warning'] = f"Submission created but publication failed: {pub_response.text}"
+                
+                # Step 4: Upload documents to OJS
+                try:
+                    uploaded_files = self._upload_submission_files_to_ojs(submission, result['ojs_id'])
+                    if uploaded_files > 0:
+                        logger.info(f"Successfully uploaded {uploaded_files} files to OJS submission {result['ojs_id']}")
+                    else:
+                        logger.info(f"No files to upload for submission {result['ojs_id']}")
+                except Exception as e:
+                    logger.error(f"Failed to upload files to OJS: {str(e)}")
+                    import traceback
+                    traceback.print_exc()
+                    # Don't fail the whole operation if file upload fails
                 
                 # Create mapping
                 OJSMapping.objects.create(
@@ -769,7 +842,7 @@ class OJSSyncService:
                     sync_direction='TO_OJS',
                     sync_status='COMPLETED',
                     last_synced_at=timezone.now(),
-                    sync_metadata=response
+                    sync_metadata=ojs_submission
                 )
             
             logger.info(f"Pushed submission {submission.id} to OJS: {result['action']}")
@@ -779,6 +852,124 @@ class OJSSyncService:
             result['error'] = str(e)
             logger.error(f"Failed to push submission {submission.id} to OJS: {str(e)}")
             return result
+    
+    def _upload_submission_files_to_ojs(self, submission, ojs_submission_id):
+        """
+        Upload documents from Django submission to OJS.
+        Only uploads files that don't already exist in OJS.
+        
+        Args:
+            submission: Django Submission instance
+            ojs_submission_id: OJS submission ID
+            
+        Returns:
+            int: Number of files uploaded
+        """
+        import requests
+        
+        uploaded_count = 0
+        
+        # Get all documents for this submission
+        documents = submission.documents.all().order_by('created_at')
+        
+        logger.info(f"Found {documents.count()} documents to upload for submission {submission.id}")
+        
+        # First, get existing files in OJS to avoid duplicates
+        existing_files = []
+        try:
+            files_url = f"{self.api_url}/submissions/{ojs_submission_id}/files"
+            headers = {
+                'Authorization': f'Bearer {self.api_key}',
+                'Content-Type': 'application/json'
+            }
+            files_response = requests.get(files_url, headers=headers, timeout=30)
+            if files_response.status_code == 200:
+                files_data = files_response.json()
+                existing_files = files_data.get('items', [])
+                logger.info(f"Found {len(existing_files)} existing files in OJS submission {ojs_submission_id}")
+        except Exception as e:
+            logger.warning(f"Could not fetch existing files: {str(e)}")
+        
+        # Create a set of existing file names for quick lookup
+        existing_file_names = {f.get('name', {}).get('en_US', '') for f in existing_files}
+        
+        for document in documents:
+            try:
+                # Skip documents without files
+                if not document.original_file:
+                    logger.warning(f"Skipping document {document.id} - no file attached")
+                    continue
+                
+                # Get file name
+                file_name = document.file_name or document.original_file.name
+                
+                # Check if file already exists in OJS
+                if file_name in existing_file_names:
+                    logger.info(f"Skipping file {file_name} - already exists in OJS")
+                    continue
+                
+                # Map Django document types to OJS file stages
+                # OJS fileStage values: 2=submission, 15=supplementary
+                file_stage = 2 if document.document_type == 'MANUSCRIPT' else 15
+                
+                logger.info(f"Uploading file: {file_name} (type: {document.document_type}) to OJS")
+                
+                # Read file content
+                document.original_file.seek(0)  # Reset file pointer
+                file_content = document.original_file.read()
+                
+                # Determine MIME type from file extension
+                import mimetypes
+                mime_type, _ = mimetypes.guess_type(file_name)
+                mime_type = mime_type or 'application/octet-stream'
+                
+                # Prepare file upload according to OJS API documentation
+                # OJS expects multipart/form-data with JSON metadata and binary file
+                url = f"{self.api_url}/submissions/{ojs_submission_id}/files"
+                headers = {
+                    'Authorization': f'Bearer {self.api_key}',
+                }
+                
+                # Prepare multipart form data with file and metadata
+                files = {
+                    'file': (file_name, file_content, mime_type)
+                }
+                
+                # Add required form fields as per OJS documentation
+                form_data = {
+                    'fileStage': str(file_stage),
+                    'genreId': '1',  # Article Text genre
+                    'name[en_US]': file_name,
+                    'submissionId': str(ojs_submission_id),
+                }
+                
+                logger.info(f"Upload URL: {url}")
+                logger.info(f"Form data: {form_data}")
+                
+                # Upload file to OJS
+                response = requests.post(url, headers=headers, files=files, data=form_data, timeout=60)
+                
+                # Log response for debugging
+                logger.info(f"Upload response status: {response.status_code}")
+                logger.info(f"Upload response body: {response.text[:500]}")  # First 500 chars
+                
+                if response.status_code not in [200, 201]:
+                    logger.error(f"OJS file upload failed. Status: {response.status_code}, Body: {response.text}")
+                    continue  # Skip this file but don't fail
+                
+                response.raise_for_status()
+                
+                uploaded_count += 1
+                logger.info(f"Successfully uploaded file {file_name} to OJS submission {ojs_submission_id}")
+                
+            except Exception as e:
+                file_name = document.file_name if hasattr(document, 'file_name') else 'unknown'
+                logger.error(f"Failed to upload file {file_name} to OJS: {str(e)}")
+                import traceback
+                traceback.print_exc()
+                continue
+        
+        return uploaded_count
     
     def _prepare_ojs_data(self, submission):
         """
@@ -795,9 +986,15 @@ class OJSSyncService:
             'DRAFT': 5,
             'SUBMITTED': 1,
             'UNDER_REVIEW': 2,
+            'REVISION_REQUIRED': 2,
+            'REVISION_REQUESTED': 2,
+            'REVISED': 2,
+            'ACCEPTANCE_REQUESTED': 1,
+            'REJECTION_REQUESTED': 1,
             'ACCEPTED': 1,
             'PUBLISHED': 3,
             'REJECTED': 4,
+            'WITHDRAWN': 4,
         }
         
         ojs_data = {
@@ -809,7 +1006,7 @@ class OJSSyncService:
                 'en_US': submission.title
             },
             'abstract': {
-                'en_US': submission.abstract
+                'en_US': submission.abstract or ''
             }
         }
         
@@ -817,7 +1014,121 @@ class OJSSyncService:
         if submission.section:
             ojs_data['sectionId'] = submission.section.id
         
+        # Add authors from author_contributions
+        authors = []
+        for contrib in submission.author_contributions.all().order_by('order'):
+            author_data = {
+                'givenName': {
+                    'en_US': contrib.profile.user.first_name or 'Unknown'
+                },
+                'familyName': {
+                    'en_US': contrib.profile.user.last_name or 'Unknown'
+                },
+                'email': contrib.profile.user.email,
+                'userGroupId': 14,  # Author group in OJS (typically 14)
+                'includeInBrowse': True,
+            }
+            
+            # Add ORCID if available
+            if contrib.profile.orcid_id:
+                author_data['orcid'] = f"https://orcid.org/{contrib.profile.orcid_id}"
+            
+            # Add affiliation if available
+            if contrib.profile.affiliation_name:
+                author_data['affiliation'] = {
+                    'en_US': contrib.profile.affiliation_name
+                }
+            
+            # Mark primary contact (first author or corresponding author)
+            if contrib.order == 1:
+                author_data['primaryContact'] = True
+            
+            authors.append(author_data)
+        
+        if authors:
+            ojs_data['authors'] = authors
+        
+        # Add keywords if available in metadata
+        if hasattr(submission, 'metadata_json') and submission.metadata_json:
+            keywords = submission.metadata_json.get('keywords', [])
+            if keywords:
+                if isinstance(keywords, list):
+                    ojs_data['keywords'] = {
+                        'en_US': keywords
+                    }
+                elif isinstance(keywords, str):
+                    ojs_data['keywords'] = {
+                        'en_US': [k.strip() for k in keywords.split(',')]
+                    }
+        
         return ojs_data
+    
+    def _prepare_publication_data(self, submission):
+        """
+        Prepare publication data for OJS.
+        A publication is required for the submission to be visible in OJS.
+        
+        Args:
+            submission: Django Submission instance
+            
+        Returns:
+            dict: Publication data for OJS
+        """
+        # Prepare authors for publication
+        authors = []
+        for contrib in submission.author_contributions.all().order_by('order'):
+            author_data = {
+                'givenName': {
+                    'en_US': contrib.profile.user.first_name or 'Unknown'
+                },
+                'familyName': {
+                    'en_US': contrib.profile.user.last_name or 'Unknown'
+                },
+                'email': contrib.profile.user.email,
+                'userGroupId': 14,
+                'includeInBrowse': True,
+            }
+            
+            if contrib.profile.orcid_id:
+                author_data['orcid'] = f"https://orcid.org/{contrib.profile.orcid_id}"
+            
+            if contrib.profile.affiliation_name:
+                author_data['affiliation'] = {
+                    'en_US': contrib.profile.affiliation_name
+                }
+            
+            if contrib.order == 1:
+                author_data['primaryContact'] = True
+            
+            authors.append(author_data)
+        
+        publication_data = {
+            'title': {
+                'en_US': submission.title
+            },
+            'abstract': {
+                'en_US': submission.abstract or ''
+            },
+            'locale': 'en_US',
+            'authors': authors,
+            'status': 1,  # STATUS_QUEUED - submitted but not scheduled
+            'version': 1,  # Required by OJS
+        }
+        
+        # Add keywords if available
+        if hasattr(submission, 'metadata_json') and submission.metadata_json:
+            keywords = submission.metadata_json.get('keywords', [])
+            if keywords:
+                if isinstance(keywords, list):
+                    publication_data['keywords'] = {
+                        'en_US': keywords
+                    }
+                elif isinstance(keywords, str):
+                    publication_data['keywords'] = {
+                        'en_US': [k.strip() for k in keywords.split(',')]
+                    }
+        
+        return publication_data
     
     def import_users(self):
         """
