@@ -662,12 +662,21 @@ class PasswordSetupRequestView(APIView):
             frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
             setup_url = f"{frontend_url}/setup-password/{uid}/{token}"
             
+            # Get journal title from imported_from UUID
+            journal_title = "unknown journal"
+            try:
+                from apps.journals.models import Journal
+                journal = Journal.objects.get(id=user.imported_from)
+                journal_title = journal.title
+            except (Journal.DoesNotExist, ValueError):
+                logger.warning(f"Could not find journal for imported_from: {user.imported_from}")
+            
             # Send email
             subject = 'Set Up Your Password - Journal Portal'
             message = f"""
 Hello {user.first_name or user.email},
 
-Your account has been imported from OJS. To access the Journal Portal, you need to set up your password.
+Your account has been imported from {journal_title}. To access the Journal Portal, you need to set up your password.
 
 Click the link below to set your password:
 {setup_url}

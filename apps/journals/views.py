@@ -517,8 +517,37 @@ class JournalViewSet(viewsets.ModelViewSet):
             from apps.integrations.ojs_sync import import_all_ojs_data_for_journal
             summary = import_all_ojs_data_for_journal(journal)
             
+            # Check if there were any errors in the import
+            user_errors = summary.get('users', {}).get('errors', 0)
+            submission_errors = summary.get('submissions', {}).get('errors', 0)
+            user_imported = summary.get('users', {}).get('imported', 0)
+            submission_imported = summary.get('submissions', {}).get('imported', 0)
+            
+            # If there were errors and nothing was imported, treat as failure
+            has_errors = user_errors > 0 or submission_errors > 0
+            nothing_imported = user_imported == 0 and submission_imported == 0
+            
+            if has_errors and nothing_imported:
+                error_details = []
+                error_details.extend(summary.get('users', {}).get('error_details', []))
+                error_details.extend(summary.get('submissions', {}).get('error_details', []))
+                
+                return Response({
+                    'detail': 'OJS import failed',
+                    'errors': error_details,
+                    'summary': summary
+                }, status=status.HTTP_502_BAD_GATEWAY)
+            
+            # If some items were imported but there were also errors, show warning
+            if has_errors:
+                return Response({
+                    'detail': 'OJS import completed with errors',
+                    'summary': summary
+                }, status=status.HTTP_207_MULTI_STATUS)
+            
+            # Complete success
             return Response({
-                'detail': 'OJS import completed',
+                'detail': 'OJS import completed successfully',
                 'summary': summary
             })
         except Exception as e:
