@@ -189,13 +189,30 @@ class SubmissionViewSet(viewsets.ModelViewSet):
     
     @extend_schema(
         summary="List draft submissions",
-        description="Get all submissions in DRAFT status.",
+        description="Get submissions in DRAFT status. By default shows only your own submissions. Use ?view_as=editor to see all journal submissions.",
+        parameters=[
+            OpenApiParameter(
+                name='view_as',
+                description='Filter submissions by role: author (default, only your submissions) or editor (all journal submissions)',
+                required=False,
+                type=str
+            )
+        ],
         responses={200: SubmissionListSerializer(many=True)}
     )
     @action(detail=False, methods=['get'])
     def drafts(self, request):
         """Get all draft submissions for the user."""
         queryset = self.get_queryset().filter(status='DRAFT')
+        
+        # Default to author view unless explicitly requesting editor view
+        view_as = request.query_params.get('view_as', 'author').lower()
+        if view_as == 'author' and hasattr(request.user, 'profile'):
+            # Only show submissions where user is author (corresponding or co-author)
+            queryset = queryset.filter(
+                Q(corresponding_author=request.user.profile) |
+                Q(author_contributions__profile=request.user.profile)
+            ).distinct()
         
         page = self.paginate_queryset(queryset)
         if page is not None:
@@ -207,7 +224,15 @@ class SubmissionViewSet(viewsets.ModelViewSet):
     
     @extend_schema(
         summary="List unassigned submissions",
-        description="Get all submissions that are SUBMITTED or UNDER_REVIEW but have no reviewers assigned.",
+        description="Get submissions that are SUBMITTED but have no reviewers assigned. By default shows only your own submissions. Use ?view_as=editor to see all journal submissions.",
+        parameters=[
+            OpenApiParameter(
+                name='view_as',
+                description='Filter submissions by role: author (default, only your submissions) or editor (all journal submissions)',
+                required=False,
+                type=str
+            )
+        ],
         responses={200: SubmissionListSerializer(many=True)}
     )
     @action(detail=False, methods=['get'])
@@ -223,6 +248,15 @@ class SubmissionViewSet(viewsets.ModelViewSet):
             review_count=Count('review_assignments')
         ).filter(review_count=0)
         
+        # Default to author view unless explicitly requesting editor view
+        view_as = request.query_params.get('view_as', 'author').lower()
+        if view_as == 'author' and hasattr(request.user, 'profile'):
+            # Only show submissions where user is author (corresponding or co-author)
+            queryset = queryset.filter(
+                Q(corresponding_author=request.user.profile) |
+                Q(author_contributions__profile=request.user.profile)
+            ).distinct()
+        
         page = self.paginate_queryset(queryset)
         if page is not None:
             serializer = SubmissionListSerializer(page, many=True, context={'request': request})
@@ -233,7 +267,15 @@ class SubmissionViewSet(viewsets.ModelViewSet):
     
     @extend_schema(
         summary="List active submissions",
-        description="Get all submissions that are actively being reviewed (have reviewers assigned).",
+        description="Get submissions that are actively being reviewed (have reviewers assigned). By default shows only your own submissions. Use ?view_as=editor to see all journal submissions.",
+        parameters=[
+            OpenApiParameter(
+                name='view_as',
+                description='Filter submissions by role: author (default, only your submissions) or editor (all journal submissions)',
+                required=False,
+                type=str
+            )
+        ],
         responses={200: SubmissionListSerializer(many=True)}
     )
     @action(detail=False, methods=['get'])
@@ -251,6 +293,15 @@ class SubmissionViewSet(viewsets.ModelViewSet):
             review_count=Count('review_assignments')
         ).filter(review_count__gt=0)
         
+        # Default to author view unless explicitly requesting editor view
+        view_as = request.query_params.get('view_as', 'author').lower()
+        if view_as == 'author' and hasattr(request.user, 'profile'):
+            # Only show submissions where user is author (corresponding or co-author)
+            queryset = queryset.filter(
+                Q(corresponding_author=request.user.profile) |
+                Q(author_contributions__profile=request.user.profile)
+            ).distinct()
+        
         page = self.paginate_queryset(queryset)
         if page is not None:
             serializer = SubmissionListSerializer(page, many=True, context={'request': request})
@@ -261,7 +312,15 @@ class SubmissionViewSet(viewsets.ModelViewSet):
     
     @extend_schema(
         summary="List archived submissions",
-        description="Get all submissions that are completed (ACCEPTED, REJECTED, WITHDRAWN, or PUBLISHED).",
+        description="Get submissions that are completed (ACCEPTED, REJECTED, WITHDRAWN, or PUBLISHED). By default shows only your own submissions. Use ?view_as=editor to see all journal submissions.",
+        parameters=[
+            OpenApiParameter(
+                name='view_as',
+                description='Filter submissions by role: author (default, only your submissions) or editor (all journal submissions)',
+                required=False,
+                type=str
+            )
+        ],
         responses={200: SubmissionListSerializer(many=True)}
     )
     @action(detail=False, methods=['get'])
@@ -273,6 +332,15 @@ class SubmissionViewSet(viewsets.ModelViewSet):
                 'ACCEPTED'
             ]
         )
+        
+        # Default to author view unless explicitly requesting editor view
+        view_as = request.query_params.get('view_as', 'author').lower()
+        if view_as == 'author' and hasattr(request.user, 'profile'):
+            # Only show submissions where user is author (corresponding or co-author)
+            queryset = queryset.filter(
+                Q(corresponding_author=request.user.profile) |
+                Q(author_contributions__profile=request.user.profile)
+            ).distinct()
         
         page = self.paginate_queryset(queryset)
         if page is not None:
