@@ -374,6 +374,8 @@ class JournalViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post', 'put'], url_path='ojs-connection', permission_classes=[IsAuthenticated])
     def configure_ojs(self, request, pk=None):
         """Configure OJS connection for this journal."""
+        import requests
+        
         journal = self.get_object()
         
         # Check if user has permission (Editor-in-Chief or Managing Editor)
@@ -390,11 +392,71 @@ class JournalViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_403_FORBIDDEN
                 )
         
-        # Update OJS settings
-        journal.ojs_enabled = request.data.get('ojs_enabled', journal.ojs_enabled)
-        journal.ojs_api_url = request.data.get('ojs_api_url', journal.ojs_api_url)
-        journal.ojs_api_key = request.data.get('ojs_api_key', journal.ojs_api_key)
-        journal.ojs_journal_id = request.data.get('ojs_journal_id', journal.ojs_journal_id)
+        # Get the new OJS configuration from request
+        ojs_api_url = request.data.get('ojs_api_url', journal.ojs_api_url)
+        ojs_api_key = request.data.get('ojs_api_key', journal.ojs_api_key)
+        ojs_journal_id = request.data.get('ojs_journal_id', journal.ojs_journal_id)
+        ojs_enabled = request.data.get('ojs_enabled', journal.ojs_enabled)
+        
+        # Test connection before saving if credentials are provided
+        if ojs_api_url and ojs_api_key:
+            try:
+                headers = {
+                    'Authorization': f'Bearer {ojs_api_key}',
+                    'Content-Type': 'application/json'
+                }
+                # Test connection with a simple API call
+                response = requests.get(
+                    f"{ojs_api_url}/submissions",
+                    headers=headers,
+                    params={'count': 1},
+                    timeout=10
+                )
+                
+                if response.status_code == 401:
+                    return Response({
+                        'detail': 'Authentication failed - invalid API key',
+                        'error': 'invalid_credentials'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                elif response.status_code == 403:
+                    return Response({
+                        'detail': 'Access forbidden - insufficient permissions',
+                        'error': 'forbidden'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                elif response.status_code == 404:
+                    return Response({
+                        'detail': 'OJS endpoint not found - check API URL',
+                        'error': 'endpoint_not_found'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                elif response.status_code != 200:
+                    return Response({
+                        'detail': f'Connection failed with status {response.status_code}',
+                        'error': 'connection_failed'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                
+                # Connection successful
+                
+            except requests.exceptions.Timeout:
+                return Response({
+                    'detail': 'Connection timeout - OJS server not responding',
+                    'error': 'timeout'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            except requests.exceptions.ConnectionError:
+                return Response({
+                    'detail': 'Cannot reach OJS server - check URL and network',
+                    'error': 'connection_error'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            except Exception as e:
+                return Response({
+                    'detail': f'Connection error: {str(e)}',
+                    'error': 'unknown_error'
+                }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Update OJS settings after successful connection test
+        journal.ojs_enabled = ojs_enabled
+        journal.ojs_api_url = ojs_api_url
+        journal.ojs_api_key = ojs_api_key
+        journal.ojs_journal_id = ojs_journal_id
         
         journal.save()
         
