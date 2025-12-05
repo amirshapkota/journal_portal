@@ -4,6 +4,7 @@ Handles importing data from OJS and syncing submissions bidirectionally.
 """
 from django.utils import timezone
 from django.db import transaction
+from django.core.cache import cache
 from apps.submissions.models import Submission
 from apps.integrations.models import OJSMapping
 from apps.integrations.utils import (
@@ -41,6 +42,9 @@ class OJSSyncService:
         Returns:
             dict: Summary of import operation
         """
+        # Create a unique cache key for this journal's import progress
+        progress_key = f"ojs_import_progress_{self.journal.id}"
+        
         summary = {
             'total_ojs_submissions': 0,
             'imported': 0,
@@ -51,6 +55,20 @@ class OJSSyncService:
         }
         
         try:
+            # Initialize progress tracking
+            progress = {
+                'status': 'fetching',
+                'current': 0,
+                'total': 0,
+                'percentage': 0,
+                'stage': 'Fetching submissions from OJS',
+                'imported': 0,
+                'updated': 0,
+                'skipped': 0,
+                'errors': 0
+            }
+            cache.set(progress_key, progress, timeout=3600)  # 1 hour timeout
+            
             # Fetch all submissions from OJS with pagination
             logger.info(f"Fetching submissions from OJS for journal {self.journal.title}")
             
@@ -66,6 +84,13 @@ class OJSSyncService:
                 
                 all_items.extend(items)
                 
+                # Update progress with percentage
+                progress['total'] = items_max
+                progress['current'] = len(all_items)
+                progress['percentage'] = round((len(all_items) / items_max * 100), 2) if items_max > 0 else 0
+                progress['stage'] = f'Fetching submissions from OJS ({len(all_items)}/{items_max})'
+                cache.set(progress_key, progress, timeout=3600)
+                
                 logger.info(f"Fetched {len(items)} submissions (offset {offset}), total so far: {len(all_items)}/{items_max}")
                 
                 # Check if we have all items
@@ -77,21 +102,48 @@ class OJSSyncService:
             summary['total_ojs_submissions'] = len(all_items)
             logger.info(f"Found {len(all_items)} total submissions to process")
             
-            # Process each OJS submission
-            for ojs_submission in all_items:
+            # Sort submissions by ID to ensure consistent processing order
+            all_items.sort(key=lambda x: x.get('id', 0))
+            
+            # Update progress to processing stage
+            progress['status'] = 'processing'
+            progress['stage'] = 'Processing submissions'
+            progress['total'] = len(all_items)
+            progress['current'] = 0
+            progress['percentage'] = 0
+            cache.set(progress_key, progress, timeout=3600)
+            
+            # Process each OJS submission in order
+            for idx, ojs_submission in enumerate(all_items, 1):
                 try:
                     result = self._import_single_submission(ojs_submission)
                     if result == 'imported':
                         summary['imported'] += 1
+                        progress['imported'] += 1
                     elif result == 'updated':
                         summary['updated'] += 1
+                        progress['updated'] += 1
                     elif result == 'skipped':
                         summary['skipped'] += 1
+                        progress['skipped'] += 1
                 except Exception as e:
                     summary['errors'] += 1
+                    progress['errors'] += 1
                     error_msg = f"Error importing OJS ID {ojs_submission.get('id')}: {str(e)}"
                     summary['error_details'].append(error_msg)
                     logger.error(error_msg)
+                
+                # Update progress every submission with percentage
+                progress['current'] = idx
+                progress['percentage'] = round((idx / len(all_items) * 100), 2) if len(all_items) > 0 else 0
+                progress['stage'] = f'Processing submission {idx}/{len(all_items)}'
+                cache.set(progress_key, progress, timeout=3600)
+            
+            # Mark as complete
+            progress['status'] = 'completed'
+            progress['percentage'] = 100
+            progress['stage'] = 'Import completed'
+            cache.set(progress_key, progress, timeout=3600)
             
             logger.info(f"Import complete: {summary}")
             return summary

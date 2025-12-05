@@ -556,6 +556,41 @@ class JournalViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
     
+    @action(detail=True, methods=['get'], url_path='import-progress', permission_classes=[IsAuthenticated])
+    def import_progress(self, request, pk=None):
+        """
+        Get the current progress of OJS import operation.
+        Returns progress information including current item, total items, and status.
+        """
+        from django.core.cache import cache
+        
+        journal = self.get_object()
+        
+        # Check permission
+        if hasattr(request.user, 'profile'):
+            staff_member = journal.staff_members.filter(
+                profile=request.user.profile,
+                is_active=True
+            ).first()
+            
+            if not staff_member and not request.user.is_superuser:
+                return Response(
+                    {'detail': 'You do not have permission to view import progress.'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        
+        # Get progress from cache
+        progress_key = f"ojs_import_progress_{journal.id}"
+        progress = cache.get(progress_key)
+        
+        if not progress:
+            return Response({
+                'status': 'idle',
+                'message': 'No import in progress'
+            })
+        
+        return Response(progress)
+    
     @extend_schema(
         summary="Get journal statistics",
         description="Get statistics for a journal (submissions, reviews, etc.)."
