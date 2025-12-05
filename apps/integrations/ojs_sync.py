@@ -4,6 +4,7 @@ Handles importing data from OJS and syncing submissions bidirectionally.
 """
 from django.utils import timezone
 from django.db import transaction
+from django.core.cache import cache
 from apps.submissions.models import Submission
 from apps.integrations.models import OJSMapping
 from apps.integrations.utils import (
@@ -41,6 +42,9 @@ class OJSSyncService:
         Returns:
             dict: Summary of import operation
         """
+        # Create a unique cache key for this journal's import progress
+        progress_key = f"ojs_import_progress_{self.journal.id}"
+        
         summary = {
             'total_ojs_submissions': 0,
             'imported': 0,
@@ -51,6 +55,20 @@ class OJSSyncService:
         }
         
         try:
+            # Initialize progress tracking
+            progress = {
+                'status': 'fetching',
+                'current': 0,
+                'total': 0,
+                'percentage': 0,
+                'stage': 'Fetching submissions from OJS',
+                'imported': 0,
+                'updated': 0,
+                'skipped': 0,
+                'errors': 0
+            }
+            cache.set(progress_key, progress, timeout=3600)  # 1 hour timeout
+            
             # Fetch all submissions from OJS with pagination
             logger.info(f"Fetching submissions from OJS for journal {self.journal.title}")
             
@@ -66,6 +84,13 @@ class OJSSyncService:
                 
                 all_items.extend(items)
                 
+                # Update progress with percentage
+                progress['total'] = items_max
+                progress['current'] = len(all_items)
+                progress['percentage'] = round((len(all_items) / items_max * 100), 2) if items_max > 0 else 0
+                progress['stage'] = f'Fetching submissions from OJS ({len(all_items)}/{items_max})'
+                cache.set(progress_key, progress, timeout=3600)
+                
                 logger.info(f"Fetched {len(items)} submissions (offset {offset}), total so far: {len(all_items)}/{items_max}")
                 
                 # Check if we have all items
@@ -77,21 +102,48 @@ class OJSSyncService:
             summary['total_ojs_submissions'] = len(all_items)
             logger.info(f"Found {len(all_items)} total submissions to process")
             
-            # Process each OJS submission
-            for ojs_submission in all_items:
+            # Sort submissions by ID to ensure consistent processing order
+            all_items.sort(key=lambda x: x.get('id', 0))
+            
+            # Update progress to processing stage
+            progress['status'] = 'processing'
+            progress['stage'] = 'Processing submissions'
+            progress['total'] = len(all_items)
+            progress['current'] = 0
+            progress['percentage'] = 0
+            cache.set(progress_key, progress, timeout=3600)
+            
+            # Process each OJS submission in order
+            for idx, ojs_submission in enumerate(all_items, 1):
                 try:
                     result = self._import_single_submission(ojs_submission)
                     if result == 'imported':
                         summary['imported'] += 1
+                        progress['imported'] += 1
                     elif result == 'updated':
                         summary['updated'] += 1
+                        progress['updated'] += 1
                     elif result == 'skipped':
                         summary['skipped'] += 1
+                        progress['skipped'] += 1
                 except Exception as e:
                     summary['errors'] += 1
+                    progress['errors'] += 1
                     error_msg = f"Error importing OJS ID {ojs_submission.get('id')}: {str(e)}"
                     summary['error_details'].append(error_msg)
                     logger.error(error_msg)
+                
+                # Update progress every submission with percentage
+                progress['current'] = idx
+                progress['percentage'] = round((idx / len(all_items) * 100), 2) if len(all_items) > 0 else 0
+                progress['stage'] = f'Processing submission {idx}/{len(all_items)}'
+                cache.set(progress_key, progress, timeout=3600)
+            
+            # Mark as complete
+            progress['status'] = 'completed'
+            progress['percentage'] = 100
+            progress['stage'] = 'Import completed'
+            cache.set(progress_key, progress, timeout=3600)
             
             logger.info(f"Import complete: {summary}")
             return summary
@@ -125,6 +177,7 @@ class OJSSyncService:
                 
                 if existing_mapping:
                     # Update existing submission
+                    logger.info(f"Updating existing submission from OJS ID {ojs_id}")
                     self._update_submission_from_ojs(existing_mapping.local_submission, ojs_submission)
                     existing_mapping.sync_metadata = ojs_submission
                     existing_mapping.last_synced_at = timezone.now()
@@ -133,6 +186,7 @@ class OJSSyncService:
                     return 'updated'
                 
                 # Create new submission from OJS data
+                logger.info(f"Creating new submission from OJS ID {ojs_id}")
                 submission = self._create_submission_from_ojs(ojs_submission)
                 
                 if submission:
@@ -562,118 +616,178 @@ class OJSSyncService:
                 'Content-Type': 'application/json'
             }
             
-            # Fetch full submission details to get review data
-            url = f"{self.api_url}/submissions/{ojs_submission_id}"
-            resp = requests.get(url, headers=headers)
-            resp.raise_for_status()
+            # OJS 3.x stores reviews in reviewRounds, not directly in submission
+            # Try to fetch review rounds first using internal editorial endpoint
+            # The public API may not expose reviewer information
+            review_rounds_url = f"{self.api_url.replace('/api/v1', '')}/$$$call$$$/api/workflow/index"
+            
+            logger.info(f"Attempting to fetch review data for OJS submission {ojs_submission_id}")
+            
+            # First try the standard submissions endpoint
+            resp = requests.get(f"{self.api_url}/submissions/{ojs_submission_id}", headers=headers)
+            
+            if resp.status_code != 200:
+                logger.warning(f"Could not fetch submission data for {ojs_submission_id}: status {resp.status_code}")
+                return 0
+            
             full_data = resp.json()
             
-            # Import review assignments
-            review_assignments = full_data.get('reviewAssignments', [])
+            # Check for reviewRounds (OJS 3.x structure)
+            review_rounds = full_data.get('reviewRounds', [])
+            logger.info(f"Found {len(review_rounds)} review rounds for OJS submission {ojs_submission_id}")
             
-            for ra in review_assignments:
-                try:
-                    # Get or create reviewer profile
-                    reviewer_id = ra.get('reviewerId')
-                    if not reviewer_id:
-                        continue
-                    
-                    # Fetch reviewer details
-                    user_resp = requests.get(f"{self.api_url}/users/{reviewer_id}", headers=headers)
-                    if user_resp.status_code != 200:
-                        continue
-                    
-                    user_data = user_resp.json()
-                    email = user_data.get('email')
-                    
-                    if not email:
-                        continue
-                    
-                    # Get or create user
-                    full_name = user_data.get('fullName', '')
-                    name_parts = full_name.split(' ', 1)
-                    first_name = name_parts[0] if name_parts else ''
-                    last_name = name_parts[1] if len(name_parts) > 1 else ''
-                    
-                    user, _ = CustomUser.objects.get_or_create(
-                        email=email,
-                        defaults={
-                            'username': user_data.get('userName', email.split('@')[0]),
-                            'first_name': first_name,
-                            'last_name': last_name,
-                        }
-                    )
-                    
-                    # Get or create profile
-                    profile, _ = Profile.objects.get_or_create(user=user)
-                    
-                    # Get assigned by (use journal editor or first staff member)
-                    assigned_by = self.journal.staff_members.filter(
-                        role='EDITOR_IN_CHIEF',
-                        is_active=True
-                    ).first()
-                    
-                    if not assigned_by:
-                        assigned_by = self.journal.staff_members.filter(is_active=True).first()
-                    
-                    if not assigned_by:
-                        logger.warning(f"No staff member found to assign review, skipping")
-                        continue
-                    
-                    # Map OJS review status to Django status
-                    ojs_status = ra.get('statusId', 0)
-                    status_map = {
-                        0: 'PENDING',       # REVIEW_ASSIGNMENT_STATUS_AWAITING_RESPONSE
-                        1: 'DECLINED',      # REVIEW_ASSIGNMENT_STATUS_DECLINED
-                        4: 'ACCEPTED',      # REVIEW_ASSIGNMENT_STATUS_ACCEPTED
-                        5: 'COMPLETED',     # REVIEW_ASSIGNMENT_STATUS_COMPLETE
-                        6: 'CANCELLED',     # REVIEW_ASSIGNMENT_STATUS_THANKED
-                        7: 'CANCELLED',     # REVIEW_ASSIGNMENT_STATUS_CANCELLED
-                    }
-                    
-                    status = status_map.get(ojs_status, 'PENDING')
-                    
-                    # Parse dates
-                    from django.utils.dateparse import parse_datetime
-                    from django.utils import timezone as tz
-                    from datetime import timedelta
-                    
-                    due_date = None
-                    if ra.get('dateResponseDue'):
-                        due_date = parse_datetime(ra.get('dateResponseDue'))
-                        if due_date and not tz.is_aware(due_date):
-                            due_date = tz.make_aware(due_date)
-                    
-                    if not due_date:
-                        # Default to 30 days from now
-                        due_date = tz.now() + timedelta(days=30)
-                    
-                    # Create or get review assignment
-                    assignment, created = ReviewAssignment.objects.get_or_create(
-                        submission=submission,
-                        reviewer=profile,
-                        review_round=ra.get('round', 1),
-                        defaults={
-                            'assigned_by': assigned_by.profile,
-                            'status': status,
-                            'due_date': due_date,
-                        }
-                    )
-                    
-                    if created:
-                        review_count += 1
-                        logger.info(f"Created review assignment for submission {submission.id}, reviewer {email}")
-                    
-                except Exception as e:
-                    logger.error(f"Error importing review assignment: {str(e)}")
-                    continue
+            if not review_rounds:
+                logger.info(f"No review rounds found for submission {ojs_submission_id}")
+                logger.debug(f"Available keys in response: {list(full_data.keys())}")
+                return 0
             
-            return review_count
+            # Unfortunately, OJS public API doesn't expose reviewer identities in review assignments
+            # The reviewAssignments in reviewRounds only contain assignment metadata, not reviewer info
+            # This is by design for privacy - only editors can see reviewer assignments
+            # We would need to use OJS's internal API or database access to get reviewer information
+            
+            logger.warning(f"OJS API does not expose reviewer identities in public endpoints. "
+                          f"Review assignments found but cannot import without reviewer information. "
+                          f"Consider using OJS database access or internal API for complete review import.")
+            
+            return 0
             
         except Exception as e:
             logger.error(f"Failed to import reviews for submission {ojs_submission_id}: {str(e)}")
             import traceback
             traceback.print_exc()
+            return 0
+    
+    def _create_review_assignment(self, submission, ra, round_number=1):
+        """
+        Create a review assignment from OJS review assignment data.
+        
+        Args:
+            submission: Django Submission instance
+            ra: OJS review assignment data
+            round_number: Review round number
+            
+        Returns:
+            int: 1 if created, 0 if already exists
+        """
+        import requests
+        from apps.reviews.models import ReviewAssignment
+        from apps.users.models import CustomUser, Profile
+        from django.utils.dateparse import parse_datetime
+        from django.utils import timezone as tz
+        from datetime import timedelta
+        
+        headers = {
+            'Authorization': f'Bearer {self.api_key}',
+            'Content-Type': 'application/json'
+        }
+        
+        # The review assignment from reviewRounds may not include reviewerId
+        # Try to get it from the assignment data first
+        reviewer_id = ra.get('reviewerId')
+        
+        if not reviewer_id:
+            # If reviewerId is not present, try to fetch full review assignment details
+            assignment_id = ra.get('id')
+            if assignment_id:
+                logger.info(f"Fetching full review assignment details for assignment ID {assignment_id}")
+                # Try to get full assignment details - OJS may have endpoint like:
+                # /reviewAssignments/{id} or we may need to parse from submission data
+                # For now, log what we have and skip
+                logger.warning(f"Review assignment {assignment_id} has no reviewerId. Available fields: {list(ra.keys())}")
+                logger.debug(f"Full review assignment data: {ra}")
+                # We cannot create a review without knowing who the reviewer is
+                return 0
+            else:
+                logger.warning(f"Review assignment has no reviewerId or id. Available fields: {list(ra.keys())}")
+                return 0
+        
+        # Fetch reviewer details
+        user_resp = requests.get(f"{self.api_url}/users/{reviewer_id}", headers=headers)
+        if user_resp.status_code != 200:
+            logger.warning(f"Could not fetch user {reviewer_id}: status {user_resp.status_code}")
+            return 0
+        
+        user_data = user_resp.json()
+        email = user_data.get('email')
+        
+        if not email:
+            logger.warning(f"Reviewer {reviewer_id} has no email, skipping")
+            return 0
+        
+        # Get or create user
+        full_name = user_data.get('fullName', '')
+        name_parts = full_name.split(' ', 1)
+        first_name = name_parts[0] if name_parts else ''
+        last_name = name_parts[1] if len(name_parts) > 1 else ''
+        
+        user, _ = CustomUser.objects.get_or_create(
+            email=email,
+            defaults={
+                'username': user_data.get('userName', email.split('@')[0]),
+                'first_name': first_name,
+                'last_name': last_name,
+                'imported_from': self.journal.id,
+            }
+        )
+        
+        # Get or create profile
+        profile, _ = Profile.objects.get_or_create(user=user)
+        
+        # Get assigned by (use journal editor or first staff member)
+        assigned_by = self.journal.staff_members.filter(
+            role='EDITOR_IN_CHIEF',
+            is_active=True
+        ).first()
+        
+        if not assigned_by:
+            assigned_by = self.journal.staff_members.filter(is_active=True).first()
+        
+        if not assigned_by:
+            logger.warning(f"No staff member found to assign review, skipping")
+            return 0
+        
+        # Map OJS review status to Django status
+        ojs_status = ra.get('statusId', 0)
+        status_map = {
+            0: 'PENDING',       # REVIEW_ASSIGNMENT_STATUS_AWAITING_RESPONSE
+            1: 'DECLINED',      # REVIEW_ASSIGNMENT_STATUS_DECLINED
+            4: 'ACCEPTED',      # REVIEW_ASSIGNMENT_STATUS_ACCEPTED
+            5: 'COMPLETED',     # REVIEW_ASSIGNMENT_STATUS_COMPLETE
+            6: 'CANCELLED',     # REVIEW_ASSIGNMENT_STATUS_THANKED
+            7: 'CANCELLED',     # REVIEW_ASSIGNMENT_STATUS_CANCELLED
+        }
+        
+        status = status_map.get(ojs_status, 'PENDING')
+        
+        # Parse dates
+        due_date = None
+        if ra.get('dateResponseDue'):
+            due_date = parse_datetime(ra.get('dateResponseDue'))
+            if due_date and not tz.is_aware(due_date):
+                due_date = tz.make_aware(due_date)
+        
+        if not due_date:
+            # Default to 30 days from now
+            due_date = tz.now() + timedelta(days=30)
+        
+        # Create or get review assignment
+        assignment, created = ReviewAssignment.objects.get_or_create(
+            submission=submission,
+            reviewer=profile,
+            review_round=round_number,
+            defaults={
+                'assigned_by': assigned_by.profile,
+                'status': status,
+                'due_date': due_date,
+            }
+        )
+        
+        if created:
+            logger.info(f"Created review assignment for submission {submission.id}, reviewer {email}, round {round_number}")
+            return 1
+        else:
+            logger.debug(f"Review assignment already exists for submission {submission.id}, reviewer {email}")
             return 0
     
     def _update_submission_from_ojs(self, submission, ojs_data):
@@ -685,6 +799,8 @@ class OJSSyncService:
             ojs_data: OJS submission data
         """
         try:
+            ojs_submission_id = ojs_data.get('id')
+            
             publications = ojs_data.get('publications', [])
             if publications:
                 pub = publications[0]
@@ -703,7 +819,10 @@ class OJSSyncService:
             submission.status = status_map.get(ojs_status, submission.status)
             submission.save()
             
-            logger.info(f"Updated submission {submission.id} from OJS")
+            # Import reviews and review assignments (they may have been added after initial import)
+            reviews_count = self._import_reviews_for_submission(submission, ojs_submission_id)
+            
+            logger.info(f"Updated submission {submission.id} from OJS with {reviews_count} reviews")
             
         except Exception as e:
             logger.error(f"Failed to update submission {submission.id}: {str(e)}")

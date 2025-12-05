@@ -43,6 +43,7 @@ class JournalSerializer(serializers.ModelSerializer):
     staff_members = JournalStaffSerializer(many=True, read_only=True)
     submission_count = serializers.SerializerMethodField()
     active_staff_count = serializers.SerializerMethodField()
+    ojs_connection_status = serializers.SerializerMethodField()
     
     class Meta:
         model = Journal
@@ -53,6 +54,7 @@ class JournalSerializer(serializers.ModelSerializer):
             'technical_contact_name', 'technical_contact_email', 'technical_contact_phone',
             'settings', 'is_active', 'is_accepting_submissions',
             'staff_members', 'submission_count', 'active_staff_count',
+            'ojs_connection_status',
             'created_at', 'updated_at'
         )
         read_only_fields = ('id', 'created_at', 'updated_at')
@@ -64,6 +66,63 @@ class JournalSerializer(serializers.ModelSerializer):
     def get_active_staff_count(self, obj):
         """Get active staff member count."""
         return obj.staff_members.filter(is_active=True).count()
+    
+    def get_ojs_connection_status(self, obj):
+        """
+        Get OJS connection status for this journal.
+        Returns configuration status and connection health.
+        """
+        import requests
+        
+        status = {
+            'configured': False,
+            'connected': False,
+            'api_url': None,
+            'journal_id': None,
+            'error': None
+        }
+        
+        # Check if OJS is configured
+        if not obj.ojs_api_url or not obj.ojs_api_key:
+            status['error'] = 'OJS not configured'
+            return status
+        
+        status['configured'] = True
+        status['api_url'] = obj.ojs_api_url
+        status['journal_id'] = obj.ojs_journal_id
+        
+        # Test connection by making a simple API call
+        try:
+            headers = {
+                'Authorization': f'Bearer {obj.ojs_api_key}',
+                'Content-Type': 'application/json'
+            }
+            # Try to fetch journal info or a simple endpoint
+            response = requests.get(
+                f"{obj.ojs_api_url}/submissions",
+                headers=headers,
+                params={'count': 1},
+                timeout=5
+            )
+            
+            if response.status_code == 200:
+                status['connected'] = True
+            elif response.status_code == 401:
+                status['error'] = 'Authentication failed - invalid API key'
+            elif response.status_code == 403:
+                status['error'] = 'Access forbidden - insufficient permissions'
+            elif response.status_code == 404:
+                status['error'] = 'OJS endpoint not found'
+            else:
+                status['error'] = f'Connection failed with status {response.status_code}'
+        except requests.exceptions.Timeout:
+            status['error'] = 'Connection timeout'
+        except requests.exceptions.ConnectionError:
+            status['error'] = 'Cannot reach OJS server'
+        except Exception as e:
+            status['error'] = f'Connection error: {str(e)}'
+        
+        return status
     
     def validate_short_name(self, value):
         """Validate short name is unique and properly formatted."""
