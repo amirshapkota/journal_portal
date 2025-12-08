@@ -940,6 +940,33 @@ class JournalViewSet(viewsets.ModelViewSet):
         })
     
     @extend_schema(
+        summary="Get journals where user is editor",
+        description="Get all journals where the current user is a staff member (editor)."
+    )
+    @action(detail=False, methods=['get'], url_path='assigned-journals', permission_classes=[IsAuthenticated])
+    def my_editor_journals(self, request):
+        """Get all journals where the current user is a staff member."""
+        if not hasattr(request.user, 'profile'):
+            return Response(
+                {'detail': 'User profile not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Get journals where user is an active staff member
+        journals = Journal.objects.filter(
+            staff_members__profile=request.user.profile,
+            staff_members__is_active=True
+        ).distinct().select_related().prefetch_related('staff_members__profile__user')
+        
+        # Optional role filter
+        role = request.query_params.get('role')
+        if role:
+            journals = journals.filter(staff_members__role=role)
+        
+        serializer = JournalListSerializer(journals, many=True)
+        return Response(serializer.data)
+    
+    @extend_schema(
         summary="Get journal statistics",
         description="Get statistics for a journal (submissions, reviews, etc.)."
     )
