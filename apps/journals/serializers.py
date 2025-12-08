@@ -160,6 +160,7 @@ class JournalListSerializer(serializers.ModelSerializer):
     
     submission_count = serializers.SerializerMethodField()
     editor_in_chief = serializers.SerializerMethodField()
+    staff_members = serializers.SerializerMethodField()
     
     class Meta:
         model = Journal
@@ -169,7 +170,7 @@ class JournalListSerializer(serializers.ModelSerializer):
             'issn_print', 'issn_online',
             'website_url', 'contact_email',
             'description', 'settings',
-            'submission_count', 'editor_in_chief', 'created_at'
+            'submission_count', 'editor_in_chief', 'staff_members', 'created_at'
         )
     
     def get_submission_count(self, obj):
@@ -189,6 +190,18 @@ class JournalListSerializer(serializers.ModelSerializer):
                 'email': editor.profile.user.email
             }
         return None
+    
+    def get_staff_members(self, obj):
+        """Get all active staff members."""
+        staff = obj.staff_members.filter(is_active=True).select_related('profile', 'profile__user')
+        return [{
+            'id': member.id,
+            'profile_id': member.profile.id,
+            'name': member.profile.display_name,
+            'email': member.profile.user.email,
+            'role': member.role,
+            'permissions': member.permissions
+        } for member in staff]
 
 
 class JournalSettingsSerializer(serializers.ModelSerializer):
