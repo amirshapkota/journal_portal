@@ -653,6 +653,319 @@ class JournalViewSet(viewsets.ModelViewSet):
         
         return Response(progress)
     
+    @action(detail=True, methods=['get', 'post'], url_path='verification-requests', permission_classes=[IsAuthenticated])
+    def verification_requests(self, request, pk=None):
+        """
+        Get or manage verification requests for users imported from this journal.
+        Editors can view and approve/reject verification requests for users imported from their journal.
+        """
+        from apps.users.models import VerificationRequest, CustomUser
+        from apps.users.verification_serializers import VerificationRequestDetailSerializer
+        from django.utils import timezone
+        
+        journal = self.get_object()
+        
+        # Check permission - must be editor of this journal
+        if hasattr(request.user, 'profile'):
+            staff_member = journal.staff_members.filter(
+                profile=request.user.profile,
+                role__in=['EDITOR_IN_CHIEF', 'MANAGING_EDITOR'],
+                is_active=True
+            ).first()
+            
+            if not staff_member and not request.user.is_superuser:
+                return Response(
+                    {'detail': 'Only Editor-in-Chief or Managing Editor can manage verification requests.'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        
+        if request.method == 'GET':
+            # Get all users imported from this journal
+            imported_users = CustomUser.objects.filter(imported_from=journal.id)
+            
+            # Get verification requests for these users
+            verification_requests = VerificationRequest.objects.filter(
+                profile__user__in=imported_users
+            ).select_related('profile', 'profile__user', 'reviewed_by')
+            
+            # Optional status filter
+            status_param = request.query_params.get('status')
+            if status_param:
+                verification_requests = verification_requests.filter(status=status_param)
+            
+            serializer = VerificationRequestDetailSerializer(verification_requests, many=True)
+            return Response({
+                'journal': {
+                    'id': str(journal.id),
+                    'title': journal.title
+                },
+                'total_imported_users': imported_users.count(),
+                'verification_requests': serializer.data
+            })
+        
+        return Response(
+            {'detail': 'Method not allowed'},
+            status=status.HTTP_405_METHOD_NOT_ALLOWED
+        )
+    
+    @action(detail=True, methods=['post'], url_path='verification-requests/(?P<request_id>[^/.]+)/approve', permission_classes=[IsAuthenticated])
+    def approve_verification(self, request, pk=None, request_id=None):
+        """
+        Approve a verification request for a user imported from this journal.
+        """
+        from apps.users.models import VerificationRequest, CustomUser, Role
+        from apps.users.verification_serializers import VerificationReviewSerializer
+        from django.utils import timezone
+        
+        journal = self.get_object()
+        
+        # Check permission
+        if hasattr(request.user, 'profile'):
+            staff_member = journal.staff_members.filter(
+                profile=request.user.profile,
+                role__in=['EDITOR_IN_CHIEF', 'MANAGING_EDITOR'],
+                is_active=True
+            ).first()
+            
+            if not staff_member and not request.user.is_superuser:
+                return Response(
+                    {'detail': 'Only Editor-in-Chief or Managing Editor can approve verification requests.'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        
+        # Get verification request
+        try:
+            verification_request = VerificationRequest.objects.get(id=request_id)
+        except VerificationRequest.DoesNotExist:
+            return Response(
+                {'detail': 'Verification request not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Check that the user was imported from this journal
+        if verification_request.profile.user.imported_from != journal.id:
+            return Response(
+                {'detail': 'This verification request is not for a user imported from your journal.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Check status
+        if verification_request.status not in ['PENDING', 'INFO_REQUESTED']:
+            return Response(
+                {'detail': 'Can only approve pending or info_requested requests'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        serializer = VerificationReviewSerializer(data=request.data)
+        if serializer.is_valid():
+            # Update verification request
+            verification_request.status = 'APPROVED'
+            verification_request.reviewed_by = request.user
+            verification_request.reviewed_at = timezone.now()
+            verification_request.admin_notes = serializer.validated_data.get('admin_notes', '')
+            verification_request.save()
+            
+            # Update profile verification status
+            profile = verification_request.profile
+            profile.verification_status = 'GENUINE'
+            
+            # Add requested roles
+            granted_roles = []
+            
+            for role_name in verification_request.requested_roles:
+                if role_name == 'AUTHOR':
+                    author_role, _ = Role.objects.get_or_create(name='AUTHOR')
+                    profile.roles.add(author_role)
+                    granted_roles.append('Author')
+                elif role_name == 'REVIEWER':
+                    reviewer_role, _ = Role.objects.get_or_create(name='REVIEWER')
+                    profile.roles.add(reviewer_role)
+                    granted_roles.append('Reviewer')
+                elif role_name == 'EDITOR':
+                    editor_role, _ = Role.objects.get_or_create(name='EDITOR')
+                    profile.roles.add(editor_role)
+                    granted_roles.append('Editor')
+            
+            profile.save()
+            
+            return Response({
+                'detail': 'Verification approved',
+                'profile_status': profile.verification_status,
+                'roles_granted': granted_roles
+            })
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=True, methods=['post'], url_path='verification-requests/(?P<request_id>[^/.]+)/reject', permission_classes=[IsAuthenticated])
+    def reject_verification(self, request, pk=None, request_id=None):
+        """
+        Reject a verification request for a user imported from this journal.
+        """
+        from apps.users.models import VerificationRequest, CustomUser
+        from apps.users.verification_serializers import VerificationReviewSerializer
+        from django.utils import timezone
+        
+        journal = self.get_object()
+        
+        # Check permission
+        if hasattr(request.user, 'profile'):
+            staff_member = journal.staff_members.filter(
+                profile=request.user.profile,
+                role__in=['EDITOR_IN_CHIEF', 'MANAGING_EDITOR'],
+                is_active=True
+            ).first()
+            
+            if not staff_member and not request.user.is_superuser:
+                return Response(
+                    {'detail': 'Only Editor-in-Chief or Managing Editor can reject verification requests.'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        
+        # Get verification request
+        try:
+            verification_request = VerificationRequest.objects.get(id=request_id)
+        except VerificationRequest.DoesNotExist:
+            return Response(
+                {'detail': 'Verification request not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Check that the user was imported from this journal
+        if verification_request.profile.user.imported_from != journal.id:
+            return Response(
+                {'detail': 'This verification request is not for a user imported from your journal.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Check status
+        if verification_request.status not in ['PENDING', 'INFO_REQUESTED']:
+            return Response(
+                {'detail': 'Can only reject pending or info_requested requests'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        serializer = VerificationReviewSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        rejection_reason = serializer.validated_data.get('rejection_reason')
+        if not rejection_reason:
+            return Response(
+                {'detail': 'Rejection reason is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Update verification request
+        verification_request.status = 'REJECTED'
+        verification_request.reviewed_by = request.user
+        verification_request.reviewed_at = timezone.now()
+        verification_request.rejection_reason = rejection_reason
+        verification_request.admin_notes = serializer.validated_data.get('admin_notes', '')
+        verification_request.save()
+        
+        # Update profile verification status
+        profile = verification_request.profile
+        profile.verification_status = 'SUSPICIOUS'
+        profile.save()
+        
+        return Response({
+            'detail': 'Verification rejected',
+            'profile_status': profile.verification_status
+        })
+    
+    @action(detail=True, methods=['post'], url_path='verification-requests/(?P<request_id>[^/.]+)/request-info', permission_classes=[IsAuthenticated])
+    def request_verification_info(self, request, pk=None, request_id=None):
+        """
+        Request additional information for a verification request.
+        """
+        from apps.users.models import VerificationRequest, CustomUser
+        from django.utils import timezone
+        
+        journal = self.get_object()
+        
+        # Check permission
+        if hasattr(request.user, 'profile'):
+            staff_member = journal.staff_members.filter(
+                profile=request.user.profile,
+                role__in=['EDITOR_IN_CHIEF', 'MANAGING_EDITOR'],
+                is_active=True
+            ).first()
+            
+            if not staff_member and not request.user.is_superuser:
+                return Response(
+                    {'detail': 'Only Editor-in-Chief or Managing Editor can request additional information.'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        
+        # Get verification request
+        try:
+            verification_request = VerificationRequest.objects.get(id=request_id)
+        except VerificationRequest.DoesNotExist:
+            return Response(
+                {'detail': 'Verification request not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Check that the user was imported from this journal
+        if verification_request.profile.user.imported_from != journal.id:
+            return Response(
+                {'detail': 'This verification request is not for a user imported from your journal.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Check status
+        if verification_request.status != 'PENDING':
+            return Response(
+                {'detail': 'Can only request additional info for pending requests'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        info_request = request.data.get('info_request')
+        if not info_request:
+            return Response(
+                {'detail': 'info_request field is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Update verification request
+        verification_request.status = 'INFO_REQUESTED'
+        verification_request.additional_info_requested = info_request
+        verification_request.reviewed_by = request.user
+        verification_request.reviewed_at = timezone.now()
+        verification_request.save()
+        
+        return Response({
+            'detail': 'Additional information requested',
+            'status': verification_request.status
+        })
+    
+    @extend_schema(
+        summary="Get journals where user is editor",
+        description="Get all journals where the current user is a staff member (editor)."
+    )
+    @action(detail=False, methods=['get'], url_path='assigned-journals', permission_classes=[IsAuthenticated])
+    def my_editor_journals(self, request):
+        """Get all journals where the current user is a staff member."""
+        if not hasattr(request.user, 'profile'):
+            return Response(
+                {'detail': 'User profile not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Get journals where user is an active staff member
+        journals = Journal.objects.filter(
+            staff_members__profile=request.user.profile,
+            staff_members__is_active=True
+        ).distinct().select_related().prefetch_related('staff_members__profile__user')
+        
+        # Optional role filter
+        role = request.query_params.get('role')
+        if role:
+            journals = journals.filter(staff_members__role=role)
+        
+        serializer = JournalListSerializer(journals, many=True)
+        return Response(serializer.data)
+    
     @extend_schema(
         summary="Get journal statistics",
         description="Get statistics for a journal (submissions, reviews, etc.)."
