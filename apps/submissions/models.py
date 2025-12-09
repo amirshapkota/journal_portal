@@ -10,6 +10,16 @@ from django.contrib.postgres.indexes import GinIndex
 from django.conf import settings
 from django.core.validators import MinValueValidator, MaxValueValidator
 
+# Import copyediting and production models
+from .copyediting_models import (
+    CopyeditingAssignment, CopyeditingFile, CopyeditingDiscussion,
+    CopyeditingMessage, CopyeditingMessageAttachment
+)
+from .production_models import (
+    ProductionAssignment, ProductionFile, ProductionDiscussion,
+    ProductionMessage, ProductionMessageAttachment, PublicationSchedule
+)
+
 
 class Submission(models.Model):
     """
@@ -27,6 +37,9 @@ class Submission(models.Model):
         ('ACCEPTED', 'Accepted'),
         ('REJECTED', 'Rejected'),
         ('WITHDRAWN', 'Withdrawn'),
+        ('COPYEDITING', 'Copyediting'),  # In copyediting stage after acceptance
+        ('IN_PRODUCTION', 'In Production'),  # In production stage after copyediting
+        ('SCHEDULED', 'Scheduled for Publication'),  # Scheduled for publication
         ('PUBLISHED', 'Published'),
     ]
     
