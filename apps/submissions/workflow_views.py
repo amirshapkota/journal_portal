@@ -157,11 +157,11 @@ class CopyeditingAssignmentViewSet(viewsets.ModelViewSet):
     
     @extend_schema(
         summary="Start copyediting",
-        description="Mark copyediting assignment as IN_PROGRESS."
+        description="Mark copyediting assignment as IN_PROGRESS and create initial copyediting files from submission documents."
     )
     @action(detail=True, methods=['post'])
     def start(self, request, pk=None):
-        """Start copyediting work."""
+        """Start copyediting work and create initial files."""
         assignment = self.get_object()
         
         if assignment.status != 'PENDING':
@@ -173,8 +173,61 @@ class CopyeditingAssignmentViewSet(viewsets.ModelViewSet):
         assignment.status = 'IN_PROGRESS'
         assignment.save()
         
+        # Create copyediting files from submission documents
+        from django.core.files.base import ContentFile
+        files_created = 0
+        
+        # Get submission documents (manuscripts and supplementary files)
+        submission_docs = assignment.submission.documents.filter(
+            document_type__in=['MANUSCRIPT', 'SUPPLEMENTARY', 'REVISED_MANUSCRIPT']
+        )
+        
+        for doc in submission_docs:
+            # Skip if copyediting file already exists for this document
+            existing = CopyeditingFile.objects.filter(
+                assignment=assignment,
+                submission=assignment.submission,
+                original_filename=doc.file_name
+            ).exists()
+            
+            if existing:
+                continue
+            
+            # Create copyediting file from document
+            try:
+                copyediting_file = CopyeditingFile.objects.create(
+                    assignment=assignment,
+                    submission=assignment.submission,
+                    file_type='INITIAL_DRAFT',
+                    description=f'Initial draft from submission document: {doc.title}',
+                    uploaded_by=request.user.profile if hasattr(request.user, 'profile') else assignment.assigned_by,
+                    original_filename=doc.file_name,
+                    file_size=doc.file_size,
+                    mime_type=doc.original_file.file.content_type if doc.original_file else 'application/octet-stream',
+                    version=1
+                )
+                
+                # Copy the file content
+                if doc.original_file:
+                    doc.original_file.file.seek(0)
+                    file_content = doc.original_file.file.read()
+                    copyediting_file.file.save(
+                        doc.file_name,
+                        ContentFile(file_content),
+                        save=True
+                    )
+                    files_created += 1
+            except Exception as e:
+                # Log error but continue with other files
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"Error creating copyediting file from document {doc.id}: {str(e)}")
+        
         serializer = self.get_serializer(assignment)
-        return Response(serializer.data)
+        return Response({
+            **serializer.data,
+            'files_created': files_created
+        })
     
     @extend_schema(
         summary="Complete copyediting",
