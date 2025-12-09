@@ -45,13 +45,19 @@ class WorkflowPermissions(permissions.BasePermission):
         return request.user.is_authenticated
     
     def has_object_permission(self, request, view, obj):
+        import logging
+        logger = logging.getLogger(__name__)
+        
         user = request.user
+        logger.info(f"Permission check for user: {user.email}, action: {view.action}, obj: {obj}")
         
         # Admin can do anything
         if user.is_superuser or user.is_staff:
+            logger.info(f"Permission GRANTED: User is superuser/staff")
             return True
         
         if hasattr(user, 'profile'):
+            logger.info(f"User has profile: {user.profile.id}")
             # Get submission based on object type
             submission = None
             if hasattr(obj, 'submission'):
@@ -60,24 +66,45 @@ class WorkflowPermissions(permissions.BasePermission):
                 submission = obj
             
             if submission:
+                logger.info(f"Submission found: {submission.id}, journal: {submission.journal.id}")
+                
                 # Author permissions (read-only)
                 if submission.corresponding_author == user.profile:
-                    return request.method in permissions.SAFE_METHODS or view.action in ['add_message']
+                    result = request.method in permissions.SAFE_METHODS or view.action in ['add_message']
+                    logger.info(f"Author check: {result}")
+                    return result
                 
                 # Journal staff permissions
                 from apps.journals.models import JournalStaff
-                if JournalStaff.objects.filter(
+                is_staff = JournalStaff.objects.filter(
                     journal=submission.journal,
                     profile=user.profile,
                     is_active=True
-                ).exists():
+                ).exists()
+                if is_staff:
+                    logger.info(f"Permission GRANTED: User is journal staff")
                     return True
                 
                 # Copyeditor/Production assistant permissions
                 if hasattr(obj, 'copyeditor') and obj.copyeditor == user.profile:
+                    logger.info(f"Permission GRANTED: User is copyeditor")
                     return True
                 if hasattr(obj, 'production_assistant') and obj.production_assistant == user.profile:
+                    logger.info(f"Permission GRANTED: User is production assistant")
                     return True
+                
+                # Allow the assigner to manage the assignment
+                if hasattr(obj, 'assigned_by') and obj.assigned_by == user.profile:
+                    logger.info(f"Permission GRANTED: User is assigner (assigned_by)")
+                    return True
+                    
+                logger.warning(f"Permission DENIED: No matching permission found")
+            else:
+                logger.warning(f"Permission DENIED: No submission found")
+        else:
+            logger.warning(f"Permission DENIED: User has no profile")
+        
+        return False
         
         return False
 
