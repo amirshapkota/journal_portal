@@ -56,7 +56,7 @@ class CopyeditingAssignmentSerializer(serializers.ModelSerializer):
         try:
             profile = Profile.objects.get(id=value)
             # Check if user has COPY_EDITOR role
-            if not profile.roles.filter(name='COPY_EDITOR').exists():
+            if not profile.roles.filter(name='EDITOR').exists():
                 raise serializers.ValidationError(
                     "Selected user does not have COPY_EDITOR role."
                 )

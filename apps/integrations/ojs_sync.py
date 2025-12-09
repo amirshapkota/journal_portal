@@ -557,7 +557,7 @@ class OJSSyncService:
                         ).first()
                         
                         if existing_doc:
-                            logger.info(f"Document {file_name} already exists for submission {submission.id}")
+                            logger.info(f"Document {file_name} already exists for submission {submission.id}, skipping to preserve existing document")
                             continue
                         
                         # Create document
@@ -641,7 +641,7 @@ class OJSSyncService:
                 logger.debug(f"Available keys in response: {list(full_data.keys())}")
                 return 0
             
-            # Unfortunately, OJS public API doesn't expose reviewer identities in review assignments
+            # OJS public API doesn't expose reviewer identities in review assignments
             # The reviewAssignments in reviewRounds only contain assignment metadata, not reviewer info
             # This is by design for privacy - only editors can see reviewer assignments
             # We would need to use OJS's internal API or database access to get reviewer information
@@ -819,10 +819,13 @@ class OJSSyncService:
             submission.status = status_map.get(ojs_status, submission.status)
             submission.save()
             
+            # Import submission files (they may have been added or updated in OJS)
+            files_count = self._import_submission_files(submission, ojs_submission_id)
+            
             # Import reviews and review assignments (they may have been added after initial import)
             reviews_count = self._import_reviews_for_submission(submission, ojs_submission_id)
             
-            logger.info(f"Updated submission {submission.id} from OJS with {reviews_count} reviews")
+            logger.info(f"Updated submission {submission.id} from OJS with {files_count} files and {reviews_count} reviews")
             
         except Exception as e:
             logger.error(f"Failed to update submission {submission.id}: {str(e)}")
