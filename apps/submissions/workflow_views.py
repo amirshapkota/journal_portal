@@ -68,13 +68,7 @@ class WorkflowPermissions(permissions.BasePermission):
             if submission:
                 logger.info(f"Submission found: {submission.id}, journal: {submission.journal.id}")
                 
-                # Author permissions (read-only)
-                if submission.corresponding_author == user.profile:
-                    result = request.method in permissions.SAFE_METHODS or view.action in ['add_message']
-                    logger.info(f"Author check: {result}")
-                    return result
-                
-                # Journal staff permissions
+                # Journal staff permissions (check first - staff can do everything)
                 from apps.journals.models import JournalStaff
                 is_staff = JournalStaff.objects.filter(
                     journal=submission.journal,
@@ -97,6 +91,12 @@ class WorkflowPermissions(permissions.BasePermission):
                 if hasattr(obj, 'assigned_by') and obj.assigned_by == user.profile:
                     logger.info(f"Permission GRANTED: User is assigner (assigned_by)")
                     return True
+                
+                # Author permissions (read-only) - check last
+                if submission.corresponding_author == user.profile:
+                    result = request.method in permissions.SAFE_METHODS or view.action in ['add_message']
+                    logger.info(f"Author check: {result}")
+                    return result
                     
                 logger.warning(f"Permission DENIED: No matching permission found")
             else:
