@@ -222,6 +222,15 @@ class CopyeditingAssignmentViewSet(viewsets.ModelViewSet):
             
             # Create copyediting file from document
             try:
+                # Determine mime type safely
+                mime_type = 'application/octet-stream'
+                if doc.original_file:
+                    try:
+                        if hasattr(doc.original_file, 'file') and hasattr(doc.original_file.file, 'content_type'):
+                            mime_type = doc.original_file.file.content_type
+                    except:
+                        pass
+                
                 copyediting_file = CopyeditingFile.objects.create(
                     assignment=assignment,
                     submission=assignment.submission,
@@ -230,20 +239,27 @@ class CopyeditingAssignmentViewSet(viewsets.ModelViewSet):
                     uploaded_by=request.user.profile if hasattr(request.user, 'profile') else assignment.assigned_by,
                     original_filename=doc.file_name,
                     file_size=doc.file_size,
-                    mime_type=doc.original_file.file.content_type if doc.original_file else 'application/octet-stream',
+                    mime_type=mime_type,
                     version=1
                 )
                 
                 # Copy the file content
-                if doc.original_file:
-                    doc.original_file.file.seek(0)
-                    file_content = doc.original_file.file.read()
-                    copyediting_file.file.save(
-                        doc.file_name,
-                        ContentFile(file_content),
-                        save=True
-                    )
-                    files_created += 1
+                if doc.original_file and hasattr(doc.original_file, 'file'):
+                    try:
+                        doc.original_file.file.seek(0)
+                        file_content = doc.original_file.file.read()
+                        copyediting_file.file.save(
+                            doc.file_name,
+                            ContentFile(file_content),
+                            save=True
+                        )
+                        files_created += 1
+                    except Exception as file_copy_error:
+                        import logging
+                        logger = logging.getLogger(__name__)
+                        logger.error(f"Error copying file content for document {doc.id}: {str(file_copy_error)}")
+                        # Delete the copyediting file if file copy failed
+                        copyediting_file.delete()
             except Exception as e:
                 # Log error but continue with other files
                 import logging
