@@ -288,11 +288,11 @@ class CopyeditingAssignmentViewSet(viewsets.ModelViewSet):
         assignment = self.get_object()
         from apps.users.serializers import ProfileSerializer
         
-        participants = {
-            'copyeditor': ProfileSerializer(assignment.copyeditor).data,
-            'assigned_by': ProfileSerializer(assignment.assigned_by).data,
-            'author': ProfileSerializer(assignment.submission.corresponding_author).data,
-        }
+        participants = [
+            {**ProfileSerializer(assignment.copyeditor).data, 'role': 'copyeditor'},
+            {**ProfileSerializer(assignment.assigned_by).data, 'role': 'assigned_by'},
+            {**ProfileSerializer(assignment.submission.corresponding_author).data, 'role': 'author'},
+        ]
         
         return Response(participants)
 
@@ -675,11 +675,11 @@ class ProductionAssignmentViewSet(viewsets.ModelViewSet):
         assignment = self.get_object()
         from apps.users.serializers import ProfileSerializer
         
-        participants = {
-            'production_assistant': ProfileSerializer(assignment.production_assistant).data,
-            'assigned_by': ProfileSerializer(assignment.assigned_by).data,
-            'author': ProfileSerializer(assignment.submission.corresponding_author).data,
-        }
+        participants = [
+            {**ProfileSerializer(assignment.production_assistant).data, 'role': 'production_assistant'},
+            {**ProfileSerializer(assignment.assigned_by).data, 'role': 'assigned_by'},
+            {**ProfileSerializer(assignment.submission.corresponding_author).data, 'role': 'author'},
+        ]
         
         return Response(participants)
 
