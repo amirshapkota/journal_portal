@@ -159,6 +159,17 @@ class CopyeditingFile(models.Model):
     )
     approved_at = models.DateTimeField(null=True, blank=True)
     
+    # Edit tracking (for manual save workflow like SuperDoc)
+    last_edited_by = models.ForeignKey(
+        'users.Profile',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='last_edited_copyediting_files',
+        help_text="Last person to edit this file"
+    )
+    last_edited_at = models.DateTimeField(null=True, blank=True)
+    
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

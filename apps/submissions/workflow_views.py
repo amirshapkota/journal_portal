@@ -526,6 +526,155 @@ class CopyeditingFileViewSet(viewsets.ModelViewSet):
         
         serializer = self.get_serializer(file_obj)
         return Response(serializer.data)
+    
+    @extend_schema(
+        summary="Load file for editing",
+        description="Load copyediting file metadata and URL for editing in document editor (e.g., SuperDoc)."
+    )
+    @action(detail=True, methods=['get'], url_path='load')
+    def load_file(self, request, pk=None):
+        """
+        Load copyediting file for editing.
+        Returns file metadata and download URL.
+        Similar to SuperDoc's load_document endpoint.
+        """
+        file_obj = self.get_object()
+        
+        response_data = {
+            'id': str(file_obj.id),
+            'assignment_id': str(file_obj.assignment.id),
+            'submission_id': str(file_obj.submission.id),
+            'file_type': file_obj.file_type,
+            'file_type_display': file_obj.get_file_type_display(),
+            'original_filename': file_obj.original_filename,
+            'description': file_obj.description,
+            'version': file_obj.version,
+            'is_approved': file_obj.is_approved,
+            'created_at': file_obj.created_at,
+            'updated_at': file_obj.updated_at,
+            'last_edited_at': file_obj.last_edited_at,
+            'last_edited_by': None,
+            'file_url': None,
+            'file_size': None,
+            'mime_type': None,
+        }
+        
+        # Add last editor info
+        if file_obj.last_edited_by:
+            response_data['last_edited_by'] = {
+                'id': str(file_obj.last_edited_by.id),
+                'name': file_obj.last_edited_by.display_name,
+                'email': file_obj.last_edited_by.user.email,
+            }
+        
+        # Add file details if exists
+        if file_obj.file:
+            response_data['file_url'] = request.build_absolute_uri(file_obj.file.url)
+            response_data['file_size'] = file_obj.file_size
+            response_data['mime_type'] = file_obj.mime_type
+        
+        return Response(response_data)
+    
+    @extend_schema(
+        summary="Save file (manual save)",
+        description="Save the updated file, replacing the existing one. Does NOT create a new version - this is for intermediate saves during editing.",
+        request={'multipart/form-data': {'type': 'object', 'properties': {
+            'file': {'type': 'string', 'format': 'binary', 'description': 'The file to upload'}
+        }}}
+    )
+    @action(detail=True, methods=['post'], url_path='save')
+    def save_file(self, request, pk=None):
+        """
+        Save copyediting file (manual save workflow like SuperDoc).
+        
+        This REPLACES the existing file with the updated one.
+        The old file is automatically deleted.
+        
+        Use this for:
+        - Copyeditor saving progress while editing
+        - Intermediate saves during the editing process
+        
+        For creating a new version (e.g., after copyeditor completes work),
+        use the regular POST endpoint to create a new CopyeditingFile with
+        file_type='COPYEDITED'.
+        """
+        file_obj = self.get_object()
+        uploaded_file = request.FILES.get('file')
+        
+        if not uploaded_file:
+            return Response(
+                {'detail': 'No file provided.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Store reference to old file
+        old_file_path = None
+        if file_obj.file:
+            try:
+                old_file_path = file_obj.file.path
+            except:
+                old_file_path = None
+        
+        # Update file
+        file_obj.file = uploaded_file
+        file_obj.file_size = uploaded_file.size
+        file_obj.original_filename = uploaded_file.name
+        
+        # Detect mime type
+        import mimetypes
+        mime_type, _ = mimetypes.guess_type(uploaded_file.name)
+        file_obj.mime_type = mime_type or 'application/octet-stream'
+        
+        # Update edit tracking
+        from django.utils import timezone
+        file_obj.last_edited_at = timezone.now()
+        if hasattr(request.user, 'profile'):
+            file_obj.last_edited_by = request.user.profile
+        
+        file_obj.save()
+        
+        # Delete old file after saving new one
+        if old_file_path:
+            try:
+                import os
+                if os.path.exists(old_file_path):
+                    os.remove(old_file_path)
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f"Failed to delete old file {old_file_path}: {str(e)}")
+        
+        serializer = self.get_serializer(file_obj)
+        return Response({
+            'status': 'saved',
+            'message': 'File saved successfully',
+            'file': serializer.data
+        })
+    
+    @extend_schema(
+        summary="Download copyediting file",
+        description="Download the copyediting file."
+    )
+    @action(detail=True, methods=['get'], url_path='download')
+    def download_file(self, request, pk=None):
+        """Download the copyediting file."""
+        file_obj = self.get_object()
+        
+        if not file_obj.file:
+            return Response(
+                {'detail': 'No file available for download.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        from django.http import FileResponse
+        
+        response = FileResponse(
+            file_obj.file.open('rb'),
+            content_type=file_obj.mime_type
+        )
+        response['Content-Disposition'] = f'attachment; filename="{file_obj.original_filename}"'
+        
+        return response
 
 
 @extend_schema_view(

@@ -118,6 +118,7 @@ class CopyeditingFileSerializer(serializers.ModelSerializer):
     
     uploaded_by = ProfileSerializer(read_only=True)
     approved_by = ProfileSerializer(read_only=True)
+    last_edited_by = ProfileSerializer(read_only=True)
     file_type_display = serializers.CharField(source='get_file_type_display', read_only=True)
     file_url = serializers.SerializerMethodField()
     
@@ -127,11 +128,13 @@ class CopyeditingFileSerializer(serializers.ModelSerializer):
             'id', 'assignment', 'submission', 'file_type', 'file_type_display',
             'file', 'file_url', 'original_filename', 'file_size', 'mime_type',
             'version', 'description', 'uploaded_by', 'is_approved',
-            'approved_by', 'approved_at', 'created_at', 'updated_at'
+            'approved_by', 'approved_at', 'last_edited_by', 'last_edited_at',
+            'created_at', 'updated_at'
         )
         read_only_fields = (
             'id', 'uploaded_by', 'file_size', 'mime_type', 'approved_by',
-            'approved_at', 'created_at', 'updated_at'
+            'approved_at', 'last_edited_by', 'last_edited_at',
+            'created_at', 'updated_at'
         )
     
     def get_file_url(self, obj):
