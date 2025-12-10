@@ -111,8 +111,9 @@ class CopyeditingFile(models.Model):
     """
     FILE_TYPE_CHOICES = [
         ('DRAFT', 'Draft File'),  # Original file from submission
-        ('COPYEDITED', 'Copyedited File'),  # File after copyediting
-        ('FINAL', 'Final Approved'),  # Author-approved final version
+        ('COPYEDITED', 'Copyedited File'),  # File after copyediting, awaiting author review
+        ('AUTHOR_FINAL', 'Author Confirmed Final'),  # Author has reviewed and confirmed
+        ('FINAL', 'Final Approved'),  # Editor has approved, ready for production
     ]
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

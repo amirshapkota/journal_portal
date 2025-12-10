@@ -280,28 +280,88 @@ class CopyeditingAssignmentViewSet(viewsets.ModelViewSet):
     
     @extend_schema(
         summary="Complete copyediting",
-        description="Mark copyediting assignment as completed.",
+        description="Mark copyediting assignment as completed. Validates all files are in AUTHOR_FINAL status, moves them to FINAL, and transitions submission to production.",
         request={'application/json': {'type': 'object', 'properties': {
             'completion_notes': {'type': 'string', 'description': 'Notes about completion'}
         }}}
     )
     @action(detail=True, methods=['post'])
     def complete(self, request, pk=None):
-        """Complete copyediting work."""
+        """Complete copyediting work and transition to production."""
         assignment = self.get_object()
         
+        # Validate assignment status
         if assignment.status not in ['PENDING', 'IN_PROGRESS']:
             return Response(
                 {'detail': 'Can only complete pending or in-progress assignments.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
+        # Validate all required files are in AUTHOR_FINAL status
+        author_final_files = CopyeditingFile.objects.filter(
+            assignment=assignment,
+            file_type='AUTHOR_FINAL'
+        )
+        
+        if not author_final_files.exists():
+            return Response(
+                {'detail': 'No files have been confirmed by the author. All copyedited files must be reviewed and confirmed by the author before completion.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Check for any COPYEDITED files that haven't been confirmed
+        unconfirmed_files = CopyeditingFile.objects.filter(
+            assignment=assignment,
+            file_type='COPYEDITED'
+        )
+        
+        if unconfirmed_files.exists():
+            unconfirmed_count = unconfirmed_files.count()
+            return Response(
+                {'detail': f'{unconfirmed_count} copyedited file(s) have not been confirmed by the author. All files must be reviewed and confirmed before completion.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Move all AUTHOR_FINAL files to FINAL status
+        from django.utils import timezone
+        files_finalized = author_final_files.update(
+            file_type='FINAL',
+            last_edited_at=timezone.now()
+        )
+        
+        # Update assignment status
         assignment.status = 'COMPLETED'
         assignment.completion_notes = request.data.get('completion_notes', '')
+        assignment.completed_at = timezone.now()
         assignment.save()
         
+        # Update submission status to production-ready
+        submission = assignment.submission
+        if submission.status in ['ACCEPTED', 'COPYEDITING']:
+            submission.status = 'PRODUCTION'
+            submission.save()
+        
+        # TODO: Create production assignment record (if auto-creation is enabled)
+        # TODO: Send notifications to relevant parties
+        
         serializer = self.get_serializer(assignment)
-        return Response(serializer.data)
+        
+        return Response({
+            'status': 'completed',
+            'message': 'Copyediting completed successfully',
+            'assignment_id': str(assignment.id),
+            'assignment_status': assignment.status,
+            'submission_status': submission.status,
+            'files_finalized': files_finalized,
+            'completed_at': assignment.completed_at,
+            'completed_by': {
+                'id': str(request.user.profile.id) if hasattr(request.user, 'profile') else None,
+                'name': request.user.profile.display_name if hasattr(request.user, 'profile') else request.user.get_full_name(),
+                'email': request.user.email
+            },
+            'completion_notes': assignment.completion_notes,
+            'assignment': serializer.data
+        })
     
     @extend_schema(
         summary="Get assignment files",
@@ -309,9 +369,13 @@ class CopyeditingAssignmentViewSet(viewsets.ModelViewSet):
     )
     @action(detail=True, methods=['get'])
     def files(self, request, pk=None):
-        """Get assignment files."""
+        """Get assignment files, optionally filter by file_type."""
         assignment = self.get_object()
-        files = assignment.files.all().order_by('-created_at')
+        files = assignment.files.all()
+        file_type = request.query_params.get('file_type')
+        if file_type:
+            files = files.filter(file_type=file_type)
+        files = files.order_by('-created_at')
         serializer = CopyeditingFileSerializer(files, many=True, context={'request': request})
         return Response(serializer.data)
     
@@ -407,6 +471,28 @@ class CopyeditingAssignmentViewSet(viewsets.ModelViewSet):
             {'detail': 'Participant added successfully.'},
             status=status.HTTP_201_CREATED
         )
+    
+    @extend_schema(
+        summary="Get copyedited files",
+        description="Get all files with COPYEDITED status for author review."
+    )
+    @action(detail=True, methods=['get'], url_path='copyedited-files')
+    def copyedited_files(self, request, pk=None):
+        """Get all copyedited files for this assignment."""
+        assignment = self.get_object()
+        
+        # Get all files with COPYEDITED status
+        files = CopyeditingFile.objects.filter(
+            assignment=assignment,
+            file_type='COPYEDITED'
+        ).select_related('uploaded_by__user').order_by('-created_at')
+        
+        serializer = CopyeditingFileSerializer(files, many=True, context={'request': request})
+        
+        return Response({
+            'count': files.count(),
+            'results': serializer.data
+        })
     
     @extend_schema(
         summary="Remove participant from assignment",
@@ -505,11 +591,11 @@ class CopyeditingFileViewSet(viewsets.ModelViewSet):
     
     @extend_schema(
         summary="Approve copyediting file",
-        description="Approve a copyediting file for further processing."
+        description="Approve a copyediting file for further processing. Updates file type to COPYEDITED."
     )
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
-        """Approve copyediting file."""
+        """Approve copyediting file and update status to COPYEDITED."""
         file_obj = self.get_object()
         
         if file_obj.is_approved:
@@ -520,6 +606,7 @@ class CopyeditingFileViewSet(viewsets.ModelViewSet):
         
         from django.utils import timezone
         file_obj.is_approved = True
+        file_obj.file_type = 'COPYEDITED'  # Update file type to COPYEDITED
         file_obj.approved_by = request.user.profile if hasattr(request.user, 'profile') else None
         file_obj.approved_at = timezone.now()
         file_obj.save()
@@ -675,6 +762,62 @@ class CopyeditingFileViewSet(viewsets.ModelViewSet):
         response['Content-Disposition'] = f'attachment; filename="{file_obj.original_filename}"'
         
         return response
+    
+    @extend_schema(
+        summary="Author confirms file as final",
+        description="Allow authors to review copyedited files and mark them as final.",
+        request={'application/json': {'type': 'object', 'properties': {
+            'confirmation_notes': {'type': 'string', 'description': 'Optional notes from author about the confirmation'}
+        }}}
+    )
+    @action(detail=True, methods=['post'], url_path='confirm-final')
+    def confirm_final(self, request, pk=None):
+        """Author confirms copyedited file as final."""
+        file_obj = self.get_object()
+        
+        # Validate file is in COPYEDITED status
+        if file_obj.file_type != 'COPYEDITED':
+            return Response(
+                {'detail': 'Only COPYEDITED files can be confirmed by author.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Validate user is the submission author
+        if not hasattr(request.user, 'profile'):
+            return Response(
+                {'detail': 'User profile not found.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        if file_obj.submission.corresponding_author != request.user.profile:
+            return Response(
+                {'detail': 'Only the submission author can confirm files.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Update file status to AUTHOR_FINAL
+        from django.utils import timezone
+        file_obj.file_type = 'AUTHOR_FINAL'
+        file_obj.description = request.data.get('confirmation_notes', file_obj.description)
+        file_obj.last_edited_at = timezone.now()
+        file_obj.last_edited_by = request.user.profile
+        file_obj.save()
+        
+        # TODO: Send notification to editor that file is ready for final review
+        
+        serializer = self.get_serializer(file_obj)
+        return Response({
+            'status': 'confirmed',
+            'message': 'File confirmed as final by author',
+            'file': serializer.data,
+            'confirmed_at': file_obj.last_edited_at,
+            'confirmed_by': {
+                'id': str(request.user.profile.id),
+                'name': request.user.profile.display_name,
+                'email': request.user.email
+            },
+            'confirmation_notes': file_obj.description
+        })
 
 
 @extend_schema_view(
