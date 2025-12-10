@@ -87,6 +87,12 @@ class WorkflowPermissions(permissions.BasePermission):
                     logger.info(f"Permission GRANTED: User is production assistant")
                     return True
                 
+                # Check if user is a participant
+                if hasattr(obj, 'participants'):
+                    if obj.participants.filter(id=user.profile.id).exists():
+                        logger.info(f"Permission GRANTED: User is a participant")
+                        return True
+                
                 # Allow the assigner to manage the assignment
                 if hasattr(obj, 'assigned_by') and obj.assigned_by == user.profile:
                     logger.info(f"Permission GRANTED: User is assigner (assigned_by)")
@@ -337,7 +343,104 @@ class CopyeditingAssignmentViewSet(viewsets.ModelViewSet):
             {**ProfileSerializer(assignment.submission.corresponding_author).data, 'role': 'author'},
         ]
         
+        # Add additional participants
+        for participant in assignment.participants.all():
+            participants.append({
+                **ProfileSerializer(participant).data,
+                'role': 'participant'
+            })
+        
         return Response(participants)
+    
+    @extend_schema(
+        summary="Add participant to assignment",
+        description="Add an additional participant/collaborator to this copyediting assignment.",
+        request={'application/json': {'type': 'object', 'properties': {
+            'profile_id': {'type': 'string', 'format': 'uuid', 'description': 'Profile UUID of the user to add'}
+        }, 'required': ['profile_id']}}
+    )
+    @action(detail=True, methods=['post'])
+    def add_participant(self, request, pk=None):
+        """Add a participant to the assignment."""
+        assignment = self.get_object()
+        profile_id = request.data.get('profile_id')
+        
+        if not profile_id:
+            return Response(
+                {'detail': 'profile_id is required.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        from apps.users.models import Profile
+        try:
+            profile = Profile.objects.get(id=profile_id)
+        except Profile.DoesNotExist:
+            return Response(
+                {'detail': 'Profile not found.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Check if already a participant
+        if assignment.participants.filter(id=profile_id).exists():
+            return Response(
+                {'detail': 'User is already a participant.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Check if user is already the copyeditor or assigned_by
+        if profile == assignment.copyeditor:
+            return Response(
+                {'detail': 'User is already the assigned copyeditor.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if profile == assignment.assigned_by:
+            return Response(
+                {'detail': 'User is already the assigner.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Add participant
+        assignment.participants.add(profile)
+        
+        return Response(
+            {'detail': 'Participant added successfully.'},
+            status=status.HTTP_201_CREATED
+        )
+    
+    @extend_schema(
+        summary="Remove participant from assignment",
+        description="Remove a participant/collaborator from this copyediting assignment.",
+        request={'application/json': {'type': 'object', 'properties': {
+            'profile_id': {'type': 'string', 'format': 'uuid', 'description': 'Profile UUID of the user to remove'}
+        }, 'required': ['profile_id']}}
+    )
+    @action(detail=True, methods=['post'])
+    def remove_participant(self, request, pk=None):
+        """Remove a participant from the assignment."""
+        assignment = self.get_object()
+        profile_id = request.data.get('profile_id')
+        
+        if not profile_id:
+            return Response(
+                {'detail': 'profile_id is required.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Check if participant exists
+        if not assignment.participants.filter(id=profile_id).exists():
+            return Response(
+                {'detail': 'User is not a participant.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Remove participant
+        assignment.participants.remove(profile_id)
+        
+        return Response(
+            {'detail': 'Participant removed successfully.'},
+            status=status.HTTP_200_OK
+        )
 
 
 @extend_schema_view(

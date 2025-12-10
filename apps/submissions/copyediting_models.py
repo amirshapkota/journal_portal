@@ -40,6 +40,14 @@ class CopyeditingAssignment(models.Model):
         help_text="Editor who assigned the copyeditor"
     )
     
+    # Additional participants (optional collaborators)
+    participants = models.ManyToManyField(
+        'users.Profile',
+        related_name='participating_copyediting_assignments',
+        blank=True,
+        help_text="Additional users who can collaborate on this assignment"
+    )
+    
     # Assignment status and dates
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
     assigned_at = models.DateTimeField(auto_now_add=True)
