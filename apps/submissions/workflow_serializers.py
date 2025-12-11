@@ -411,8 +411,8 @@ class ProductionFileSerializer(serializers.ModelSerializer):
             'is_approved', 'approved_by', 'approved_at', 'created_at', 'updated_at'
         )
         read_only_fields = (
-            'id', 'uploaded_by', 'file_size', 'mime_type', 'approved_by',
-            'approved_at', 'published_at', 'created_at', 'updated_at'
+            'id', 'uploaded_by', 'file_size', 'mime_type', 'original_filename',
+            'approved_by', 'approved_at', 'published_at', 'created_at', 'updated_at'
         )
     
     def get_file_url(self, obj):
