@@ -253,8 +253,7 @@ class SubmissionViewSet(viewsets.ModelViewSet):
             status__in=[
                 'UNDER_REVIEW',
                 'REVISION_REQUIRED', 'REVISION_REQUESTED', 'REVISED',
-                'ACCEPTANCE_REQUESTED', 'REJECTION_REQUESTED',
-                'COPYEDITING', 'ACCEPTED'
+                'ACCEPTANCE_REQUESTED', 'REJECTION_REQUESTED', 'ACCEPTED', 'COPYEDITING',
             ]
         ).annotate(
             review_count=Count('review_assignments')
@@ -295,7 +294,7 @@ class SubmissionViewSet(viewsets.ModelViewSet):
         """Get all archived submissions (completed)."""
         queryset = self.get_queryset().filter(
             status__in=[
-                'REJECTED', 'WITHDRAWN', 'PUBLISHED',
+                'REJECTED', 'WITHDRAWN', 'PUBLISHED', 
             ]
         )
         
