@@ -334,10 +334,10 @@ class ProductionAssignmentSerializer(serializers.ModelSerializer):
         from apps.users.models import Profile, Role
         try:
             profile = Profile.objects.get(id=value)
-            # Check if user has LAYOUT_EDITOR or PRODUCTION_EDITOR role
-            if not profile.roles.filter(name__in=['LAYOUT_EDITOR', 'PRODUCTION_EDITOR']).exists():
+            # Check if user has EDITOR role
+            if not profile.roles.filter(name__in=['EDITOR']).exists():
                 raise serializers.ValidationError(
-                    "Selected user does not have LAYOUT_EDITOR or PRODUCTION_EDITOR role."
+                    "Selected user does not have EDITOR role."
                 )
         except Profile.DoesNotExist:
             raise serializers.ValidationError("Production assistant profile does not exist.")

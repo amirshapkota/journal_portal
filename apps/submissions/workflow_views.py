@@ -1119,7 +1119,106 @@ class ProductionAssignmentViewSet(viewsets.ModelViewSet):
             {**ProfileSerializer(assignment.submission.corresponding_author).data, 'role': 'author'},
         ]
         
+        # Add additional participants
+        for participant in assignment.participants.all():
+            participants.append({
+                **ProfileSerializer(participant).data, 
+                'role': 'participant'
+            })
+        
         return Response(participants)
+    
+    @extend_schema(
+        summary="Add participant to assignment",
+        description="Add an additional participant/collaborator to this production assignment.",
+        request={'application/json': {'type': 'object', 'properties': {
+            'profile_id': {'type': 'string', 'format': 'uuid', 'description': 'Profile UUID of the user to add'}
+        }, 'required': ['profile_id']}}
+    )
+    @action(detail=True, methods=['post'])
+    def add_participant(self, request, pk=None):
+        """Add a participant to this production assignment."""
+        assignment = self.get_object()
+        
+        profile_id = request.data.get('profile_id')
+        if not profile_id:
+            return Response(
+                {'error': 'profile_id is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Check if user exists
+        from apps.users.models import Profile
+        try:
+            profile = Profile.objects.get(id=profile_id)
+        except Profile.DoesNotExist:
+            return Response(
+                {'error': 'User not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Check if already a participant
+        if assignment.participants.filter(id=profile_id).exists():
+            return Response(
+                {'error': 'User is already a participant'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Check if already the production assistant or assigned_by
+        if profile.id == assignment.production_assistant.id:
+            return Response(
+                {'error': 'User is already the production assistant'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if profile.id == assignment.assigned_by.id:
+            return Response(
+                {'error': 'User is already the assigner (editor)'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Add participant
+        assignment.participants.add(profile)
+        
+        from apps.users.serializers import ProfileSerializer
+        return Response(
+            ProfileSerializer(profile).data,
+            status=status.HTTP_201_CREATED
+        )
+    
+    @extend_schema(
+        summary="Remove participant from assignment",
+        description="Remove a participant/collaborator from this production assignment.",
+        request={'application/json': {'type': 'object', 'properties': {
+            'profile_id': {'type': 'string', 'format': 'uuid', 'description': 'Profile UUID of the user to remove'}
+        }, 'required': ['profile_id']}}
+    )
+    @action(detail=True, methods=['post'])
+    def remove_participant(self, request, pk=None):
+        """Remove a participant from this production assignment."""
+        assignment = self.get_object()
+        
+        profile_id = request.data.get('profile_id')
+        if not profile_id:
+            return Response(
+                {'error': 'profile_id is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Check if user is a participant
+        if not assignment.participants.filter(id=profile_id).exists():
+            return Response(
+                {'error': 'User is not a participant'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Remove participant
+        assignment.participants.remove(profile_id)
+        
+        return Response(
+            {'message': 'Participant removed successfully'},
+            status=status.HTTP_200_OK
+        )
 
 
 @extend_schema_view(

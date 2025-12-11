@@ -59,6 +59,14 @@ class ProductionAssignment(models.Model):
         help_text="Notes from production assistant upon completion"
     )
     
+    # Participants
+    participants = models.ManyToManyField(
+        'users.Profile',
+        related_name='production_participants',
+        blank=True,
+        help_text="Additional participants involved in this production assignment"
+    )
+    
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
