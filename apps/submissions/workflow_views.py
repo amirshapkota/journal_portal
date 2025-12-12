@@ -208,14 +208,22 @@ class CopyeditingAssignmentViewSet(viewsets.ModelViewSet):
         
         # Create copyediting files from submission documents
         from django.core.files.base import ContentFile
+        import logging
+        logger = logging.getLogger(__name__)
+        
         files_created = 0
+        files_failed = 0
         
         # Get submission documents (manuscripts and supplementary files)
         submission_docs = assignment.submission.documents.filter(
             document_type__in=['MANUSCRIPT', 'SUPPLEMENTARY', 'REVISED_MANUSCRIPT']
         )
         
+        logger.info(f"Found {submission_docs.count()} submission documents to process for assignment {assignment.id}")
+        
         for doc in submission_docs:
+            logger.info(f"Processing document {doc.id}: {doc.file_name} (type: {doc.document_type})")
+            
             # Skip if copyediting file already exists for this document
             existing = CopyeditingFile.objects.filter(
                 assignment=assignment,
@@ -224,6 +232,7 @@ class CopyeditingAssignmentViewSet(viewsets.ModelViewSet):
             ).exists()
             
             if existing:
+                logger.info(f"Skipping document {doc.id} - copyediting file already exists")
                 continue
             
             # Create copyediting file from document
@@ -249,6 +258,8 @@ class CopyeditingAssignmentViewSet(viewsets.ModelViewSet):
                     version=1
                 )
                 
+                logger.info(f"Created copyediting file record {copyediting_file.id} for document {doc.id}")
+                
                 # Copy the file content
                 if doc.original_file and hasattr(doc.original_file, 'file'):
                     try:
@@ -260,22 +271,29 @@ class CopyeditingAssignmentViewSet(viewsets.ModelViewSet):
                             save=True
                         )
                         files_created += 1
+                        logger.info(f"Successfully copied file content for document {doc.id}")
                     except Exception as file_copy_error:
-                        import logging
-                        logger = logging.getLogger(__name__)
-                        logger.error(f"Error copying file content for document {doc.id}: {str(file_copy_error)}")
+                        logger.error(f"Error copying file content for document {doc.id}: {str(file_copy_error)}", exc_info=True)
                         # Delete the copyediting file if file copy failed
                         copyediting_file.delete()
+                        files_failed += 1
+                else:
+                    logger.warning(f"Document {doc.id} has no original_file or file attribute")
+                    # Keep the copyediting file record even if no file content
+                    files_created += 1
             except Exception as e:
                 # Log error but continue with other files
-                import logging
-                logger = logging.getLogger(__name__)
-                logger.error(f"Error creating copyediting file from document {doc.id}: {str(e)}")
+                logger.error(f"Error creating copyediting file from document {doc.id}: {str(e)}", exc_info=True)
+                files_failed += 1
+        
+        logger.info(f"Copyediting file creation complete: {files_created} created, {files_failed} failed")
         
         serializer = self.get_serializer(assignment)
         return Response({
             **serializer.data,
-            'files_created': files_created
+            'files_created': files_created,
+            'files_failed': files_failed,
+            'total_documents': submission_docs.count()
         })
     
     @extend_schema(
