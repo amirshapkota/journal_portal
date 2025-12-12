@@ -608,7 +608,7 @@ class PublicationScheduleSerializer(serializers.ModelSerializer):
         
         # Move submission to SCHEDULED status
         submission = validated_data['submission']
-        if submission.status == 'IN_PRODUCTION':
+        if submission.status in ['IN_PRODUCTION', 'PRODUCTION']:
             submission.status = 'SCHEDULED'
             submission.save()
         
