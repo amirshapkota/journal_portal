@@ -95,15 +95,39 @@ class JournalSerializer(serializers.ModelSerializer):
         try:
             headers = {
                 'Authorization': f'Bearer {obj.ojs_api_key}',
-                'Content-Type': 'application/json'
+                'Accept': 'application/json',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
             }
-            # Try to fetch journal info or a simple endpoint
+            
+            # Try _context endpoint first (lightweight)
             response = requests.get(
-                f"{obj.ojs_api_url}/submissions",
+                f"{obj.ojs_api_url}/_context",
                 headers=headers,
-                params={'count': 1},
                 timeout=5
             )
+            
+            # If _context not found, try submissions endpoint
+            if response.status_code == 404:
+                response = requests.get(
+                    f"{obj.ojs_api_url}/submissions",
+                    headers=headers,
+                    params={'count': 1},
+                    timeout=5
+                )
+            
+            # If 406, try alternative header format
+            if response.status_code == 406:
+                headers_alt = {
+                    'X-Csrf-Token': obj.ojs_api_key,
+                    'Accept': 'application/json',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                }
+                response = requests.get(
+                    f"{obj.ojs_api_url}/submissions",
+                    headers=headers_alt,
+                    params={'count': 1},
+                    timeout=5
+                )
             
             if response.status_code == 200:
                 status['connected'] = True
@@ -113,6 +137,11 @@ class JournalSerializer(serializers.ModelSerializer):
                 status['error'] = 'Access forbidden - insufficient permissions'
             elif response.status_code == 404:
                 status['error'] = 'OJS endpoint not found'
+            elif response.status_code == 406:
+                if 'Mod_Security' in response.text or 'ModSecurity' in response.text:
+                    status['error'] = 'Blocked by server firewall (ModSecurity)'
+                else:
+                    status['error'] = 'OJS API version mismatch'
             else:
                 status['error'] = f'Connection failed with status {response.status_code}'
         except requests.exceptions.Timeout:

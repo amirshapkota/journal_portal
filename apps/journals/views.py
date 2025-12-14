@@ -401,17 +401,60 @@ class JournalViewSet(viewsets.ModelViewSet):
         # Test connection before saving if credentials are provided
         if ojs_api_url and ojs_api_key:
             try:
+                import logging
+                logger = logging.getLogger(__name__)
+                
+                # First try: Bearer token with User-Agent to avoid WAF/ModSecurity blocks
                 headers = {
                     'Authorization': f'Bearer {ojs_api_key}',
-                    'Content-Type': 'application/json'
+                    'Accept': 'application/json',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
                 }
-                # Test connection with a simple API call
-                response = requests.get(
-                    f"{ojs_api_url}/submissions",
-                    headers=headers,
-                    params={'count': 1},
-                    timeout=10
-                )
+                
+                # Test connection with _context endpoint first (lightweight)
+                test_url = f"{ojs_api_url}/_context"
+                logger.info(f"Testing OJS connection to: {test_url}")
+                
+                response = requests.get(test_url, headers=headers, timeout=10)
+                
+                # If _context not found, try submissions endpoint
+                if response.status_code == 404:
+                    test_url = f"{ojs_api_url}/submissions"
+                    response = requests.get(
+                        test_url,
+                        headers=headers,
+                        params={'count': 1},
+                        timeout=10
+                    )
+                
+                logger.info(f"OJS response status: {response.status_code}")
+                
+                # If 406 from ModSecurity, try with minimal headers and apiToken parameter
+                if response.status_code == 406 and 'Mod_Security' in response.text:
+                    logger.info("ModSecurity block detected - trying with API token as query parameter")
+                    # Some OJS instances accept API key as query parameter instead
+                    minimal_headers = {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                        'Accept': 'application/json'
+                    }
+                    response = requests.get(
+                        test_url,
+                        headers=minimal_headers,
+                        params={'apiToken': ojs_api_key, 'count': 1},
+                        timeout=10
+                    )
+                    logger.info(f"Query parameter attempt status: {response.status_code}")
+                
+                # If still 406, try alternative header format
+                if response.status_code == 406:
+                    logger.info("Trying alternative header format with X-Csrf-Token")
+                    headers_alt = {
+                        'X-Csrf-Token': ojs_api_key,
+                        'Accept': 'application/json',
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                    }
+                    response = requests.get(test_url, headers=headers_alt, timeout=10)
+                    logger.info(f"Alternative attempt status: {response.status_code}")
                 
                 if response.status_code == 401:
                     return Response({
@@ -423,18 +466,39 @@ class JournalViewSet(viewsets.ModelViewSet):
                         'detail': 'Access forbidden - insufficient permissions',
                         'error': 'forbidden'
                     }, status=status.HTTP_400_BAD_REQUEST)
+                elif response.status_code == 406:
+                    # Check if it's ModSecurity blocking
+                    if 'Mod_Security' in response.text or 'ModSecurity' in response.text:
+                        logger.error(f"ModSecurity blocking request")
+                        return Response({
+                            'detail': 'Request blocked by server firewall (ModSecurity). The OJS server security configuration is preventing API access. Contact the OJS administrator to whitelist API requests.',
+                            'error': 'firewall_blocked',
+                            'suggestion': 'Ask the OJS administrator to configure ModSecurity to allow REST API requests with Bearer tokens.'
+                        }, status=status.HTTP_400_BAD_REQUEST)
+                    else:
+                        logger.error(f"406 response body: {response.text[:500]}")
+                        return Response({
+                            'detail': f'OJS server returned 406 Not Acceptable. Response: {response.text[:200]}',
+                            'error': 'not_acceptable',
+                            'suggestion': 'This OJS instance may have different API configuration. Check OJS version and API settings.'
+                        }, status=status.HTTP_400_BAD_REQUEST)
                 elif response.status_code == 404:
                     return Response({
-                        'detail': 'OJS endpoint not found - check API URL',
+                        'detail': 'OJS API endpoint not found - verify the API URL is correct',
                         'error': 'endpoint_not_found'
                     }, status=status.HTTP_400_BAD_REQUEST)
                 elif response.status_code != 200:
+                    # Include response text for debugging
+                    error_detail = response.text[:300] if response.text else 'No error details'
+                    logger.error(f"OJS connection failed: {response.status_code} - {error_detail}")
                     return Response({
                         'detail': f'Connection failed with status {response.status_code}',
-                        'error': 'connection_failed'
+                        'error': 'connection_failed',
+                        'response_body': error_detail
                     }, status=status.HTTP_400_BAD_REQUEST)
                 
                 # Connection successful
+                logger.info("OJS connection successful")
                 
             except requests.exceptions.Timeout:
                 return Response({
@@ -550,6 +614,7 @@ class JournalViewSet(viewsets.ModelViewSet):
         """
         Import all data from OJS into Django database.
         This imports users first, then submissions with proper author links.
+        Runs as a background task to avoid request timeout.
         """
         journal = self.get_object()
         
@@ -574,49 +639,44 @@ class JournalViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Perform import
-        try:
-            from apps.integrations.ojs_sync import import_all_ojs_data_for_journal
-            summary = import_all_ojs_data_for_journal(journal)
-            
-            # Check if there were any errors in the import
-            user_errors = summary.get('users', {}).get('errors', 0)
-            submission_errors = summary.get('submissions', {}).get('errors', 0)
-            user_imported = summary.get('users', {}).get('imported', 0)
-            submission_imported = summary.get('submissions', {}).get('imported', 0)
-            
-            # If there were errors and nothing was imported, treat as failure
-            has_errors = user_errors > 0 or submission_errors > 0
-            nothing_imported = user_imported == 0 and submission_imported == 0
-            
-            if has_errors and nothing_imported:
-                error_details = []
-                error_details.extend(summary.get('users', {}).get('error_details', []))
-                error_details.extend(summary.get('submissions', {}).get('error_details', []))
-                
-                return Response({
-                    'detail': 'OJS import failed',
-                    'errors': error_details,
-                    'summary': summary
-                }, status=status.HTTP_502_BAD_GATEWAY)
-            
-            # If some items were imported but there were also errors, show warning
-            if has_errors:
-                return Response({
-                    'detail': 'OJS import completed with errors',
-                    'summary': summary
-                }, status=status.HTTP_207_MULTI_STATUS)
-            
-            # Complete success
+        # Check if import is already in progress
+        from django.core.cache import cache
+        progress_key = f"ojs_import_progress_{journal.id}"
+        existing_progress = cache.get(progress_key)
+        
+        if existing_progress and existing_progress.get('status') in ['fetching', 'processing']:
             return Response({
-                'detail': 'OJS import completed successfully',
-                'summary': summary
-            })
-        except Exception as e:
-            return Response(
-                {'detail': f'Import failed: {str(e)}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+                'detail': 'Import is already in progress',
+                'progress': existing_progress
+            }, status=status.HTTP_409_CONFLICT)
+        
+        # Start import in background thread
+        import threading
+        
+        def run_import():
+            try:
+                from apps.integrations.ojs_sync import import_all_ojs_data_for_journal
+                import_all_ojs_data_for_journal(journal)
+            except Exception as e:
+                # Update cache with error status
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"Background OJS import failed: {str(e)}")
+                
+                progress = cache.get(progress_key, {})
+                progress['status'] = 'failed'
+                progress['error'] = str(e)
+                cache.set(progress_key, progress, timeout=3600)
+        
+        # Start background thread
+        thread = threading.Thread(target=run_import, daemon=True)
+        thread.start()
+        
+        return Response({
+            'detail': 'OJS import started in background',
+            'message': 'Use the import-progress endpoint to check status',
+            'progress_endpoint': f'/api/v1/journals/journals/{journal.id}/import-progress/'
+        }, status=status.HTTP_202_ACCEPTED)
     
     @action(detail=True, methods=['get'], url_path='import-progress', permission_classes=[IsAuthenticated])
     def import_progress(self, request, pk=None):

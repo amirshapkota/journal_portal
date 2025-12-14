@@ -96,51 +96,75 @@ def get_openalex_work(work_id):
 def doaj_search_journals(query, page=1, page_size=10):
     url = f"{DOAJ_API_BASE}search/journals/{query}"
     params = {"page": page, "pageSize": page_size}
-    resp = requests.get(url, params=params)
-    resp.raise_for_status()
-    data = resp.json()
-    # v2 returns 'results' as a list, 'total' as int
-    return {
-        'results': data.get('results', []),
-        'total': data.get('total', len(data.get('results', [])))
-    }
+    try:
+        resp = requests.get(url, params=params, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+        # v2 returns 'results' as a list, 'total' as int
+        return {
+            'results': data.get('results', []),
+            'total': data.get('total', len(data.get('results', [])))
+        }
+    except requests.exceptions.RequestException as e:
+        # Return empty results on network errors
+        return {
+            'results': [],
+            'total': 0,
+            'error': str(e)
+        }
 
 # Search articles by query
 
 def doaj_search_articles(query, page=1, page_size=10):
     url = f"{DOAJ_API_BASE}search/articles/{query}"
     params = {"page": page, "pageSize": page_size}
-    resp = requests.get(url, params=params)
-    resp.raise_for_status()
-    data = resp.json()
-    return {
-        'results': data.get('results', []),
-        'total': data.get('total', len(data.get('results', [])))
-    }
+    try:
+        resp = requests.get(url, params=params, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+        return {
+            'results': data.get('results', []),
+            'total': data.get('total', len(data.get('results', [])))
+        }
+    except requests.exceptions.RequestException as e:
+        return {
+            'results': [],
+            'total': 0,
+            'error': str(e)
+        }
 
 # Check if a journal is included in DOAJ by ISSN
 
 def doaj_check_inclusion(issn):
     # v2: /search/journals/issn:{issn}
     url = f"{DOAJ_API_BASE}search/journals/issn:{issn}"
-    resp = requests.get(url)
-    resp.raise_for_status()
-    data = resp.json()
-    return data.get('total', 0) > 0
+    try:
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+        return data.get('total', 0) > 0
+    except requests.exceptions.RequestException:
+        return False
 
 # Fetch journal metadata by DOAJ journal id
 def doaj_fetch_journal_metadata(journal_id):
     url = f"{DOAJ_API_BASE}journals/{journal_id}"
-    resp = requests.get(url)
-    resp.raise_for_status()
-    return resp.json()
+    try:
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        return resp.json()
+    except requests.exceptions.RequestException as e:
+        return {'error': str(e)}
 
 # Fetch article metadata by DOAJ article id
 def doaj_fetch_article_metadata(article_id):
     url = f"{DOAJ_API_BASE}articles/{article_id}"
-    resp = requests.get(url)
-    resp.raise_for_status()
-    return resp.json()
+    try:
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        return resp.json()
+    except requests.exceptions.RequestException as e:
+        return {'error': str(e)}
 
 # Submit or update data (requires API key, not implemented here)
 def doaj_submit_or_update(data, api_key, endpoint="journals", method="POST", object_id=None):
@@ -160,7 +184,9 @@ def get_ojs_headers(api_key):
     """Generate headers for OJS API requests."""
     return {
         "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
 
 # --- OJS → Django ---

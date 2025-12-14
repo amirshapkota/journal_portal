@@ -22,6 +22,7 @@ class VerificationRequestSerializer(serializers.ModelSerializer):
 
 class VerificationRequestCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating verification requests."""
+    affiliation = serializers.CharField(required=False, allow_blank=True)
     
     class Meta:
         model = VerificationRequest
@@ -62,6 +63,15 @@ class VerificationRequestCreateSerializer(serializers.ModelSerializer):
                 "You already have a pending verification request. "
                 "Please wait for it to be reviewed before submitting another."
             )
+        
+        # Auto-populate affiliation from profile if not provided
+        if not data.get('affiliation'):
+            if profile.affiliation_name:
+                data['affiliation'] = profile.affiliation_name
+            else:
+                raise serializers.ValidationError({
+                    'affiliation': 'Affiliation is required. Please provide it or update your profile.'
+                })
         
         return data
 
