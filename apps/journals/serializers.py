@@ -73,6 +73,8 @@ class JournalSerializer(serializers.ModelSerializer):
         Returns configuration status and connection health.
         """
         import requests
+        import re
+        import time
         
         status = {
             'configured': False,
@@ -93,6 +95,35 @@ class JournalSerializer(serializers.ModelSerializer):
         
         # Test connection by making a simple API call
         try:
+            # Create a session to handle cookies (for bot detection)
+            session = requests.Session()
+            session.headers.update({
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.5',
+                'Connection': 'keep-alive',
+            })
+            
+            # Initialize session by visiting the site to get cookies
+            try:
+                base_url = obj.ojs_api_url.replace('/api/v1', '')
+                init_resp = session.get(base_url, timeout=5)
+                
+                # Check if we got a bot detection response
+                if init_resp.status_code == 409 or 'document.cookie' in init_resp.text:
+                    # Extract cookie from JavaScript: document.cookie = "humans_21909=1"
+                    cookie_match = re.search(r'document\.cookie\s*=\s*"([^=]+)=([^"]+)"', init_resp.text)
+                    if cookie_match:
+                        cookie_name = cookie_match.group(1)
+                        cookie_value = cookie_match.group(2)
+                        session.cookies.set(cookie_name, cookie_value, domain=base_url.split('//')[1].split('/')[0])
+                        
+                        # Wait a moment then reload
+                        time.sleep(0.3)
+                        init_resp = session.get(base_url, timeout=5)
+            except Exception:
+                pass  # Continue even if initialization fails
+            
             headers = {
                 'Authorization': f'Bearer {obj.ojs_api_key}',
                 'Accept': 'application/json',
@@ -100,7 +131,7 @@ class JournalSerializer(serializers.ModelSerializer):
             }
             
             # Try _context endpoint first (lightweight)
-            response = requests.get(
+            response = session.get(
                 f"{obj.ojs_api_url}/_context",
                 headers=headers,
                 timeout=5
@@ -108,7 +139,7 @@ class JournalSerializer(serializers.ModelSerializer):
             
             # If _context not found, try submissions endpoint
             if response.status_code == 404:
-                response = requests.get(
+                response = session.get(
                     f"{obj.ojs_api_url}/submissions",
                     headers=headers,
                     params={'count': 1},
@@ -122,7 +153,7 @@ class JournalSerializer(serializers.ModelSerializer):
                     'Accept': 'application/json',
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
                 }
-                response = requests.get(
+                response = session.get(
                     f"{obj.ojs_api_url}/submissions",
                     headers=headers_alt,
                     params={'count': 1},

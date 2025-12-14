@@ -404,6 +404,45 @@ class JournalViewSet(viewsets.ModelViewSet):
                 import logging
                 logger = logging.getLogger(__name__)
                 
+                # Create a session to handle cookies (for bot detection)
+                session = requests.Session()
+                session.headers.update({
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                    'Accept-Language': 'en-US,en;q=0.5',
+                    'Accept-Encoding': 'gzip, deflate',
+                    'Connection': 'keep-alive',
+                    'Upgrade-Insecure-Requests': '1'
+                })
+                
+                # Initialize session by visiting the site to get cookies
+                import re
+                import time
+                try:
+                    base_url = ojs_api_url.replace('/api/v1', '')
+                    init_resp = session.get(base_url, timeout=10)
+                    logger.info(f"Initial session response: status={init_resp.status_code}, cookies={len(session.cookies)}")
+                    
+                    # Check if we got a bot detection response
+                    if init_resp.status_code == 409 or 'document.cookie' in init_resp.text:
+                        logger.info("Bot detection triggered, extracting cookie...")
+                        # Extract cookie from JavaScript: document.cookie = "humans_21909=1"
+                        cookie_match = re.search(r'document\.cookie\s*=\s*"([^=]+)=([^"]+)"', init_resp.text)
+                        if cookie_match:
+                            cookie_name = cookie_match.group(1)
+                            cookie_value = cookie_match.group(2)
+                            logger.info(f"Setting bot detection cookie: {cookie_name}={cookie_value}")
+                            session.cookies.set(cookie_name, cookie_value, domain=base_url.split('//')[1].split('/')[0])
+                            
+                            # Wait a moment then reload the page as the script expects
+                            time.sleep(0.5)
+                            init_resp = session.get(base_url, timeout=10)
+                            logger.info(f"After cookie retry: status={init_resp.status_code}, cookies={len(session.cookies)}")
+                    
+                    logger.info(f"Session initialized successfully with {len(session.cookies)} cookies")
+                except Exception as e:
+                    logger.warning(f"Could not initialize session: {str(e)}")
+                
                 # First try: Bearer token with User-Agent to avoid WAF/ModSecurity blocks
                 headers = {
                     'Authorization': f'Bearer {ojs_api_key}',
@@ -415,12 +454,12 @@ class JournalViewSet(viewsets.ModelViewSet):
                 test_url = f"{ojs_api_url}/_context"
                 logger.info(f"Testing OJS connection to: {test_url}")
                 
-                response = requests.get(test_url, headers=headers, timeout=10)
+                response = session.get(test_url, headers=headers, timeout=10)
                 
                 # If _context not found, try submissions endpoint
                 if response.status_code == 404:
                     test_url = f"{ojs_api_url}/submissions"
-                    response = requests.get(
+                    response = session.get(
                         test_url,
                         headers=headers,
                         params={'count': 1},
@@ -437,7 +476,7 @@ class JournalViewSet(viewsets.ModelViewSet):
                         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
                         'Accept': 'application/json'
                     }
-                    response = requests.get(
+                    response = session.get(
                         test_url,
                         headers=minimal_headers,
                         params={'apiToken': ojs_api_key, 'count': 1},
@@ -453,7 +492,7 @@ class JournalViewSet(viewsets.ModelViewSet):
                         'Accept': 'application/json',
                         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
                     }
-                    response = requests.get(test_url, headers=headers_alt, timeout=10)
+                    response = session.get(test_url, headers=headers_alt, timeout=10)
                     logger.info(f"Alternative attempt status: {response.status_code}")
                 
                 if response.status_code == 401:

@@ -11,6 +11,7 @@ from apps.integrations.utils import (
     ojs_list_submissions, ojs_create_submission, ojs_update_submission
 )
 import logging
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,45 @@ class OJSSyncService:
         
         if not self.api_url or not self.api_key:
             raise ValueError("Journal does not have OJS configured")
+        
+        # Create persistent session for cookie handling (bot detection)
+        self.session = requests.Session()
+        self.session.headers.update({
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Accept-Encoding': 'gzip, deflate',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1'
+        })
+        
+        # Initialize session by visiting the site to get cookies
+        import re
+        import time
+        try:
+            base_url = self.api_url.replace('/api/v1', '')
+            init_resp = self.session.get(base_url, timeout=10)
+            logger.info(f"Initial session response: status={init_resp.status_code}, cookies={len(self.session.cookies)}")
+            
+            # Check if we got a bot detection response
+            if init_resp.status_code == 409 or 'document.cookie' in init_resp.text:
+                logger.info("Bot detection triggered, extracting cookie...")
+                # Extract cookie from JavaScript: document.cookie = "humans_21909=1"
+                cookie_match = re.search(r'document\.cookie\s*=\s*"([^=]+)=([^"]+)"', init_resp.text)
+                if cookie_match:
+                    cookie_name = cookie_match.group(1)
+                    cookie_value = cookie_match.group(2)
+                    logger.info(f"Setting bot detection cookie: {cookie_name}={cookie_value}")
+                    self.session.cookies.set(cookie_name, cookie_value, domain=base_url.split('//')[1].split('/')[0])
+                    
+                    # Wait a moment then reload the page as the script expects
+                    time.sleep(0.5)
+                    init_resp = self.session.get(base_url, timeout=10)
+                    logger.info(f"After cookie retry: status={init_resp.status_code}, cookies={len(self.session.cookies)}")
+            
+            logger.info(f"Session initialized successfully with {len(self.session.cookies)} cookies")
+        except Exception as e:
+            logger.warning(f"Could not initialize session: {str(e)}")
     
     def import_all_from_ojs(self):
         """
@@ -76,9 +116,22 @@ class OJSSyncService:
             offset = 0
             count = 100  # Fetch 100 items per page
             
+            headers = {
+                'Authorization': f'Bearer {self.api_key}',
+                'Accept': 'application/json',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+            
             while True:
-                # Fetch page of submissions
-                data = ojs_list_submissions(self.api_url, self.api_key, journal_id=None, offset=offset, count=count)
+                # Fetch page of submissions using session
+                url = f"{self.api_url}/submissions"
+                params = {'offset': offset, 'count': count}
+                
+                logger.info(f"Fetching submissions: {url} (offset {offset})")
+                resp = self.session.get(url, headers=headers, params=params)
+                resp.raise_for_status()
+                
+                data = resp.json()
                 items = data.get('items', [])
                 items_max = data.get('itemsMax', 0)
                 
@@ -239,7 +292,7 @@ class OJSSyncService:
             }
             
             logger.info(f"Fetching full publication details for OJS ID {ojs_submission_id}")
-            resp = requests.get(url, headers=headers)
+            resp = self.session.get(url, headers=headers)
             
             if resp.status_code != 200:
                 logger.error(f"Failed to fetch publication details: {resp.status_code} - {resp.text[:500]}")
@@ -484,7 +537,7 @@ class OJSSyncService:
             # Method 1: Import from submission files endpoint (all stages)
             files_url = f"{self.api_url}/submissions/{ojs_submission_id}/files"
             logger.info(f"Fetching files from: {files_url}")
-            files_resp = requests.get(files_url, headers=headers)
+            files_resp = self.session.get(files_url, headers=headers)
             
             logger.info(f"Files API response status: {files_resp.status_code}")
             
@@ -501,7 +554,7 @@ class OJSSyncService:
                 # Fallback: Get files from publication galleys
                 try:
                     sub_url = f"{self.api_url}/submissions/{ojs_submission_id}"
-                    sub_resp = requests.get(sub_url, headers=headers)
+                    sub_resp = self.session.get(sub_url, headers=headers)
                     if sub_resp.status_code == 200:
                         sub_data = sub_resp.json()
                         publications = sub_data.get('publications', [])
@@ -533,9 +586,18 @@ class OJSSyncService:
             for file_data in submission_files:
                     try:
                         file_id = file_data.get('id')
-                        file_name = file_data.get('name', {}).get('en_US', f'document_{file_id}')
+                        file_name_obj = file_data.get('name', {})
+                        # Handle name as multilingual object
+                        file_name = file_name_obj.get('en_US') or file_name_obj.get('en') or f'document_{file_id}'
                         mime_type = file_data.get('mimetype', 'application/octet-stream')
                         file_stage = file_data.get('fileStage', 0)
+                        
+                        # Get the direct download URL from OJS API response
+                        file_url = file_data.get('url')
+                        file_path = file_data.get('path')
+                        
+                        logger.info(f"Processing file: {file_name} (ID: {file_id}, Stage: {file_stage})")
+                        logger.info(f"  URL: {file_url}, Path: {file_path}")
                         
                         # Map OJS file stage to Django document type
                         # OJS fileStage values: 2=submission, 4=review, 9=copyedit, 10=production
@@ -561,9 +623,26 @@ class OJSSyncService:
                         # Try different download methods
                         file_content = None
                         
-                        # Method 1: Try using the file path directly (OJS stores files in files_dir)
-                        file_path = file_data.get('path')
-                        if file_path:
+                        # Method 1: Use the 'url' field from the API response (preferred)
+                        if file_url:
+                            logger.info(f"Attempting download from API-provided URL: {file_url}")
+                            
+                            file_headers_with_auth = {
+                                'Authorization': f'Bearer {self.api_key}',
+                                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                            }
+                            file_resp = self.session.get(file_url, headers=file_headers_with_auth, allow_redirects=True)
+                            
+                            if file_resp.status_code == 200 and len(file_resp.content) > 0:
+                                # Verify it's not an error page
+                                if not (len(file_resp.content) < 1000 and b'<html' in file_resp.content.lower()):
+                                    file_content = file_resp.content
+                                    logger.info(f"✓ Downloaded file from API URL: {len(file_content)} bytes")
+                            else:
+                                logger.warning(f"URL download failed: {file_resp.status_code} - {file_resp.text[:200]}")
+                        
+                        # Method 2: Try using the file path directly (OJS stores files in files_dir)
+                        if not file_content and file_path:
                             # Try to access via OJS's files directory
                             # OJS usually serves files from: /files/{path}
                             direct_file_url = f"{base_url.rsplit('/', 2)[0]}/files/{file_path}"
@@ -573,15 +652,15 @@ class OJSSyncService:
                             file_headers_minimal = {
                                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
                             }
-                            file_resp = requests.get(direct_file_url, headers=file_headers_minimal, allow_redirects=True)
+                            file_resp = self.session.get(direct_file_url, headers=file_headers_minimal, allow_redirects=True)
                             
                             if file_resp.status_code == 200 and len(file_resp.content) > 0:
                                 # Verify it's not an error page
                                 if not (len(file_resp.content) < 1000 and b'<html' in file_resp.content.lower()):
                                     file_content = file_resp.content
-                                    logger.info(f"Successfully downloaded file via direct path: {len(file_content)} bytes")
+                                    logger.info(f"✓ Downloaded file via direct path: {len(file_content)} bytes")
                         
-                        # Method 2: Try OJS file API (may not work due to permissions)
+                        # Method 3: Try OJS file API (may not work due to permissions)
                         if not file_content:
                             file_stage_id = file_data.get('fileStage', 1)
                             file_api_url = f"{base_url}/$$$call$$$/api/file/file-api/download-file"
@@ -599,7 +678,7 @@ class OJSSyncService:
                                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
                             }
                             
-                            file_resp = requests.get(
+                            file_resp = self.session.get(
                                 file_api_url, 
                                 params=file_api_params, 
                                 headers=file_headers, 
@@ -644,7 +723,7 @@ class OJSSyncService:
                                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
                             }
-                            galley_resp = requests.get(download_url, headers=galley_headers, allow_redirects=True, timeout=30)
+                            galley_resp = self.session.get(download_url, headers=galley_headers, allow_redirects=True, timeout=30)
                             
                             if galley_resp.status_code == 200:
                                 # Check if it's actually a file (not HTML error page or JSON)
@@ -664,7 +743,7 @@ class OJSSyncService:
                         
                         # Method 4: Try fetching submission and looking for galleys
                         if not file_content:
-                            sub_resp = requests.get(f"{self.api_url}/submissions/{ojs_submission_id}", headers=headers)
+                            sub_resp = self.session.get(f"{self.api_url}/submissions/{ojs_submission_id}", headers=headers)
                             if sub_resp.status_code == 200:
                                 sub_data = sub_resp.json()
                                 publications = sub_data.get('publications', [])
@@ -683,7 +762,7 @@ class OJSSyncService:
                                             galley_headers_minimal = {
                                                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
                                             }
-                                            galley_resp = requests.get(download_url, headers=galley_headers_minimal, allow_redirects=True)
+                                            galley_resp = self.session.get(download_url, headers=galley_headers_minimal, allow_redirects=True)
                                             
                                             if galley_resp.status_code == 200:
                                                 if not (len(galley_resp.content) < 1000 and b'<html' in galley_resp.content.lower()):
@@ -791,7 +870,7 @@ class OJSSyncService:
             logger.info(f"Attempting to fetch review data for OJS submission {ojs_submission_id}")
             
             # First try the standard submissions endpoint
-            resp = requests.get(f"{self.api_url}/submissions/{ojs_submission_id}", headers=headers)
+            resp = self.session.get(f"{self.api_url}/submissions/{ojs_submission_id}", headers=headers)
             
             if resp.status_code != 200:
                 logger.warning(f"Could not fetch submission data for {ojs_submission_id}: status {resp.status_code}")
@@ -872,7 +951,7 @@ class OJSSyncService:
                 return 0
         
         # Fetch reviewer details
-        user_resp = requests.get(f"{self.api_url}/users/{reviewer_id}", headers=headers)
+        user_resp = self.session.get(f"{self.api_url}/users/{reviewer_id}", headers=headers)
         if user_resp.status_code != 200:
             logger.warning(f"Could not fetch user {reviewer_id}: status {user_resp.status_code}")
             return 0
@@ -1079,7 +1158,7 @@ class OJSSyncService:
                 logger.info(f"Creating submission in OJS: {url}")
                 logger.info(f"Submission data: {submission_data}")
                 
-                response = requests.post(url, json=submission_data, headers=headers)
+                response = self.session.post(url, json=submission_data, headers=headers)
                 logger.info(f"Create submission response: {response.status_code}")
                 logger.info(f"Create submission body: {response.text}")
                 
@@ -1101,7 +1180,7 @@ class OJSSyncService:
                 logger.info(f"Creating publication in OJS: {pub_url}")
                 logger.info(f"Publication data: {publication_data}")
                 
-                pub_response = requests.post(pub_url, json=publication_data, headers=headers)
+                pub_response = self.session.post(pub_url, json=publication_data, headers=headers)
                 logger.info(f"Create publication response: {pub_response.status_code}")
                 logger.info(f"Create publication body: {pub_response.text}")
                 
@@ -1177,7 +1256,7 @@ class OJSSyncService:
                 'Accept': 'application/json',
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
             }
-            files_response = requests.get(files_url, headers=headers, timeout=30)
+            files_response = self.session.get(files_url, headers=headers, timeout=30)
             if files_response.status_code == 200:
                 files_data = files_response.json()
                 existing_files = files_data.get('items', [])
@@ -1243,7 +1322,7 @@ class OJSSyncService:
                 logger.info(f"Form data: {form_data}")
                 
                 # Upload file to OJS
-                response = requests.post(url, headers=headers, files=files, data=form_data, timeout=60)
+                response = self.session.post(url, headers=headers, files=files, data=form_data, timeout=60)
                 
                 # Log response for debugging
                 logger.info(f"Upload response status: {response.status_code}")
@@ -1464,7 +1543,7 @@ class OJSSyncService:
                 params = {'offset': offset, 'count': count}
                 
                 logger.info(f"Fetching users from OJS: {url} (offset {offset})")
-                resp = requests.get(url, headers=headers, params=params)
+                resp = self.session.get(url, headers=headers, params=params)
                 resp.raise_for_status()
                 
                 data = resp.json()
