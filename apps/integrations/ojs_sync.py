@@ -1,6 +1,17 @@
 """
 OJS Synchronization Service
 Handles importing data from OJS and syncing submissions bidirectionally.
+
+OJS 3.4 REST API Compliance:
+- Uses Bearer token authentication via Authorization header
+- Handles multilingual LocaleObject fields (en_US, en, etc.)
+- Supports paginated responses with {items: [], itemsMax: X} format
+- Uses dedicated endpoints for contributors, files, decisions
+- Handles HTML in fullTitle, title, subtitle, and abstract fields
+- Supports submissionProgress string field (3.4+)
+- File downloads via url field from files API
+- Proper file stage constants (SUBMISSION_FILE_* values)
+- Contributors API for author management
 """
 from django.utils import timezone
 from django.db import transaction
@@ -291,7 +302,7 @@ class OJSSyncService:
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
             }
             
-            logger.info(f"Fetching full publication details for OJS ID {ojs_submission_id}")
+            logger.info(f"Fetching full publication details for OJS ID {ojs_submission_id}, Publication ID {publication_id}")
             resp = self.session.get(url, headers=headers)
             
             if resp.status_code != 200:
@@ -301,41 +312,71 @@ class OJSSyncService:
                 full_pub = pub  # Use the publication data we already have
             else:
                 full_pub = resp.json()
+                logger.info(f"Successfully fetched publication details")
             
             # Log the full publication data for debugging
-            logger.info(f"Full publication data keys: {list(full_pub.keys())}")
-            logger.debug(f"Full publication data: {full_pub}")
+            logger.debug(f"Full publication data keys: {list(full_pub.keys())}")
             
-            # Extract title - try multiple fields
+            # Extract title - OJS 3.4+ uses fullTitle with HTML support
+            # fullTitle = title + subtitle combined with HTML
+            # title = main title
+            # subtitle = subtitle
             title = None
             if 'fullTitle' in full_pub and full_pub['fullTitle']:
-                title = full_pub['fullTitle'].get('en_US') or full_pub['fullTitle'].get('en')
+                # fullTitle is the preferred field (includes subtitle)
+                title_obj = full_pub['fullTitle']
+                title = title_obj.get('en_US') or title_obj.get('en') or title_obj.get(list(title_obj.keys())[0] if title_obj else '')
             if not title and 'title' in full_pub and full_pub['title']:
-                title = full_pub['title'].get('en_US') or full_pub['title'].get('en')
+                title_obj = full_pub['title']
+                title = title_obj.get('en_US') or title_obj.get('en') or title_obj.get(list(title_obj.keys())[0] if title_obj else '')
             if not title:
                 # Fallback to checking the original publications data
-                title = pub.get('fullTitle', {}).get('en_US') or pub.get('title', {}).get('en_US', 'Untitled')
+                fallback_title = pub.get('fullTitle', {})
+                if fallback_title:
+                    title = fallback_title.get('en_US') or fallback_title.get('en') or 'Untitled'
+                else:
+                    fallback_title = pub.get('title', {})
+                    title = fallback_title.get('en_US') or fallback_title.get('en') or 'Untitled'
+            
+            # Strip HTML from title if present
+            import re
+            if title:
+                title = re.sub(r'<[^>]+>', '', title)
+                title = re.sub(r'\s+', ' ', title).strip()
             
             logger.info(f"Extracted title: {title}")
             
-            # Extract abstract (strip HTML tags from abstract)
-            abstract_html = full_pub.get('abstract', {}).get('en_US') or full_pub.get('abstract', {}).get('en', '')
+            # Extract abstract (abstract includes HTML markup per OJS docs)
+            abstract_html = ''
+            if 'abstract' in full_pub and full_pub['abstract']:
+                abstract_obj = full_pub['abstract']
+                abstract_html = abstract_obj.get('en_US') or abstract_obj.get('en') or abstract_obj.get(list(abstract_obj.keys())[0] if abstract_obj else '')
             
             # Strip HTML tags from abstract
             import re
-            abstract = re.sub(r'<[^>]+>', '', abstract_html)
+            abstract = re.sub(r'<[^>]+>', '', abstract_html) if abstract_html else ''
             abstract = re.sub(r'\s+', ' ', abstract).strip()  # Clean up whitespace
             
             # Map OJS status to Django status
+            # OJS submissionProgress is now a string in 3.4+, not integer
+            # When > 0, submission is incomplete
             ojs_status = ojs_data.get('status')
+            submission_progress = ojs_data.get('submissionProgress', 0)
+            
+            # OJS status constants (from documentation)
             status_map = {
-                1: 'SUBMITTED',      # Queued
-                2: 'UNDER_REVIEW',   # Scheduled
-                3: 'PUBLISHED',      # Published
-                4: 'REJECTED',       # Declined
-                5: 'DRAFT'           # Incomplete
+                1: 'SUBMITTED',      # STATUS_QUEUED
+                2: 'UNDER_REVIEW',   # STATUS_SCHEDULED  
+                3: 'PUBLISHED',      # STATUS_PUBLISHED
+                4: 'REJECTED',       # STATUS_DECLINED
+                5: 'DRAFT'           # Not in docs but observed
             }
-            status = status_map.get(ojs_status, 'SUBMITTED')
+            
+            # If submissionProgress > 0, it's incomplete/draft
+            if submission_progress and str(submission_progress) != '0':
+                status = 'DRAFT'
+            else:
+                status = status_map.get(ojs_status, 'SUBMITTED')
             
             # Parse date with timezone
             from django.utils.dateparse import parse_datetime
@@ -348,9 +389,29 @@ class OJSSyncService:
                     submitted_at = tz.make_aware(naive_dt, tz.get_default_timezone())
             
             # Extract additional metadata
-            pages = full_pub.get('pages', '')
+            # pages can be a string or array of arrays per OJS docs
+            # Example: "25-31" or [[25, 31], [45, 62]]
+            pages_raw = full_pub.get('pages', '')
+            if isinstance(pages_raw, list):
+                # Convert array format to string "25-31, 45-62"
+                pages = ', '.join([f"{p[0]}-{p[1]}" for p in pages_raw if isinstance(p, list) and len(p) == 2])
+            else:
+                pages = str(pages_raw) if pages_raw else ''
+            
             published_date = full_pub.get('datePublished')
             section_id = full_pub.get('sectionId')
+            doi = full_pub.get('pub-id::doi') or full_pub.get('doiObject', {}).get('doi', '')
+            
+            # Extract copyright and license
+            copyright_holder = ''
+            if 'copyrightHolder' in full_pub and full_pub['copyrightHolder']:
+                copyright_obj = full_pub['copyrightHolder']
+                copyright_holder = copyright_obj.get('en_US') or copyright_obj.get('en') or copyright_obj.get(list(copyright_obj.keys())[0] if copyright_obj else '')
+            
+            copyright_year = full_pub.get('copyrightYear', '')
+            license_url = full_pub.get('licenseUrl', '')
+            
+            logger.info(f"Metadata - Pages: {pages}, Section: {section_id}, DOI: {doi}, Copyright: {copyright_holder} ({copyright_year})")
             
             # Parse published date
             published_at = None
@@ -380,16 +441,20 @@ class OJSSyncService:
                 abstract=abstract,
                 status=status,
                 submitted_at=submitted_at,
+                doi=doi if doi else None,  # Store DOI from OJS
                 # corresponding_author will be set after creating authors
             )
             
             # Store additional metadata in a JSON field if available, or log it
-            logger.info(f"Submission metadata - Pages: {pages}, Section ID: {section_id}, Published: {published_date}")
+            logger.info(f"Submission metadata - Pages: {pages}, DOI: {doi}, Section ID: {section_id}, Published: {published_date}, Copyright: {copyright_holder} ({copyright_year}), License: {license_url}")
             
-            # Create author profiles and link them
-            authors_data = full_pub.get('authors', [])
-            if authors_data:
-                self._create_authors_for_submission(submission, authors_data)
+            # Fetch contributors using dedicated API endpoint
+            # Per OJS docs: GET /submissions/{submissionId}/publications/{publicationId}/contributors
+            # This is more reliable than using the authors field from publication
+            contributors_data = self._fetch_contributors(ojs_submission_id, publication_id)
+            
+            if contributors_data:
+                self._create_authors_for_submission(submission, contributors_data, ojs_submission_id, publication_id)
             
             # Import submission files/documents
             files_count = self._import_submission_files(submission, ojs_submission_id)
@@ -397,7 +462,7 @@ class OJSSyncService:
             # Import reviews and review assignments
             reviews_count = self._import_reviews_for_submission(submission, ojs_submission_id)
             
-            logger.info(f"Created submission {submission.id} from OJS ID {ojs_submission_id} with {len(authors_data)} authors, {files_count} files, and {reviews_count} reviews")
+            logger.info(f"Created submission {submission.id} from OJS ID {ojs_submission_id} with {len(contributors_data)} contributors, {files_count} files, and {reviews_count} reviews")
             return submission
             
         except Exception as e:
@@ -406,14 +471,60 @@ class OJSSyncService:
             traceback.print_exc()
             return None
     
-    def _create_authors_for_submission(self, submission, authors_data):
+    def _fetch_contributors(self, submission_id, publication_id):
         """
-        Link author profiles to submission from OJS authors data.
+        Fetch contributors for a publication using the dedicated API endpoint.
+        Per OJS docs: GET /submissions/{submissionId}/publications/{publicationId}/contributors
+        
+        Args:
+            submission_id: OJS submission ID
+            publication_id: OJS publication ID
+            
+        Returns:
+            List of contributor dictionaries
+        """
+        try:
+            url = f"{self.api_url}/submissions/{submission_id}/publications/{publication_id}/contributors"
+            headers = {
+                'Authorization': f'Bearer {self.api_key}',
+                'Accept': 'application/json',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+            
+            logger.info(f"Fetching contributors from: {url}")
+            resp = self.session.get(url, headers=headers)
+            
+            if resp.status_code == 200:
+                contributors_data = resp.json()
+                
+                # Check if it's a paginated response or direct array
+                if isinstance(contributors_data, dict) and 'items' in contributors_data:
+                    contributors = contributors_data.get('items', [])
+                elif isinstance(contributors_data, list):
+                    contributors = contributors_data
+                else:
+                    contributors = []
+                
+                logger.info(f"Found {len(contributors)} contributors via API")
+                return contributors
+            else:
+                logger.warning(f"Failed to fetch contributors: {resp.status_code} - {resp.text[:200]}")
+                return []
+                
+        except Exception as e:
+            logger.error(f"Error fetching contributors: {str(e)}")
+            return []
+    
+    def _create_authors_for_submission(self, submission, authors_data, ojs_submission_id=None, publication_id=None):
+        """
+        Link author profiles to submission from OJS contributors data.
         Matches existing users imported from OJS by email.
         
         Args:
             submission: Django Submission instance
-            authors_data: List of author dictionaries from OJS
+            authors_data: List of contributor dictionaries from OJS API
+            ojs_submission_id: Optional OJS submission ID for logging
+            publication_id: Optional OJS publication ID for logging
         """
         from apps.users.models import CustomUser, Profile
         from apps.submissions.models import AuthorContribution
@@ -427,11 +538,38 @@ class OJSSyncService:
             
             for idx, author in enumerate(sorted_authors):
                 email = author.get('email', f'author{idx}@imported.ojs')
-                # Try en_US first, then en as fallback
-                given_name = author.get('givenName', {}).get('en_US') or author.get('givenName', {}).get('en', '')
-                family_name = author.get('familyName', {}).get('en_US') or author.get('familyName', {}).get('en', '')
-                affiliation = author.get('affiliation', {}).get('en_US') or author.get('affiliation', {}).get('en', '')
+                
+                # Handle multilingual fields
+                # Per OJS docs: givenName, familyName, affiliation are LocaleObjects
+                given_name_obj = author.get('givenName', {})
+                family_name_obj = author.get('familyName', {})
+                affiliation_obj = author.get('affiliation', {})
+                
+                if isinstance(given_name_obj, dict):
+                    given_name = given_name_obj.get('en_US') or given_name_obj.get('en') or given_name_obj.get(list(given_name_obj.keys())[0] if given_name_obj else '')
+                else:
+                    given_name = str(given_name_obj) if given_name_obj else ''
+                
+                if isinstance(family_name_obj, dict):
+                    family_name = family_name_obj.get('en_US') or family_name_obj.get('en') or family_name_obj.get(list(family_name_obj.keys())[0] if family_name_obj else '')
+                else:
+                    family_name = str(family_name_obj) if family_name_obj else ''
+                
+                if isinstance(affiliation_obj, dict):
+                    affiliation = affiliation_obj.get('en_US') or affiliation_obj.get('en') or affiliation_obj.get(list(affiliation_obj.keys())[0] if affiliation_obj else '')
+                else:
+                    affiliation = str(affiliation_obj) if affiliation_obj else ''
+                
                 orcid_raw = author.get('orcid', '')
+                country = author.get('country', '')
+                url = author.get('url', '')
+                
+                # Additional contributor fields from OJS 3.4
+                is_primary_contact = author.get('isPrimaryContact', False)
+                include_in_browse = author.get('includeInBrowse', True)
+                user_group_id = author.get('userGroupId')
+                
+                logger.info(f"Processing contributor: {given_name} {family_name} <{email}> (Primary: {is_primary_contact}, UserGroup: {user_group_id})")
                 
                 # Extract ORCID ID from URL if it's a full URL
                 orcid = None
@@ -534,8 +672,26 @@ class OJSSyncService:
             
             files_imported = 0
             
-            # Method 1: Import from submission files endpoint (all stages)
+            # Method 1: Import from submission files endpoint
+            # Per OJS docs: GET /submissions/{submissionId}/files
+            # Returns all files the user has access to based on their role
             files_url = f"{self.api_url}/submissions/{ojs_submission_id}/files"
+            
+            # Optional: Filter by fileStages if needed
+            # File stage constants from OJS:
+            # SUBMISSION_FILE_SUBMISSION = 2
+            # SUBMISSION_FILE_NOTE = 3  
+            # SUBMISSION_FILE_REVIEW_FILE = 4
+            # SUBMISSION_FILE_REVIEW_ATTACHMENT = 5
+            # SUBMISSION_FILE_REVIEW_REVISION = 6
+            # SUBMISSION_FILE_FINAL = 7
+            # SUBMISSION_FILE_COPYEDIT = 9
+            # SUBMISSION_FILE_PROOF = 10
+            # SUBMISSION_FILE_PRODUCTION_READY = 11
+            # SUBMISSION_FILE_ATTACHMENT = 13
+            # SUBMISSION_FILE_QUERY = 15
+            # SUBMISSION_FILE_DEPENDENT = 17
+            
             logger.info(f"Fetching files from: {files_url}")
             files_resp = self.session.get(files_url, headers=headers)
             
@@ -543,12 +699,18 @@ class OJSSyncService:
             
             submission_files = []
             if files_resp.status_code == 200:
+                # OJS 3.4 returns {items: [...], itemsMax: X} for paginated lists
                 files_data = files_resp.json()
-                submission_files = files_data.get('items', [])
+                
+                # Check if it's a paginated response or direct array
+                if isinstance(files_data, dict) and 'items' in files_data:
+                    submission_files = files_data.get('items', [])
+                elif isinstance(files_data, list):
+                    submission_files = files_data
                 
                 logger.info(f"Found {len(submission_files)} files in OJS submission {ojs_submission_id}")
             else:
-                logger.warning(f"Failed to fetch files directly: {files_resp.status_code} - {files_resp.text[:200]}")
+                logger.warning(f"Failed to fetch files: {files_resp.status_code} - {files_resp.text[:200]}")
                 logger.info("Trying to fetch files from publication galleys as fallback")
                 
                 # Fallback: Get files from publication galleys
@@ -586,35 +748,58 @@ class OJSSyncService:
             for file_data in submission_files:
                     try:
                         file_id = file_data.get('id')
+                        
+                        # Handle multilingual name field
+                        # Per OJS docs: name is LocaleObject with locale keys
                         file_name_obj = file_data.get('name', {})
-                        # Handle name as multilingual object
-                        file_name = file_name_obj.get('en_US') or file_name_obj.get('en') or f'document_{file_id}'
+                        if isinstance(file_name_obj, dict):
+                            file_name = file_name_obj.get('en_US') or file_name_obj.get('en') or file_name_obj.get(list(file_name_obj.keys())[0] if file_name_obj else '')
+                        else:
+                            file_name = str(file_name_obj) if file_name_obj else f'document_{file_id}'
+                        
                         mime_type = file_data.get('mimetype', 'application/octet-stream')
                         file_stage = file_data.get('fileStage', 0)
                         
-                        # Get the direct download URL from OJS API response
+                        # Get the download URL from OJS API response (preferred method)
+                        # Per OJS docs: each file has a 'url' field for download
                         file_url = file_data.get('url')
+                        
+                        # Alternative: use path field
                         file_path = file_data.get('path')
                         
-                        logger.info(f"Processing file: {file_name} (ID: {file_id}, Stage: {file_stage})")
-                        logger.info(f"  URL: {file_url}, Path: {file_path}")
+                        # Get additional metadata
+                        file_genre = file_data.get('genreName', '')  # e.g., "Article Text"
+                        is_dependent = file_data.get('genreIsDependent', False)
+                        is_supplementary = file_data.get('genreIsSupplementary', False)
+                        
+                        logger.info(f"Processing file: {file_name} (ID: {file_id}, Stage: {file_stage}, Genre: {file_genre})")
+                        logger.info(f"  URL: {file_url}, Path: {file_path}, Supplementary: {is_supplementary}")
                         
                         # Map OJS file stage to Django document type
-                        # OJS fileStage values: 2=submission, 4=review, 9=copyedit, 10=production
+                        # Using OJS 3.x file stage constants
                         stage_to_type_map = {
-                            2: 'MANUSCRIPT',           # Submission files
-                            3: 'MANUSCRIPT',           # Review file
-                            4: 'REVIEWER_RESPONSE',    # Review attachments
-                            5: 'REVISED_MANUSCRIPT',   # Review revision
-                            9: 'REVISED_MANUSCRIPT',   # Copyediting
-                            10: 'FINAL_VERSION',       # Production ready
-                            15: 'SUPPLEMENTARY',       # Supplementary files
+                            2: 'MANUSCRIPT',           # SUBMISSION_FILE_SUBMISSION
+                            3: 'SUPPLEMENTARY',        # SUBMISSION_FILE_NOTE
+                            4: 'MANUSCRIPT',           # SUBMISSION_FILE_REVIEW_FILE
+                            5: 'REVIEWER_RESPONSE',    # SUBMISSION_FILE_REVIEW_ATTACHMENT
+                            6: 'REVISED_MANUSCRIPT',   # SUBMISSION_FILE_REVIEW_REVISION
+                            7: 'FINAL_VERSION',        # SUBMISSION_FILE_FINAL
+                            9: 'REVISED_MANUSCRIPT',   # SUBMISSION_FILE_COPYEDIT
+                            10: 'FINAL_VERSION',       # SUBMISSION_FILE_PROOF
+                            11: 'FINAL_VERSION',       # SUBMISSION_FILE_PRODUCTION_READY
+                            13: 'SUPPLEMENTARY',       # SUBMISSION_FILE_ATTACHMENT
+                            15: 'SUPPLEMENTARY',       # SUBMISSION_FILE_QUERY
+                            17: 'SUPPLEMENTARY',       # SUBMISSION_FILE_DEPENDENT
                         }
                         
-                        doc_type = stage_to_type_map.get(file_stage, 'MANUSCRIPT')
+                        # Use genre flags to determine if supplementary
+                        if is_supplementary or is_dependent:
+                            doc_type = 'SUPPLEMENTARY'
+                        else:
+                            doc_type = stage_to_type_map.get(file_stage, 'MANUSCRIPT')
                         
-                        # Special handling for DOCX files - always mark as MANUSCRIPT
-                        if 'word' in mime_type.lower() or file_name.endswith('.docx'):
+                        # Special handling for DOCX files - always mark as MANUSCRIPT unless supplementary
+                        if not is_supplementary and ('word' in mime_type.lower() or file_name.endswith('.docx')):
                             doc_type = 'MANUSCRIPT'
                         
                         # For downloading files from OJS
@@ -623,23 +808,98 @@ class OJSSyncService:
                         # Try different download methods
                         file_content = None
                         
-                        # Method 1: Use the 'url' field from the API response (preferred)
-                        if file_url:
+                        # Method 1: Try publication galleys first (most reliable for published content)
+                        # Fetch submission to get galley information
+                        try:
+                            sub_resp = self.session.get(f"{self.api_url}/submissions/{ojs_submission_id}", headers=headers)
+                            if sub_resp.status_code == 200:
+                                sub_data = sub_resp.json()
+                                publications = sub_data.get('publications', [])
+                                
+                                if publications:
+                                    pub = publications[0]
+                                    galleys = pub.get('galleys', [])
+                                    
+                                    # Try to match by submission file ID
+                                    matching_galley = None
+                                    for galley in galleys:
+                                        if galley.get('submissionFileId') == file_id or galley.get('file', {}).get('id') == file_id:
+                                            matching_galley = galley
+                                            break
+                                    
+                                    # If no exact match, try first galley for this file type
+                                    if not matching_galley and galleys:
+                                        for galley in galleys:
+                                            galley_file = galley.get('file', {})
+                                            if galley_file.get('mimetype') == mime_type:
+                                                matching_galley = galley
+                                                break
+                                    
+                                    if matching_galley:
+                                        galley_id = matching_galley.get('id')
+                                        # Public galley download URL
+                                        download_url = f"{base_url}/article/download/{ojs_submission_id}/{galley_id}"
+                                        
+                                        logger.info(f"Trying galley download from: {download_url}")
+                                        galley_headers = {
+                                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                                            'Accept': '*/*',
+                                        }
+                                        galley_resp = self.session.get(download_url, headers=galley_headers, allow_redirects=True, timeout=30)
+                                        
+                                        logger.info(f"Galley response: status={galley_resp.status_code}, content-type={galley_resp.headers.get('Content-Type')}, size={len(galley_resp.content)}")
+                                        
+                                        if galley_resp.status_code == 200 and len(galley_resp.content) > 0:
+                                            content_type = galley_resp.headers.get('Content-Type', '')
+                                            
+                                            # Check if it's actually a file
+                                            if 'application/json' in content_type:
+                                                logger.warning(f"Galley returned JSON: {galley_resp.text[:200]}")
+                                            elif len(galley_resp.content) < 1000 and b'<html' in galley_resp.content.lower():
+                                                logger.warning(f"Galley returned HTML error page")
+                                            else:
+                                                file_content = galley_resp.content
+                                                logger.info(f"✓ Downloaded from galley: {len(file_content)} bytes")
+                        except Exception as e:
+                            logger.warning(f"Galley method failed: {str(e)}")
+                        
+                        # Method 2: Try using the file path directly (if galley failed)
                             logger.info(f"Attempting download from API-provided URL: {file_url}")
                             
                             file_headers_with_auth = {
                                 'Authorization': f'Bearer {self.api_key}',
-                                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                                'Accept': '*/*'
                             }
-                            file_resp = self.session.get(file_url, headers=file_headers_with_auth, allow_redirects=True)
                             
-                            if file_resp.status_code == 200 and len(file_resp.content) > 0:
-                                # Verify it's not an error page
-                                if not (len(file_resp.content) < 1000 and b'<html' in file_resp.content.lower()):
-                                    file_content = file_resp.content
-                                    logger.info(f"✓ Downloaded file from API URL: {len(file_content)} bytes")
-                            else:
-                                logger.warning(f"URL download failed: {file_resp.status_code} - {file_resp.text[:200]}")
+                            try:
+                                file_resp = self.session.get(file_url, headers=file_headers_with_auth, allow_redirects=True, timeout=30)
+                                
+                                logger.info(f"URL response: status={file_resp.status_code}, content-type={file_resp.headers.get('Content-Type')}, size={len(file_resp.content)}")
+                                
+                                if file_resp.status_code == 200 and len(file_resp.content) > 0:
+                                    # Check content type
+                                    content_type = file_resp.headers.get('Content-Type', '')
+                                    
+                                    # Skip JSON error responses
+                                    if 'application/json' in content_type:
+                                        try:
+                                            error_data = file_resp.json()
+                                            logger.warning(f"URL returned JSON error: {error_data}")
+                                        except:
+                                            pass
+                                    # Verify it's not an error page
+                                    elif len(file_resp.content) < 1000 and b'<html' in file_resp.content.lower():
+                                        logger.warning(f"URL returned HTML error page")
+                                    else:
+                                        file_content = file_resp.content
+                                        logger.info(f"✓ Downloaded file from API URL: {len(file_content)} bytes")
+                                else:
+                                    logger.warning(f"URL download failed: {file_resp.status_code}")
+                                    if file_resp.text:
+                                        logger.warning(f"Response: {file_resp.text[:500]}")
+                            except Exception as e:
+                                logger.error(f"Exception downloading from URL: {str(e)}")
                         
                         # Method 2: Try using the file path directly (OJS stores files in files_dir)
                         if not file_content and file_path:
@@ -775,7 +1035,11 @@ class OJSSyncService:
                             logger.warning(f"File {file_id} ({file_name}) could not be downloaded after trying all methods, skipping")
                             continue
                         
-                        logger.info(f"Successfully obtained file content for {file_name}: {len(file_content)} bytes")
+                        if len(file_content) == 0:
+                            logger.warning(f"File {file_id} ({file_name}) downloaded but has 0 bytes, skipping")
+                            continue
+                        
+                        logger.info(f"✓ Successfully obtained file content for {file_name}: {len(file_content)} bytes, {len(file_content)/1024:.2f} KB")
                         
                         # Get or create the document creator
                         creator = submission.corresponding_author
@@ -822,8 +1086,18 @@ class OJSSyncService:
                             save=True
                         )
                         
+                        # Verify file was saved
+                        document.refresh_from_db()
+                        saved_size = document.original_file.size if document.original_file else 0
+                        logger.info(f"✓ Saved document: {file_name}, DB size: {document.file_size}, Actual size: {saved_size} bytes")
+                        
+                        if saved_size == 0:
+                            logger.error(f"✗ File was saved but has 0 bytes on disk: {file_name}")
+                            document.delete()
+                            continue
+                        
                         files_imported += 1
-                        logger.info(f"Imported file {file_name} ({doc_type}) for submission {submission.id}")
+                        logger.info(f"✓ Imported file {file_name} ({doc_type}) for submission {submission.id}")
                         
                     except Exception as e:
                         logger.error(f"Error importing file {file_data.get('id')}: {str(e)}")

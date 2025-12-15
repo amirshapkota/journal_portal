@@ -127,6 +127,15 @@ class Submission(models.Model):
         help_text="Tags, keywords, funding info, ethics declarations, etc."
     )
     
+    # DOI (Digital Object Identifier)
+    doi = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        unique=True,
+        help_text="Digital Object Identifier (e.g., 10.1234/example.2024.001)"
+    )
+    
     # Quality and compliance scores
     compliance_score = models.FloatField(
         null=True,

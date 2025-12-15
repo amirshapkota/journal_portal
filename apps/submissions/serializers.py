@@ -180,7 +180,7 @@ class SubmissionSerializer(serializers.ModelSerializer):
             'corresponding_author', 'author_contributions', 'documents',
             'review_assignments', 'status', 'status_display', 
             'submission_number', 'review_type', 'review_type_display', 
-            'metadata_json', 'compliance_score', 
+            'metadata_json', 'doi', 'compliance_score', 
             'created_at', 'submitted_at', 'updated_at'
         )
         read_only_fields = (
