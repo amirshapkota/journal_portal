@@ -85,6 +85,89 @@ class OJSSyncService:
         except Exception as e:
             logger.warning(f"Could not initialize session: {str(e)}")
     
+    def _refresh_session(self):
+        """
+        Refresh session cookies when bot detection is triggered.
+        Called automatically when 409 errors occur.
+        """
+        import re
+        import time
+        
+        try:
+            base_url = self.api_url.replace('/api/v1', '')
+            logger.info("Refreshing session due to bot detection...")
+            
+            # Clear existing cookies
+            self.session.cookies.clear()
+            
+            # Get new cookies
+            init_resp = self.session.get(base_url, timeout=10)
+            
+            # Check if we got a bot detection response
+            if init_resp.status_code == 409 or 'document.cookie' in init_resp.text:
+                # Extract cookie from JavaScript
+                cookie_match = re.search(r'document\.cookie\s*=\s*"([^=]+)=([^"]+)"', init_resp.text)
+                if cookie_match:
+                    cookie_name = cookie_match.group(1)
+                    cookie_value = cookie_match.group(2)
+                    logger.info(f"Setting refreshed bot detection cookie: {cookie_name}={cookie_value}")
+                    self.session.cookies.set(cookie_name, cookie_value, domain=base_url.split('//')[1].split('/')[0])
+                    
+                    # Wait and reload
+                    time.sleep(0.5)
+                    init_resp = self.session.get(base_url, timeout=10)
+                    logger.info(f"Session refreshed: status={init_resp.status_code}, cookies={len(self.session.cookies)}")
+                    return True
+            
+            logger.info(f"Session refreshed with {len(self.session.cookies)} cookies")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to refresh session: {str(e)}")
+            return False
+    
+    def _make_api_request(self, url, headers=None, params=None, max_retries=2):
+        """
+        Make API request with automatic retry on 409 errors.
+        
+        Args:
+            url: URL to request
+            headers: Optional headers dict
+            params: Optional query parameters
+            max_retries: Maximum number of retries on 409 errors
+            
+        Returns:
+            Response object or None on failure
+        """
+        for attempt in range(max_retries + 1):
+            try:
+                resp = self.session.get(url, headers=headers, params=params, timeout=30)
+                
+                # Check for bot detection
+                if resp.status_code == 409 or 'document.cookie' in resp.text[:200]:
+                    if attempt < max_retries:
+                        logger.warning(f"Bot detection triggered (attempt {attempt + 1}/{max_retries + 1}), refreshing session...")
+                        if self._refresh_session():
+                            import time
+                            time.sleep(1)  # Wait before retry
+                            continue
+                    else:
+                        logger.error(f"Failed after {max_retries + 1} attempts due to bot detection")
+                        return None
+                
+                return resp
+                
+            except Exception as e:
+                if attempt < max_retries:
+                    logger.warning(f"Request failed (attempt {attempt + 1}/{max_retries + 1}): {str(e)}")
+                    import time
+                    time.sleep(1)
+                    continue
+                else:
+                    logger.error(f"Request failed after {max_retries + 1} attempts: {str(e)}")
+                    return None
+        
+        return None
+    
     def import_all_from_ojs(self):
         """
         Import all submissions from OJS into Django database.
@@ -134,13 +217,16 @@ class OJSSyncService:
             }
             
             while True:
-                # Fetch page of submissions using session
+                # Fetch page of submissions using session with retry
                 url = f"{self.api_url}/submissions"
                 params = {'offset': offset, 'count': count}
                 
                 logger.info(f"Fetching submissions: {url} (offset {offset})")
-                resp = self.session.get(url, headers=headers, params=params)
-                resp.raise_for_status()
+                resp = self._make_api_request(url, headers=headers, params=params)
+                
+                if not resp or resp.status_code != 200:
+                    logger.error(f"Failed to fetch submissions page at offset {offset}")
+                    break
                 
                 data = resp.json()
                 items = data.get('items', [])
@@ -303,10 +389,11 @@ class OJSSyncService:
             }
             
             logger.info(f"Fetching full publication details for OJS ID {ojs_submission_id}, Publication ID {publication_id}")
-            resp = self.session.get(url, headers=headers)
+            resp = self._make_api_request(url, headers=headers)
             
-            if resp.status_code != 200:
-                logger.error(f"Failed to fetch publication details: {resp.status_code} - {resp.text[:500]}")
+            if not resp or resp.status_code != 200:
+                if resp:
+                    logger.error(f"Failed to fetch publication details: {resp.status_code}")
                 # Try to continue with data from the original publications array
                 logger.warning("Attempting to use data from original publications array")
                 full_pub = pub  # Use the publication data we already have
@@ -448,10 +535,10 @@ class OJSSyncService:
             # Store additional metadata in a JSON field if available, or log it
             logger.info(f"Submission metadata - Pages: {pages}, DOI: {doi}, Section ID: {section_id}, Published: {published_date}, Copyright: {copyright_holder} ({copyright_year}), License: {license_url}")
             
-            # Fetch contributors using dedicated API endpoint
+            # Fetch contributors using dedicated API endpoint with fallback
             # Per OJS docs: GET /submissions/{submissionId}/publications/{publicationId}/contributors
-            # This is more reliable than using the authors field from publication
-            contributors_data = self._fetch_contributors(ojs_submission_id, publication_id)
+            # Fallback: Extract from publication data for older OJS versions
+            contributors_data = self._fetch_contributors(ojs_submission_id, publication_id, full_pub)
             
             if contributors_data:
                 self._create_authors_for_submission(submission, contributors_data, ojs_submission_id, publication_id)
@@ -471,19 +558,23 @@ class OJSSyncService:
             traceback.print_exc()
             return None
     
-    def _fetch_contributors(self, submission_id, publication_id):
+    def _fetch_contributors(self, submission_id, publication_id, publication_data=None):
         """
-        Fetch contributors for a publication using the dedicated API endpoint.
-        Per OJS docs: GET /submissions/{submissionId}/publications/{publicationId}/contributors
+        Fetch contributors for a publication with fallback support for all OJS versions.
+        
+        Method 1: Try dedicated API endpoint (OJS 3.3+)
+        Method 2: Extract from publication data (OJS 3.0-3.2 and fallback)
         
         Args:
             submission_id: OJS submission ID
             publication_id: OJS publication ID
+            publication_data: Optional publication data dict for fallback
             
         Returns:
             List of contributor dictionaries
         """
         try:
+            # Method 1: Try dedicated contributors API endpoint (OJS 3.3+)
             url = f"{self.api_url}/submissions/{submission_id}/publications/{publication_id}/contributors"
             headers = {
                 'Authorization': f'Bearer {self.api_key}',
@@ -491,10 +582,10 @@ class OJSSyncService:
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
             }
             
-            logger.info(f"Fetching contributors from: {url}")
-            resp = self.session.get(url, headers=headers)
+            logger.info(f"Attempting to fetch contributors from API: {url}")
+            resp = self._make_api_request(url, headers=headers)
             
-            if resp.status_code == 200:
+            if resp and resp.status_code == 200:
                 contributors_data = resp.json()
                 
                 # Check if it's a paginated response or direct array
@@ -505,14 +596,55 @@ class OJSSyncService:
                 else:
                     contributors = []
                 
-                logger.info(f"Found {len(contributors)} contributors via API")
-                return contributors
+                if contributors:
+                    logger.info(f"✓ Found {len(contributors)} contributors via dedicated API endpoint")
+                    return contributors
+                else:
+                    logger.warning("Contributors API returned empty list, trying fallback...")
             else:
-                logger.warning(f"Failed to fetch contributors: {resp.status_code} - {resp.text[:200]}")
-                return []
+                if resp:
+                    logger.warning(f"Contributors API failed with status {resp.status_code}, trying fallback...")
+                else:
+                    logger.warning("Contributors API request failed, trying fallback...")
+            
+            # Method 2: Fallback - Extract from publication data (older OJS versions)
+            if publication_data:
+                logger.info("Using fallback method: extracting contributors from publication data")
+                
+                # OJS 3.0-3.2 store authors in publication.authors array
+                authors = publication_data.get('authors', [])
+                
+                if authors:
+                    logger.info(f"✓ Found {len(authors)} contributors from publication data (fallback)")
+                    return authors
+                else:
+                    logger.warning("No authors found in publication data")
+            
+            # Method 3: Last resort - Try fetching publication again to get authors
+            logger.info("Last resort: fetching publication data to extract contributors")
+            pub_url = f"{self.api_url}/submissions/{submission_id}/publications/{publication_id}"
+            pub_resp = self._make_api_request(pub_url, headers=headers)
+            
+            if pub_resp and pub_resp.status_code == 200:
+                pub_data = pub_resp.json()
+                authors = pub_data.get('authors', [])
+                
+                if authors:
+                    logger.info(f"✓ Found {len(authors)} contributors from re-fetched publication data")
+                    return authors
+            
+            logger.error(f"Could not fetch contributors for submission {submission_id} using any method")
+            return []
                 
         except Exception as e:
             logger.error(f"Error fetching contributors: {str(e)}")
+            
+            # Emergency fallback to publication data if available
+            if publication_data and 'authors' in publication_data:
+                authors = publication_data.get('authors', [])
+                logger.warning(f"Using emergency fallback: {len(authors)} contributors from publication_data")
+                return authors
+            
             return []
     
     def _create_authors_for_submission(self, submission, authors_data, ojs_submission_id=None, publication_id=None):
@@ -539,12 +671,16 @@ class OJSSyncService:
             for idx, author in enumerate(sorted_authors):
                 email = author.get('email', f'author{idx}@imported.ojs')
                 
-                # Handle multilingual fields
-                # Per OJS docs: givenName, familyName, affiliation are LocaleObjects
-                given_name_obj = author.get('givenName', {})
-                family_name_obj = author.get('familyName', {})
+                # Handle multilingual fields with fallback for older OJS versions
+                # OJS 3.3+: givenName, familyName (LocaleObjects)
+                # OJS 3.0-3.2: firstName, lastName (may be strings or LocaleObjects)
+                
+                # Try givenName first, then firstName
+                given_name_obj = author.get('givenName') or author.get('firstName', {})
+                family_name_obj = author.get('familyName') or author.get('lastName', {})
                 affiliation_obj = author.get('affiliation', {})
                 
+                # Extract string value from LocaleObject or use as-is if string
                 if isinstance(given_name_obj, dict):
                     given_name = given_name_obj.get('en_US') or given_name_obj.get('en') or given_name_obj.get(list(given_name_obj.keys())[0] if given_name_obj else '')
                 else:
@@ -560,12 +696,13 @@ class OJSSyncService:
                 else:
                     affiliation = str(affiliation_obj) if affiliation_obj else ''
                 
+                # Handle ORCID and other fields
                 orcid_raw = author.get('orcid', '')
                 country = author.get('country', '')
                 url = author.get('url', '')
                 
                 # Additional contributor fields from OJS 3.4
-                is_primary_contact = author.get('isPrimaryContact', False)
+                is_primary_contact = author.get('isPrimaryContact', author.get('primaryContact', False))
                 include_in_browse = author.get('includeInBrowse', True)
                 user_group_id = author.get('userGroupId')
                 
@@ -693,12 +830,12 @@ class OJSSyncService:
             # SUBMISSION_FILE_DEPENDENT = 17
             
             logger.info(f"Fetching files from: {files_url}")
-            files_resp = self.session.get(files_url, headers=headers)
+            files_resp = self._make_api_request(files_url, headers=headers)
             
-            logger.info(f"Files API response status: {files_resp.status_code}")
+            logger.info(f"Files API response status: {files_resp.status_code if files_resp else 'No response'}")
             
             submission_files = []
-            if files_resp.status_code == 200:
+            if files_resp and files_resp.status_code == 200:
                 # OJS 3.4 returns {items: [...], itemsMax: X} for paginated lists
                 files_data = files_resp.json()
                 
@@ -710,14 +847,17 @@ class OJSSyncService:
                 
                 logger.info(f"Found {len(submission_files)} files in OJS submission {ojs_submission_id}")
             else:
-                logger.warning(f"Failed to fetch files: {files_resp.status_code} - {files_resp.text[:200]}")
+                if files_resp:
+                    logger.warning(f"Failed to fetch files: {files_resp.status_code}")
+                else:
+                    logger.warning("Failed to fetch files: No response")
                 logger.info("Trying to fetch files from publication galleys as fallback")
                 
                 # Fallback: Get files from publication galleys
                 try:
                     sub_url = f"{self.api_url}/submissions/{ojs_submission_id}"
-                    sub_resp = self.session.get(sub_url, headers=headers)
-                    if sub_resp.status_code == 200:
+                    sub_resp = self._make_api_request(sub_url, headers=headers)
+                    if sub_resp and sub_resp.status_code == 200:
                         sub_data = sub_resp.json()
                         publications = sub_data.get('publications', [])
                         
@@ -737,7 +877,7 @@ class OJSSyncService:
                                     'path': None  # Will use galley download
                                 })
                     else:
-                        logger.error(f"Failed to fetch submission data for galleys: {sub_resp.status_code}")
+                        logger.error("Failed to fetch submission data for galleys")
                 except Exception as e:
                     logger.error(f"Error fetching galleys: {str(e)}")
             
@@ -811,8 +951,8 @@ class OJSSyncService:
                         # Method 1: Try publication galleys first (most reliable for published content)
                         # Fetch submission to get galley information
                         try:
-                            sub_resp = self.session.get(f"{self.api_url}/submissions/{ojs_submission_id}", headers=headers)
-                            if sub_resp.status_code == 200:
+                            sub_resp = self._make_api_request(f"{self.api_url}/submissions/{ojs_submission_id}", headers=headers)
+                            if sub_resp and sub_resp.status_code == 200:
                                 sub_data = sub_resp.json()
                                 publications = sub_data.get('publications', [])
                                 
