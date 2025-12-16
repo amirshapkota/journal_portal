@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Publication Cancelled</title>
+    <style>
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        line-height: 1.6;
+        color: #333;
+        max-width: 600px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #f4f4f4;
+      }
+      .container {
+        background-color: #ffffff;
+        border-radius: 10px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        overflow: hidden;
+      }
+      .header {
+        background: linear-gradient(135deg, #ffc107 0%, #ff9800 100%);
+        color: white;
+        padding: 30px;
+        text-align: center;
+      }
+      .header h1 {
+        margin: 0;
+        font-size: 24px;
+        font-weight: 600;
+      }
+      .content {
+        padding: 30px;
+      }
+      .warning-box {
+        background-color: #fff3cd;
+        border-left: 4px solid #ffc107;
+        padding: 15px;
+        margin: 20px 0;
+        border-radius: 4px;
+      }
+      .warning-box p {
+        margin: 5px 0;
+        color: #856404;
+      }
+      .footer {
+        background-color: #f8f9fa;
+        padding: 20px;
+        text-align: center;
+        color: #6c757d;
+        font-size: 14px;
+        border-top: 1px solid #dee2e6;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>⚠️ Publication Schedule Changed</h1>
+      </div>
+
+      <div class="content">
+        <p>Dear {{ author_name }},</p>
+
+        <p>
+          We are writing to inform you that the scheduled publication of your
+          manuscript has been cancelled.
+        </p>
+
+        <div class="warning-box">
+          <p><strong>Manuscript:</strong> {{ submission_title }}</p>
+          <p>
+            <strong>Original Schedule:</strong> {{ original_scheduled_date }}
+          </p>
+          <p><strong>Status:</strong> Returned to production</p>
+        </div>
+
+        <p><strong>Reason:</strong> {{ reason }}</p>
+
+        <p>
+          Your manuscript remains accepted and will be rescheduled for
+          publication once any necessary adjustments are completed. We apologize
+          for any inconvenience this may cause.
+        </p>
+
+        <p>We will keep you informed of the new publication schedule.</p>
+
+        <p>
+          Best regards,<br />
+          Editorial Team
+        </p>
+      </div>
+
+      <div class="footer">
+        <p>
+          This is an automated email. Please do not reply directly to this
+          email.
+        </p>
+        <p>For questions, please contact the editorial office.</p>
+      </div>
+    </div>
+  </body>
+</html>

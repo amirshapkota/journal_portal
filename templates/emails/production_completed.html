@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Production Completed</title>
+    <style>
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        line-height: 1.6;
+        color: #333;
+        max-width: 600px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #f4f4f4;
+      }
+      .container {
+        background-color: #ffffff;
+        border-radius: 10px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        overflow: hidden;
+      }
+      .header {
+        background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+        color: white;
+        padding: 30px;
+        text-align: center;
+      }
+      .header h1 {
+        margin: 0;
+        font-size: 24px;
+        font-weight: 600;
+      }
+      .content {
+        padding: 30px;
+      }
+      .info-box {
+        background-color: #d4edda;
+        border-left: 4px solid #28a745;
+        padding: 15px;
+        margin: 20px 0;
+        border-radius: 4px;
+      }
+      .success-icon {
+        text-align: center;
+        font-size: 48px;
+        margin: 20px 0;
+      }
+      .footer {
+        background-color: #f8f9fa;
+        padding: 20px;
+        text-align: center;
+        color: #6c757d;
+        font-size: 14px;
+        border-top: 1px solid #dee2e6;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>✅ Production Completed</h1>
+      </div>
+
+      <div class="content">
+        <div class="success-icon">✓</div>
+
+        <p>Dear {{ author_name }},</p>
+
+        <p>
+          The production process for your manuscript has been completed
+          successfully!
+        </p>
+
+        <div class="info-box">
+          <p><strong>Manuscript:</strong> {{ submission_title }}</p>
+          <p>
+            <strong>Production Team:</strong> {{ production_assistant_name }}
+          </p>
+        </div>
+
+        <p><strong>Next Steps:</strong> {{ next_steps }}</p>
+
+        <p>
+          Your manuscript is now ready for publication scheduling. You will be
+          notified once the publication date is set.
+        </p>
+
+        <p>
+          Best regards,<br />
+          Editorial Team
+        </p>
+      </div>
+
+      <div class="footer">
+        <p>
+          This is an automated email. Please do not reply directly to this
+          email.
+        </p>
+      </div>
+    </div>
+  </body>
+</html>

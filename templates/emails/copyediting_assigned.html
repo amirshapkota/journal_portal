@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Copyediting Assignment</title>
+    <style>
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        line-height: 1.6;
+        color: #333;
+        max-width: 600px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #f4f4f4;
+      }
+      .container {
+        background-color: #ffffff;
+        border-radius: 10px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        overflow: hidden;
+      }
+      .header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 30px;
+        text-align: center;
+      }
+      .header h1 {
+        margin: 0;
+        font-size: 24px;
+        font-weight: 600;
+      }
+      .content {
+        padding: 30px;
+      }
+      .info-box {
+        background-color: #f8f9fa;
+        border-left: 4px solid #667eea;
+        padding: 15px;
+        margin: 20px 0;
+        border-radius: 4px;
+      }
+      .info-box h3 {
+        margin-top: 0;
+        color: #667eea;
+        font-size: 16px;
+      }
+      .info-box p {
+        margin: 5px 0;
+        color: #555;
+      }
+      .button-container {
+        text-align: center;
+        margin: 30px 0;
+      }
+      .button {
+        display: inline-block;
+        padding: 14px 30px;
+        text-decoration: none;
+        border-radius: 5px;
+        font-weight: 600;
+        font-size: 16px;
+        background-color: #667eea;
+        color: white;
+        transition: all 0.3s ease;
+      }
+      .button:hover {
+        background-color: #764ba2;
+      }
+      .deadline-box {
+        background-color: #fff3cd;
+        border: 1px solid #ffc107;
+        padding: 15px;
+        margin: 20px 0;
+        border-radius: 5px;
+        text-align: center;
+      }
+      .deadline-box strong {
+        color: #856404;
+        font-size: 18px;
+      }
+      .footer {
+        background-color: #f8f9fa;
+        padding: 20px;
+        text-align: center;
+        color: #6c757d;
+        font-size: 14px;
+        border-top: 1px solid #dee2e6;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>✍️ Copyediting Assignment</h1>
+      </div>
+
+      <div class="content">
+        <p>Dear {{ copyeditor_name }},</p>
+
+        <p>
+          You have been assigned to copyedit a manuscript. Please find the
+          details below:
+        </p>
+
+        <div class="info-box">
+          <h3>Manuscript Details</h3>
+          <p><strong>Title:</strong> {{ submission_title }}</p>
+          <p><strong>Submission ID:</strong> {{ submission_id }}</p>
+          <p><strong>Assigned by:</strong> {{ assigned_by }}</p>
+        </div>
+
+        <div class="deadline-box">
+          <strong>⏰ Due Date: {{ due_date }}</strong>
+        </div>
+
+        <div class="info-box">
+          <h3>Instructions</h3>
+          <p>{{ instructions }}</p>
+        </div>
+
+        <div class="button-container">
+          <a href="{{ assignment_url }}" class="button">View Assignment</a>
+        </div>
+
+        <p><strong>Next Steps:</strong></p>
+        <ul>
+          <li>Review the manuscript for grammar, spelling, and clarity</li>
+          <li>Ensure consistent formatting and style</li>
+          <li>Make necessary corrections and improvements</li>
+          <li>Upload the copyedited version before the due date</li>
+        </ul>
+
+        <p>
+          Thank you for your contribution to maintaining our publication
+          standards.
+        </p>
+
+        <p>
+          Best regards,<br />
+          <strong>{{ assigned_by }}</strong><br />
+          Editorial Team
+        </p>
+      </div>
+
+      <div class="footer">
+        <p>
+          This is an automated email. Please do not reply directly to this
+          email.
+        </p>
+        <p>If you have questions, please contact the editorial office.</p>
+      </div>
+    </div>
+  </body>
+</html>

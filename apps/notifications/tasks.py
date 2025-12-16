@@ -928,3 +928,446 @@ def send_revision_rejected_email(revision_round_id):
     except Exception as exc:
         logger.error(f"Error sending revision rejected email: {exc}")
         return {'status': 'error', 'message': str(exc)}
+
+
+# ============= WORKFLOW NOTIFICATION TASKS =============
+
+@shared_task
+def send_copyediting_assigned_email(assignment_id):
+    """Send email when copyediting is assigned."""
+    from apps.submissions.copyediting_models import CopyeditingAssignment
+    
+    try:
+        assignment = CopyeditingAssignment.objects.select_related(
+            'copyeditor__user', 'submission', 'assigned_by__user'
+        ).get(id=assignment_id)
+        
+        copyeditor = assignment.copyeditor.user
+        submission = assignment.submission
+        
+        context = {
+            'copyeditor_name': copyeditor.get_full_name() or copyeditor.email,
+            'submission_title': submission.title,
+            'submission_id': str(submission.id),
+            'assigned_by': assignment.assigned_by.user.get_full_name() if assignment.assigned_by else 'Editorial Team',
+            'due_date': assignment.due_date.strftime('%B %d, %Y') if assignment.due_date else 'TBD',
+            'instructions': assignment.instructions or 'Please review and copyedit the manuscript.',
+            'assignment_url': f"{settings.SITE_URL if hasattr(settings, 'SITE_URL') else 'http://127.0.0.1:8000'}/copyediting/assignments/{assignment.id}/",
+        }
+        
+        return send_template_email(
+            recipient=copyeditor.email,
+            template_type='COPYEDITING_ASSIGNED',
+            context=context,
+            user_id=str(copyeditor.id)
+        )
+    
+    except Exception as exc:
+        logger.error(f"Error sending copyediting assigned email: {exc}")
+        return {'status': 'error', 'message': str(exc)}
+
+
+@shared_task
+def send_copyediting_started_email(assignment_id):
+    """Send email to author when copyediting has started."""
+    from apps.submissions.copyediting_models import CopyeditingAssignment
+    
+    try:
+        assignment = CopyeditingAssignment.objects.select_related(
+            'copyeditor__user', 'submission__corresponding_author__user'
+        ).get(id=assignment_id)
+        
+        if not assignment.submission.corresponding_author:
+            logger.warning(f"Assignment {assignment_id} has no corresponding author, skipping notification")
+            return {'status': 'skipped', 'reason': 'no_corresponding_author'}
+        
+        author = assignment.submission.corresponding_author.user
+        submission = assignment.submission
+        
+        context = {
+            'author_name': author.get_full_name() or author.email,
+            'submission_title': submission.title,
+            'copyeditor_name': assignment.copyeditor.user.get_full_name() if assignment.copyeditor else 'Our copyeditor',
+            'estimated_completion': assignment.due_date.strftime('%B %d, %Y') if assignment.due_date else 'soon',
+        }
+        
+        return send_template_email(
+            recipient=author.email,
+            template_type='COPYEDITING_STARTED',
+            context=context,
+            user_id=str(author.id)
+        )
+    
+    except Exception as exc:
+        logger.error(f"Error sending copyediting started email: {exc}")
+        return {'status': 'error', 'message': str(exc)}
+
+
+@shared_task
+def send_copyediting_completed_email(assignment_id):
+    """Send email to editor and author when copyediting is completed."""
+    from apps.submissions.copyediting_models import CopyeditingAssignment
+    
+    try:
+        assignment = CopyeditingAssignment.objects.select_related(
+            'copyeditor__user', 'submission__corresponding_author__user', 'assigned_by__user'
+        ).get(id=assignment_id)
+        
+        submission = assignment.submission
+        
+        # Notify editor
+        if assignment.assigned_by:
+            editor = assignment.assigned_by.user
+            editor_context = {
+                'editor_name': editor.get_full_name() or editor.email,
+                'submission_title': submission.title,
+                'copyeditor_name': assignment.copyeditor.user.get_full_name() if assignment.copyeditor else 'The copyeditor',
+                'completion_notes': assignment.completion_notes or 'No additional notes provided.',
+                'assignment_url': f"{settings.SITE_URL if hasattr(settings, 'SITE_URL') else 'http://127.0.0.1:8000'}/copyediting/assignments/{assignment.id}/",
+            }
+            
+            send_template_email(
+                recipient=editor.email,
+                template_type='COPYEDITING_COMPLETED',
+                context=editor_context,
+                user_id=str(editor.id)
+            )
+        
+        # Notify author
+        if submission.corresponding_author:
+            author = submission.corresponding_author.user
+            author_context = {
+                'author_name': author.get_full_name() or author.email,
+                'submission_title': submission.title,
+                'copyeditor_name': assignment.copyeditor.user.get_full_name() if assignment.copyeditor else 'Our copyeditor',
+                'next_steps': 'Your manuscript will now proceed to the production stage.',
+            }
+            
+            return send_template_email(
+                recipient=author.email,
+                template_type='COPYEDITING_COMPLETED',
+                context=author_context,
+                user_id=str(author.id)
+            )
+    
+    except Exception as exc:
+        logger.error(f"Error sending copyediting completed email: {exc}")
+        return {'status': 'error', 'message': str(exc)}
+
+
+@shared_task
+def send_copyedited_file_ready_email(file_id):
+    """Send email to author when copyedited file is ready for review."""
+    from apps.submissions.copyediting_models import CopyeditingFile
+    
+    try:
+        file = CopyeditingFile.objects.select_related(
+            'assignment__submission__corresponding_author__user'
+        ).get(id=file_id)
+        
+        submission = file.assignment.submission
+        
+        if not submission.corresponding_author:
+            logger.warning(f"File {file_id} submission has no corresponding author, skipping notification")
+            return {'status': 'skipped', 'reason': 'no_corresponding_author'}
+        
+        author = submission.corresponding_author.user
+        
+        context = {
+            'author_name': author.get_full_name() or author.email,
+            'submission_title': submission.title,
+            'file_name': file.original_filename,
+            'file_url': f"{settings.SITE_URL if hasattr(settings, 'SITE_URL') else 'http://127.0.0.1:8000'}/api/v1/workflow/copyediting-files/{file.id}/download/",
+            'review_instructions': 'Please review the copyedited manuscript and confirm or provide feedback.',
+        }
+        
+        return send_template_email(
+            recipient=author.email,
+            template_type='COPYEDITING_FILE_READY',
+            context=context,
+            user_id=str(author.id)
+        )
+    
+    except Exception as exc:
+        logger.error(f"Error sending copyedited file ready email: {exc}")
+        return {'status': 'error', 'message': str(exc)}
+
+
+@shared_task
+def send_production_assigned_email(assignment_id):
+    """Send email when production is assigned."""
+    from apps.submissions.production_models import ProductionAssignment
+    
+    try:
+        assignment = ProductionAssignment.objects.select_related(
+            'production_assistant__user', 'submission', 'assigned_by__user'
+        ).get(id=assignment_id)
+        
+        prod_assistant = assignment.production_assistant.user
+        submission = assignment.submission
+        
+        context = {
+            'production_assistant_name': prod_assistant.get_full_name() or prod_assistant.email,
+            'submission_title': submission.title,
+            'submission_id': str(submission.id),
+            'assigned_by': assignment.assigned_by.user.get_full_name() if assignment.assigned_by else 'Editorial Team',
+            'due_date': assignment.due_date.strftime('%B %d, %Y') if assignment.due_date else 'TBD',
+            'instructions': assignment.instructions or 'Please prepare the galley files for publication.',
+            'assignment_url': f"{settings.SITE_URL if hasattr(settings, 'SITE_URL') else 'http://127.0.0.1:8000'}/production/assignments/{assignment.id}/",
+        }
+        
+        return send_template_email(
+            recipient=prod_assistant.email,
+            template_type='PRODUCTION_ASSIGNED',
+            context=context,
+            user_id=str(prod_assistant.id)
+        )
+    
+    except Exception as exc:
+        logger.error(f"Error sending production assigned email: {exc}")
+        return {'status': 'error', 'message': str(exc)}
+
+
+@shared_task
+def send_production_started_email(assignment_id):
+    """Send email to author when production has started."""
+    from apps.submissions.production_models import ProductionAssignment
+    
+    try:
+        assignment = ProductionAssignment.objects.select_related(
+            'production_assistant__user', 'submission__corresponding_author__user'
+        ).get(id=assignment_id)
+        
+        if not assignment.submission.corresponding_author:
+            logger.warning(f"Assignment {assignment_id} has no corresponding author, skipping notification")
+            return {'status': 'skipped', 'reason': 'no_corresponding_author'}
+        
+        author = assignment.submission.corresponding_author.user
+        submission = assignment.submission
+        
+        context = {
+            'author_name': author.get_full_name() or author.email,
+            'submission_title': submission.title,
+            'production_assistant_name': assignment.production_assistant.user.get_full_name() if assignment.production_assistant else 'Our production team',
+            'estimated_completion': assignment.due_date.strftime('%B %d, %Y') if assignment.due_date else 'soon',
+        }
+        
+        return send_template_email(
+            recipient=author.email,
+            template_type='PRODUCTION_STARTED',
+            context=context,
+            user_id=str(author.id)
+        )
+    
+    except Exception as exc:
+        logger.error(f"Error sending production started email: {exc}")
+        return {'status': 'error', 'message': str(exc)}
+
+
+@shared_task
+def send_production_completed_email(assignment_id):
+    """Send email to editor and author when production is completed."""
+    from apps.submissions.production_models import ProductionAssignment
+    
+    try:
+        assignment = ProductionAssignment.objects.select_related(
+            'production_assistant__user', 'submission__corresponding_author__user', 'assigned_by__user'
+        ).get(id=assignment_id)
+        
+        submission = assignment.submission
+        
+        # Notify editor
+        if assignment.assigned_by:
+            editor = assignment.assigned_by.user
+            editor_context = {
+                'editor_name': editor.get_full_name() or editor.email,
+                'submission_title': submission.title,
+                'production_assistant_name': assignment.production_assistant.user.get_full_name() if assignment.production_assistant else 'The production team',
+                'completion_notes': assignment.completion_notes or 'No additional notes provided.',
+                'assignment_url': f"{settings.SITE_URL if hasattr(settings, 'SITE_URL') else 'http://127.0.0.1:8000'}/production/assignments/{assignment.id}/",
+            }
+            
+            send_template_email(
+                recipient=editor.email,
+                template_type='PRODUCTION_COMPLETED',
+                context=editor_context,
+                user_id=str(editor.id)
+            )
+        
+        # Notify author
+        if submission.corresponding_author:
+            author = submission.corresponding_author.user
+            author_context = {
+                'author_name': author.get_full_name() or author.email,
+                'submission_title': submission.title,
+                'production_assistant_name': assignment.production_assistant.user.get_full_name() if assignment.production_assistant else 'Our production team',
+                'next_steps': 'Your manuscript is now ready for publication scheduling.',
+            }
+            
+            return send_template_email(
+                recipient=author.email,
+                template_type='PRODUCTION_COMPLETED',
+                context=author_context,
+                user_id=str(author.id)
+            )
+    
+    except Exception as exc:
+        logger.error(f"Error sending production completed email: {exc}")
+        return {'status': 'error', 'message': str(exc)}
+
+
+@shared_task
+def send_galley_published_email(file_id):
+    """Send email when galley file is published."""
+    from apps.submissions.production_models import ProductionFile
+    
+    try:
+        file = ProductionFile.objects.select_related(
+            'assignment__submission__corresponding_author__user'
+        ).get(id=file_id)
+        
+        submission = file.assignment.submission
+        
+        if not submission.corresponding_author:
+            logger.warning(f"File {file_id} submission has no corresponding author, skipping notification")
+            return {'status': 'skipped', 'reason': 'no_corresponding_author'}
+        
+        author = submission.corresponding_author.user
+        
+        context = {
+            'author_name': author.get_full_name() or author.email,
+            'submission_title': submission.title,
+            'galley_format': file.get_galley_format_display(),
+            'file_label': file.label,
+        }
+        
+        return send_template_email(
+            recipient=author.email,
+            template_type='GALLEY_PUBLISHED',
+            context=context,
+            user_id=str(author.id)
+        )
+    
+    except Exception as exc:
+        logger.error(f"Error sending galley published email: {exc}")
+        return {'status': 'error', 'message': str(exc)}
+
+
+@shared_task
+def send_publication_scheduled_email(schedule_id):
+    """Send email when publication is scheduled."""
+    from apps.submissions.production_models import PublicationSchedule
+    
+    try:
+        schedule = PublicationSchedule.objects.select_related(
+            'submission__corresponding_author__user', 'scheduled_by__user'
+        ).get(id=schedule_id)
+        
+        submission = schedule.submission
+        
+        if not submission.corresponding_author:
+            logger.warning(f"Schedule {schedule_id} has no corresponding author, skipping notification")
+            return {'status': 'skipped', 'reason': 'no_corresponding_author'}
+        
+        author = submission.corresponding_author.user
+        
+        context = {
+            'author_name': author.get_full_name() or author.email,
+            'submission_title': submission.title,
+            'scheduled_date': schedule.scheduled_date.strftime('%B %d, %Y'),
+            'volume': schedule.volume,
+            'issue': schedule.issue,
+            'year': schedule.year,
+            'doi': schedule.doi or 'Will be assigned',
+            'pages': f"{schedule.first_page}-{schedule.last_page}" if schedule.first_page and schedule.last_page else 'TBD',
+        }
+        
+        return send_template_email(
+            recipient=author.email,
+            template_type='PUBLICATION_SCHEDULED',
+            context=context,
+            user_id=str(author.id)
+        )
+    
+    except Exception as exc:
+        logger.error(f"Error sending publication scheduled email: {exc}")
+        return {'status': 'error', 'message': str(exc)}
+
+
+@shared_task
+def send_publication_published_email(schedule_id):
+    """Send email when article is published."""
+    from apps.submissions.production_models import PublicationSchedule
+    
+    try:
+        schedule = PublicationSchedule.objects.select_related(
+            'submission__corresponding_author__user'
+        ).get(id=schedule_id)
+        
+        submission = schedule.submission
+        
+        if not submission.corresponding_author:
+            logger.warning(f"Schedule {schedule_id} has no corresponding author, skipping notification")
+            return {'status': 'skipped', 'reason': 'no_corresponding_author'}
+        
+        author = submission.corresponding_author.user
+        
+        context = {
+            'author_name': author.get_full_name() or author.email,
+            'submission_title': submission.title,
+            'published_date': schedule.published_date.strftime('%B %d, %Y') if schedule.published_date else timezone.now().strftime('%B %d, %Y'),
+            'volume': schedule.volume,
+            'issue': schedule.issue,
+            'year': schedule.year,
+            'doi': schedule.doi or 'Pending',
+            'pages': f"{schedule.first_page}-{schedule.last_page}" if schedule.first_page and schedule.last_page else 'See article',
+            'article_url': schedule.url or f"{settings.SITE_URL if hasattr(settings, 'SITE_URL') else 'http://127.0.0.1:8000'}/articles/{submission.id}/",
+        }
+        
+        return send_template_email(
+            recipient=author.email,
+            template_type='PUBLICATION_PUBLISHED',
+            context=context,
+            user_id=str(author.id)
+        )
+    
+    except Exception as exc:
+        logger.error(f"Error sending publication published email email: {exc}")
+        return {'status': 'error', 'message': str(exc)}
+
+
+@shared_task
+def send_publication_cancelled_email(schedule_id):
+    """Send email when publication is cancelled."""
+    from apps.submissions.production_models import PublicationSchedule
+    
+    try:
+        schedule = PublicationSchedule.objects.select_related(
+            'submission__corresponding_author__user'
+        ).get(id=schedule_id)
+        
+        submission = schedule.submission
+        
+        if not submission.corresponding_author:
+            logger.warning(f"Schedule {schedule_id} has no corresponding author, skipping notification")
+            return {'status': 'skipped', 'reason': 'no_corresponding_author'}
+        
+        author = submission.corresponding_author.user
+        
+        context = {
+            'author_name': author.get_full_name() or author.email,
+            'submission_title': submission.title,
+            'original_scheduled_date': schedule.scheduled_date.strftime('%B %d, %Y') if schedule.scheduled_date else 'scheduled date',
+            'reason': 'Please contact the editorial office for more information.',
+        }
+        
+        return send_template_email(
+            recipient=author.email,
+            template_type='PUBLICATION_CANCELLED',
+            context=context,
+            user_id=str(author.id)
+        )
+    
+    except Exception as exc:
+        logger.error(f"Error sending publication cancelled email: {exc}")
+        return {'status': 'error', 'message': str(exc)}

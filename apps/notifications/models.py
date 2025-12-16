@@ -44,6 +44,20 @@ class EmailTemplate(models.Model):
         ('REVISION_SUBMITTED', 'Revision Submitted (Editor Notification)'),
         ('REVISION_APPROVED', 'Revision Approved'),
         ('REVISION_REJECTED', 'Revision Rejected'),
+        # Copyediting workflow templates
+        ('COPYEDITING_ASSIGNED', 'Copyediting Assignment'),
+        ('COPYEDITING_STARTED', 'Copyediting Started'),
+        ('COPYEDITING_COMPLETED', 'Copyediting Completed'),
+        ('COPYEDITING_FILE_READY', 'Copyedited File Ready for Author Review'),
+        # Production workflow templates
+        ('PRODUCTION_ASSIGNED', 'Production Assignment'),
+        ('PRODUCTION_STARTED', 'Production Started'),
+        ('PRODUCTION_COMPLETED', 'Production Completed'),
+        ('GALLEY_PUBLISHED', 'Galley Published'),
+        # Publication scheduling templates
+        ('PUBLICATION_SCHEDULED', 'Publication Scheduled'),
+        ('PUBLICATION_PUBLISHED', 'Article Published'),
+        ('PUBLICATION_CANCELLED', 'Publication Cancelled'),
     ]
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -179,6 +193,32 @@ class EmailNotificationPreference(models.Model):
     email_on_decision_made = models.BooleanField(
         default=True,
         help_text="Notify when editorial decision is made"
+    )
+    
+    # Workflow notifications
+    email_on_copyediting_assigned = models.BooleanField(
+        default=True,
+        help_text="Notify when copyediting is assigned"
+    )
+    email_on_copyediting_completed = models.BooleanField(
+        default=True,
+        help_text="Notify when copyediting is completed"
+    )
+    email_on_production_assigned = models.BooleanField(
+        default=True,
+        help_text="Notify when production is assigned"
+    )
+    email_on_production_completed = models.BooleanField(
+        default=True,
+        help_text="Notify when production is completed"
+    )
+    email_on_publication_scheduled = models.BooleanField(
+        default=True,
+        help_text="Notify when publication is scheduled"
+    )
+    email_on_publication_published = models.BooleanField(
+        default=True,
+        help_text="Notify when article is published"
     )
     
     # Digest options

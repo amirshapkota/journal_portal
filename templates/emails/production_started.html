@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Production Started</title>
+    <style>
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        line-height: 1.6;
+        color: #333;
+        max-width: 600px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #f4f4f4;
+      }
+      .container {
+        background-color: #ffffff;
+        border-radius: 10px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        overflow: hidden;
+      }
+      .header {
+        background: linear-gradient(135deg, #6f42c1 0%, #e83e8c 100%);
+        color: white;
+        padding: 30px;
+        text-align: center;
+      }
+      .header h1 {
+        margin: 0;
+        font-size: 24px;
+        font-weight: 600;
+      }
+      .content {
+        padding: 30px;
+      }
+      .info-box {
+        background-color: #f3e5f5;
+        border-left: 4px solid #6f42c1;
+        padding: 15px;
+        margin: 20px 0;
+        border-radius: 4px;
+      }
+      .footer {
+        background-color: #f8f9fa;
+        padding: 20px;
+        text-align: center;
+        color: #6c757d;
+        font-size: 14px;
+        border-top: 1px solid #dee2e6;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>🎨 Production in Progress</h1>
+      </div>
+
+      <div class="content">
+        <p>Dear {{ author_name }},</p>
+
+        <p>Your manuscript is now in the production stage!</p>
+
+        <div class="info-box">
+          <p><strong>Manuscript:</strong> {{ submission_title }}</p>
+          <p>
+            <strong>Production Team:</strong> {{ production_assistant_name }}
+          </p>
+          <p>
+            <strong>Estimated Completion:</strong> {{ estimated_completion }}
+          </p>
+        </div>
+
+        <p>
+          Our production team is preparing the final publication files,
+          including galley proofs in various formats (PDF, HTML, etc.). You will
+          receive the proofs for your final approval before publication.
+        </p>
+
+        <p>
+          Thank you for your patience as we prepare your manuscript for
+          publication.
+        </p>
+
+        <p>
+          Best regards,<br />
+          Editorial Team
+        </p>
+      </div>
+
+      <div class="footer">
+        <p>
+          This is an automated email. Please do not reply directly to this
+          email.
+        </p>
+      </div>
+    </div>
+  </body>
+</html>

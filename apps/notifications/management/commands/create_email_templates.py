@@ -109,7 +109,7 @@ class Command(BaseCommand):
             {
                 'template_type': 'DECISION_ACCEPT',
                 'name': 'Editorial Decision: Accepted',
-                'subject': '🎉 Manuscript Accepted - {{ submission_title }}',
+                'subject': 'Manuscript Accepted - {{ submission_title }}',
                 'description': 'Sent when editorial decision is ACCEPT',
                 'html_file': 'decision_accept.html',
             },
@@ -151,7 +151,7 @@ class Command(BaseCommand):
             {
                 'template_type': 'REVISION_APPROVED',
                 'name': 'Revision Approved',
-                'subject': '✅ Your Revision Has Been Approved - {{ submission_title }}',
+                'subject': 'Your Revision Has Been Approved - {{ submission_title }}',
                 'description': 'Sent when editor approves a revised manuscript',
                 'html_file': 'revision_approved.html',
             },
@@ -161,6 +161,86 @@ class Command(BaseCommand):
                 'subject': 'Revision Decision - {{ submission_title }}',
                 'description': 'Sent when editor rejects a revised manuscript',
                 'html_file': 'revision_rejected.html',
+            },
+            # Workflow Templates - Copyediting
+            {
+                'template_type': 'COPYEDITING_ASSIGNED',
+                'name': 'Copyediting Assignment',
+                'subject': 'Copyediting Assignment - {{ submission_title }}',
+                'description': 'Sent when copyeditor is assigned to a manuscript',
+                'html_file': 'copyediting_assigned.html',
+            },
+            {
+                'template_type': 'COPYEDITING_STARTED',
+                'name': 'Copyediting Started',
+                'subject': 'Copyediting in Progress - {{ submission_title }}',
+                'description': 'Sent to author when copyediting work begins',
+                'html_file': 'copyediting_started.html',
+            },
+            {
+                'template_type': 'COPYEDITING_COMPLETED',
+                'name': 'Copyediting Completed',
+                'subject': 'Copyediting Completed - {{ submission_title }}',
+                'description': 'Sent when copyediting is finished',
+                'html_file': 'copyediting_completed.html',
+            },
+            {
+                'template_type': 'COPYEDITING_FILE_READY',
+                'name': 'Copyedited File Ready for Review',
+                'subject': 'Copyedited File Ready - {{ submission_title }}',
+                'description': 'Sent to author when copyedited file is ready for review',
+                'html_file': 'copyediting_file_ready.html',
+            },
+            # Workflow Templates - Production
+            {
+                'template_type': 'PRODUCTION_ASSIGNED',
+                'name': 'Production Assignment',
+                'subject': 'Production Assignment - {{ submission_title }}',
+                'description': 'Sent when production assistant is assigned',
+                'html_file': 'production_assigned.html',
+            },
+            {
+                'template_type': 'PRODUCTION_STARTED',
+                'name': 'Production Started',
+                'subject': 'Production in Progress - {{ submission_title }}',
+                'description': 'Sent to author when production work begins',
+                'html_file': 'production_started.html',
+            },
+            {
+                'template_type': 'PRODUCTION_COMPLETED',
+                'name': 'Production Completed',
+                'subject': 'Production Completed - {{ submission_title }}',
+                'description': 'Sent when production is finished',
+                'html_file': 'production_completed.html',
+            },
+            {
+                'template_type': 'GALLEY_PUBLISHED',
+                'name': 'Galley File Published',
+                'subject': 'Galley Published - {{ submission_title }}',
+                'description': 'Sent when a galley file is published',
+                'html_file': 'galley_published.html',
+            },
+            # Workflow Templates - Publication Scheduling
+            {
+                'template_type': 'PUBLICATION_SCHEDULED',
+                'name': 'Publication Scheduled',
+                'subject': 'Publication Scheduled - {{ submission_title }}',
+                'description': 'Sent when article is scheduled for publication',
+                'html_file': 'publication_scheduled.html',
+            },
+            {
+                'template_type': 'PUBLICATION_PUBLISHED',
+                'name': 'Article Published',
+                'subject': 'Your Article is Published - {{ submission_title }}',
+                'description': 'Sent when article is published and live',
+                'html_file': 'publication_published.html',
+            },
+            {
+                'template_type': 'PUBLICATION_CANCELLED',
+                'name': 'Publication Cancelled',
+                'subject': 'Publication Schedule Updated - {{ submission_title }}',
+                'description': 'Sent when scheduled publication is cancelled',
+                'html_file': 'publication_cancelled.html',
             },
         ]
 

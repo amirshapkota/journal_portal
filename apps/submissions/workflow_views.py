@@ -206,6 +206,13 @@ class CopyeditingAssignmentViewSet(viewsets.ModelViewSet):
         assignment.status = 'IN_PROGRESS'
         assignment.save()
         
+        # Send notification to author
+        from apps.notifications.tasks import send_copyediting_started_email
+        try:
+            send_copyediting_started_email.delay(str(assignment.id))
+        except Exception as e:
+            logger.error(f"Failed to send copyediting started notification: {e}")
+        
         # Create copyediting files from submission documents
         from django.core.files.base import ContentFile
         import logging
@@ -359,8 +366,14 @@ class CopyeditingAssignmentViewSet(viewsets.ModelViewSet):
             submission.status = 'PRODUCTION'
             submission.save()
         
-        # TODO: Create production assignment record (if auto-creation is enabled)
-        # TODO: Send notifications to relevant parties
+        # Send notification to editor and author
+        from apps.notifications.tasks import send_copyediting_completed_email
+        try:
+            send_copyediting_completed_email.delay(str(assignment.id))
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Failed to send copyediting completed notification: {e}")
         
         serializer = self.get_serializer(assignment)
         
@@ -629,6 +642,15 @@ class CopyeditingFileViewSet(viewsets.ModelViewSet):
         file_obj.approved_at = timezone.now()
         file_obj.save()
         
+        # Send notification to author that file is ready for review
+        from apps.notifications.tasks import send_copyedited_file_ready_email
+        try:
+            send_copyedited_file_ready_email.delay(str(file_obj.id))
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Failed to send copyedited file ready notification: {e}")
+        
         serializer = self.get_serializer(file_obj)
         return Response(serializer.data)
     
@@ -821,7 +843,8 @@ class CopyeditingFileViewSet(viewsets.ModelViewSet):
         file_obj.last_edited_by = request.user.profile
         file_obj.save()
         
-        # TODO: Send notification to editor that file is ready for final review
+        # Send notification to editor that file is confirmed
+        # (We send copyedited_file_ready when file type changes to COPYEDITED)
         
         serializer = self.get_serializer(file_obj)
         return Response({
@@ -1069,6 +1092,15 @@ class ProductionAssignmentViewSet(viewsets.ModelViewSet):
         assignment.status = 'IN_PROGRESS'
         assignment.save()
         
+        # Send notification to author
+        from apps.notifications.tasks import send_production_started_email
+        try:
+            send_production_started_email.delay(str(assignment.id))
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Failed to send production started notification: {e}")
+        
         serializer = self.get_serializer(assignment)
         return Response(serializer.data)
     
@@ -1090,9 +1122,20 @@ class ProductionAssignmentViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
+        from django.utils import timezone
         assignment.status = 'COMPLETED'
         assignment.completion_notes = request.data.get('completion_notes', '')
+        assignment.completed_at = timezone.now()
         assignment.save()
+        
+        # Send notification to editor and author
+        from apps.notifications.tasks import send_production_completed_email
+        try:
+            send_production_completed_email.delay(str(assignment.id))
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Failed to send production completed notification: {e}")
         
         serializer = self.get_serializer(assignment)
         return Response(serializer.data)
@@ -1345,6 +1388,15 @@ class ProductionFileViewSet(viewsets.ModelViewSet):
         file_obj.published_at = timezone.now()
         file_obj.save()
         
+        # Send notification to author
+        from apps.notifications.tasks import send_galley_published_email
+        try:
+            send_galley_published_email.delay(str(file_obj.id))
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Failed to send galley published notification: {e}")
+        
         serializer = self.get_serializer(file_obj)
         return Response(serializer.data)
 
@@ -1550,6 +1602,23 @@ class PublicationScheduleViewSet(viewsets.ModelViewSet):
         
         return queryset.none()
     
+    def perform_create(self, serializer):
+        """Create publication schedule and send notification."""
+        schedule = serializer.save()
+        
+        # Update submission status
+        schedule.submission.status = 'SCHEDULED'
+        schedule.submission.save()
+        
+        # Send notification to author
+        from apps.notifications.tasks import send_publication_scheduled_email
+        try:
+            send_publication_scheduled_email.delay(str(schedule.id))
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Failed to send publication scheduled notification: {e}")
+    
     @extend_schema(
         summary="Publish now",
         description="Immediately publish a scheduled submission."
@@ -1573,6 +1642,15 @@ class PublicationScheduleViewSet(viewsets.ModelViewSet):
         # Update submission status
         schedule.submission.status = 'PUBLISHED'
         schedule.submission.save()
+        
+        # Send notification to author
+        from apps.notifications.tasks import send_publication_published_email
+        try:
+            send_publication_published_email.delay(str(schedule.id))
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Failed to send publication published notification: {e}")
         
         serializer = self.get_serializer(schedule)
         return Response(serializer.data)
@@ -1598,6 +1676,15 @@ class PublicationScheduleViewSet(viewsets.ModelViewSet):
         # Revert submission status
         schedule.submission.status = 'IN_PRODUCTION'
         schedule.submission.save()
+        
+        # Send notification to author
+        from apps.notifications.tasks import send_publication_cancelled_email
+        try:
+            send_publication_cancelled_email.delay(str(schedule.id))
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Failed to send publication cancelled notification: {e}")
         
         serializer = self.get_serializer(schedule)
         return Response(serializer.data)

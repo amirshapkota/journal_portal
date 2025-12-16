@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Copyedited File Ready</title>
+    <style>
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        line-height: 1.6;
+        color: #333;
+        max-width: 600px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #f4f4f4;
+      }
+      .container {
+        background-color: #ffffff;
+        border-radius: 10px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        overflow: hidden;
+      }
+      .header {
+        background: linear-gradient(135deg, #17a2b8 0%, #138496 100%);
+        color: white;
+        padding: 30px;
+        text-align: center;
+      }
+      .header h1 {
+        margin: 0;
+        font-size: 24px;
+        font-weight: 600;
+      }
+      .content {
+        padding: 30px;
+      }
+      .info-box {
+        background-color: #d1ecf1;
+        border-left: 4px solid #17a2b8;
+        padding: 15px;
+        margin: 20px 0;
+        border-radius: 4px;
+      }
+      .button-container {
+        text-align: center;
+        margin: 30px 0;
+      }
+      .button {
+        display: inline-block;
+        padding: 14px 30px;
+        text-decoration: none;
+        border-radius: 5px;
+        font-weight: 600;
+        font-size: 16px;
+        background-color: #17a2b8;
+        color: white;
+        transition: all 0.3s ease;
+      }
+      .button:hover {
+        background-color: #138496;
+      }
+      .footer {
+        background-color: #f8f9fa;
+        padding: 20px;
+        text-align: center;
+        color: #6c757d;
+        font-size: 14px;
+        border-top: 1px solid #dee2e6;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>📄 Copyedited File Ready for Review</h1>
+      </div>
+
+      <div class="content">
+        <p>Dear {{ author_name }},</p>
+
+        <p>Your copyedited manuscript is ready for your review!</p>
+
+        <div class="info-box">
+          <p><strong>Manuscript:</strong> {{ submission_title }}</p>
+          <p><strong>File:</strong> {{ file_name }}</p>
+        </div>
+
+        <p><strong>Action Required:</strong> {{ review_instructions }}</p>
+
+        <div class="button-container">
+          <a href="{{ file_url }}" class="button">Download & Review File</a>
+        </div>
+
+        <p><strong>What to check:</strong></p>
+        <ul>
+          <li>Review all editorial changes made to your manuscript</li>
+          <li>Verify that your intended meaning is preserved</li>
+          <li>Check for any factual errors introduced during editing</li>
+          <li>Approve or provide feedback on the changes</li>
+        </ul>
+
+        <p>
+          Please review the file carefully and confirm your approval or provide
+          feedback as soon as possible.
+        </p>
+
+        <p>
+          Best regards,<br />
+          Editorial Team
+        </p>
+      </div>
+
+      <div class="footer">
+        <p>
+          This is an automated email. Please do not reply directly to this
+          email.
+        </p>
+      </div>
+    </div>
+  </body>
+</html>
