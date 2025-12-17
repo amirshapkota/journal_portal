@@ -487,7 +487,7 @@ class OJSSyncService:
             
             published_date = full_pub.get('datePublished')
             section_id = full_pub.get('sectionId')
-            doi = full_pub.get('pub-id::doi') or full_pub.get('doiObject', {}).get('doi', '')
+            doi = full_pub.get('pub-id::doi') or (full_pub.get('doiObject') or {}).get('doi', '')
             
             # Extract copyright and license
             copyright_holder = ''
