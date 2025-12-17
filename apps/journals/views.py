@@ -56,9 +56,9 @@ class JournalPermissions(permissions.BasePermission):
         return False
     
     def has_object_permission(self, request, view, obj):
-        # Read permissions for active journals
+        # Read permissions - anyone can view any journal
         if request.method in permissions.SAFE_METHODS:
-            return obj.is_active or request.user.is_staff
+            return True
         
         # Write permissions for journal staff or admin
         if request.user.is_superuser or request.user.is_staff:
@@ -117,6 +117,13 @@ class JournalViewSet(viewsets.ModelViewSet):
             'staff_members__profile__user',
             'submissions'
         )
+        
+        # For detail view (retrieve), show all journals to authenticated users
+        if self.action == 'retrieve':
+            if self.request.user.is_authenticated:
+                return queryset
+            # Anonymous users can only see active journals
+            return queryset.filter(is_active=True)
         
         # Superuser sees all journals
         if self.request.user.is_superuser:
