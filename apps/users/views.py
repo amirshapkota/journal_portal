@@ -302,8 +302,48 @@ class EmailVerificationView(APIView):
                 
                 logger.info(f"Email verified for user: {user.email}")
                 
+                # Blacklist all outstanding JWT tokens for this user
+                try:
+                    from rest_framework_simplejwt.token_blacklist.models import OutstandingToken
+                    outstanding_tokens = OutstandingToken.objects.filter(user=user)
+                    tokens_blacklisted = 0
+                    for outstanding_token in outstanding_tokens:
+                        try:
+                            from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken
+                            BlacklistedToken.objects.get_or_create(token=outstanding_token)
+                            tokens_blacklisted += 1
+                        except Exception as token_error:
+                            continue
+                    logger.info(f"Blacklisted {tokens_blacklisted} JWT token(s) for user {user.email} after email verification")
+                except Exception as e:
+                    logger.warning(f"Could not blacklist JWT tokens for user {user.email}: {e}")
+                
+                # Logout all active sessions for this user to force re-login
+                from django.contrib.sessions.models import Session
+                from django.utils import timezone as tz
+                
+                # Delete all active sessions for this user
+                try:
+                    active_sessions = Session.objects.filter(expire_date__gte=tz.now())
+                    sessions_deleted = 0
+                    for session in active_sessions:
+                        try:
+                            session_data = session.get_decoded()
+                            # Check both string and int versions of user ID
+                            session_user_id = session_data.get('_auth_user_id')
+                            if session_user_id and (str(session_user_id) == str(user.id) or session_user_id == user.id):
+                                session.delete()
+                                sessions_deleted += 1
+                        except Exception as decode_error:
+                            # Skip sessions that can't be decoded
+                            continue
+                    
+                    logger.info(f"Deleted {sessions_deleted} active session(s) for user {user.email} after email verification")
+                except Exception as e:
+                    logger.warning(f"Could not delete sessions for user {user.email}: {e}")
+                
                 return Response({
-                    'message': 'Email verification successful.'
+                    'message': 'Email verification successful. Please log in again.'
                 }, status=status.HTTP_200_OK)
             else:
                 logger.warning(f"Invalid verification token for user: {user.email}")
