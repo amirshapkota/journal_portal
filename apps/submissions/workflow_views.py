@@ -126,6 +126,11 @@ class WorkflowPermissions(permissions.BasePermission):
                     logger.info(f"Permission GRANTED: User is assigner (via assignment)")
                     return True
                 
+                # Allow the scheduler to manage publication schedules
+                if hasattr(obj, 'scheduled_by') and obj.scheduled_by == user.profile:
+                    logger.info(f"Permission GRANTED: User is scheduler (scheduled_by)")
+                    return True
+                
                 # Author permissions (read-only) - check last
                 if submission.corresponding_author == user.profile:
                     result = request.method in permissions.SAFE_METHODS or view.action in ['add_message']
