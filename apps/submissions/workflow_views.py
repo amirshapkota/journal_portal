@@ -58,12 +58,24 @@ class WorkflowPermissions(permissions.BasePermission):
         
         if hasattr(user, 'profile'):
             logger.info(f"User has profile: {user.profile.id}")
-            # Get submission based on object type
+            # Get submission and assignment based on object type
             submission = None
+            assignment = None
+            
             if hasattr(obj, 'submission'):
                 submission = obj.submission
             elif isinstance(obj, Submission):
                 submission = obj
+            
+            # Get assignment for permission checking
+            if hasattr(obj, 'assignment'):
+                assignment = obj.assignment
+            elif hasattr(obj, 'copyeditor'):
+                # This is a CopyeditingAssignment
+                assignment = obj
+            elif hasattr(obj, 'production_assistant'):
+                # This is a ProductionAssignment
+                assignment = obj
             
             if submission:
                 logger.info(f"Submission found: {submission.id}, journal: {submission.journal.id}")
@@ -79,12 +91,24 @@ class WorkflowPermissions(permissions.BasePermission):
                     logger.info(f"Permission GRANTED: User is journal staff")
                     return True
                 
-                # Copyeditor/Production assistant permissions
+                # Copyeditor permissions - check both direct and via assignment
+                # If object has copyeditor directly (CopyeditingAssignment)
                 if hasattr(obj, 'copyeditor') and obj.copyeditor == user.profile:
-                    logger.info(f"Permission GRANTED: User is copyeditor")
+                    logger.info(f"Permission GRANTED: User is copyeditor (direct)")
                     return True
+                
+                # If object belongs to an assignment where user is copyeditor
+                if assignment and hasattr(assignment, 'copyeditor') and assignment.copyeditor == user.profile:
+                    logger.info(f"Permission GRANTED: User is copyeditor (via assignment)")
+                    return True
+                
+                # Production assistant permissions - check both direct and via assignment
                 if hasattr(obj, 'production_assistant') and obj.production_assistant == user.profile:
-                    logger.info(f"Permission GRANTED: User is production assistant")
+                    logger.info(f"Permission GRANTED: User is production assistant (direct)")
+                    return True
+                
+                if assignment and hasattr(assignment, 'production_assistant') and assignment.production_assistant == user.profile:
+                    logger.info(f"Permission GRANTED: User is production assistant (via assignment)")
                     return True
                 
                 # Check if user is a participant
@@ -98,6 +122,10 @@ class WorkflowPermissions(permissions.BasePermission):
                     logger.info(f"Permission GRANTED: User is assigner (assigned_by)")
                     return True
                 
+                if assignment and hasattr(assignment, 'assigned_by') and assignment.assigned_by == user.profile:
+                    logger.info(f"Permission GRANTED: User is assigner (via assignment)")
+                    return True
+                
                 # Author permissions (read-only) - check last
                 if submission.corresponding_author == user.profile:
                     result = request.method in permissions.SAFE_METHODS or view.action in ['add_message']
@@ -109,8 +137,6 @@ class WorkflowPermissions(permissions.BasePermission):
                 logger.warning(f"Permission DENIED: No submission found")
         else:
             logger.warning(f"Permission DENIED: User has no profile")
-        
-        return False
         
         return False
 
