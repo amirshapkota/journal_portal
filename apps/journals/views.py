@@ -106,14 +106,32 @@ class JournalViewSet(viewsets.ModelViewSet):
         return JournalSerializer
     
     def perform_create(self, serializer):
-        """Create journal and automatically add creator as Editor-in-Chief."""
+        """Create journal and add Editor-in-Chief."""
+        # Extract editor_in_chief_email from validated data if provided
+        editor_in_chief_email = serializer.validated_data.pop('editor_in_chief_email', None)
+        
         journal = serializer.save()
         
-        # Automatically add the creator as Editor-in-Chief if they have a profile
-        if hasattr(self.request.user, 'profile'):
+        # Determine who should be the Editor-in-Chief
+        if editor_in_chief_email:
+            # Use the specified email to find the profile
+            from apps.users.models import Profile
+            from django.contrib.auth import get_user_model
+            User = get_user_model()
+            
+            user = User.objects.get(email=editor_in_chief_email)
+            editor_profile = user.profile
+        elif hasattr(self.request.user, 'profile'):
+            # Default to creator as Editor-in-Chief
+            editor_profile = self.request.user.profile
+        else:
+            editor_profile = None
+        
+        # Add the Editor-in-Chief if we have a profile
+        if editor_profile:
             JournalStaff.objects.create(
                 journal=journal,
-                profile=self.request.user.profile,
+                profile=editor_profile,
                 role='EDITOR_IN_CHIEF',
                 is_active=True
             )

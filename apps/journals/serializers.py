@@ -44,6 +44,7 @@ class JournalSerializer(serializers.ModelSerializer):
     submission_count = serializers.SerializerMethodField()
     active_staff_count = serializers.SerializerMethodField()
     ojs_connection_status = serializers.SerializerMethodField()
+    editor_in_chief_email = serializers.EmailField(write_only=True, required=False, allow_null=True)
     
     class Meta:
         model = Journal
@@ -54,7 +55,7 @@ class JournalSerializer(serializers.ModelSerializer):
             'technical_contact_name', 'technical_contact_email', 'technical_contact_phone',
             'settings', 'is_active', 'is_accepting_submissions',
             'staff_members', 'submission_count', 'active_staff_count',
-            'ojs_connection_status',
+            'ojs_connection_status', 'editor_in_chief_email',
             'created_at', 'updated_at'
         )
         read_only_fields = ('id', 'created_at', 'updated_at')
@@ -212,6 +213,21 @@ class JournalSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     "Online ISSN must be in format: 1234-5678"
                 )
+        return value
+    
+    def validate_editor_in_chief_email(self, value):
+        """Validate that the editor-in-chief email exists."""
+        if value:
+            from apps.users.models import Profile
+            from django.contrib.auth import get_user_model
+            User = get_user_model()
+            
+            try:
+                user = User.objects.get(email=value)
+                if not hasattr(user, 'profile'):
+                    raise serializers.ValidationError("User does not have a profile.")
+            except User.DoesNotExist:
+                raise serializers.ValidationError("User with this email does not exist.")
         return value
 
 
