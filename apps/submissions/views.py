@@ -261,7 +261,7 @@ class SubmissionViewSet(viewsets.ModelViewSet):
             status__in=[
                 'UNDER_REVIEW',
                 'REVISION_REQUIRED', 'REVISION_REQUESTED', 'REVISED',
-                'ACCEPTANCE_REQUESTED', 'REJECTION_REQUESTED', 'ACCEPTED', 'COPYEDITING',
+                'ACCEPTANCE_REQUESTED', 'REJECTION_REQUESTED', 'ACCEPTED', 'COPYEDITING', 'PRODUCTION',
             ]
         ).annotate(
             review_count=Count('review_assignments')
