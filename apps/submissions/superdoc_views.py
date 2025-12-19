@@ -29,6 +29,7 @@ class SuperDocPermission(permissions.BasePermission):
     - Co-authors: view and comment only (edit=False)
     - Reviewers: view and comment only (edit=False)
     - Journal editors: full access
+    - JOURNAL_MANAGER: no access (editorial activities)
     - Others: no access
     """
     
@@ -48,6 +49,11 @@ class SuperDocPermission(permissions.BasePermission):
         # Must have profile
         profile = getattr(user, 'profile', None)
         if not profile:
+            return False
+        
+        # Explicitly deny JOURNAL_MANAGER role from editorial activities
+        from apps.users.models import Role
+        if profile.roles.filter(name='JOURNAL_MANAGER').exists():
             return False
         
         submission = document.submission
@@ -87,6 +93,11 @@ def can_access_document(user, document):
     profile = getattr(user, 'profile', None)
     
     if not profile:
+        return (False, False)
+    
+    # Explicitly deny JOURNAL_MANAGER role from editorial activities
+    from apps.users.models import Role
+    if profile.roles.filter(name='JOURNAL_MANAGER').exists():
         return (False, False)
     
     # Corresponding author - full access

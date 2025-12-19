@@ -39,6 +39,7 @@ class WorkflowPermissions(permissions.BasePermission):
     - Editors and journal staff can manage workflow
     - Copyeditors/Production assistants can manage their assigned tasks
     - Authors can view their submission's workflow
+    - JOURNAL_MANAGER role cannot access workflow (editorial activities)
     """
     
     def has_permission(self, request, view):
@@ -55,6 +56,13 @@ class WorkflowPermissions(permissions.BasePermission):
         if user.is_superuser or user.is_staff:
             logger.info(f"Permission GRANTED: User is superuser/staff")
             return True
+        
+        # Explicitly deny JOURNAL_MANAGER role from workflow/editorial activities
+        if hasattr(user, 'profile'):
+            from apps.users.models import Role
+            if user.profile.roles.filter(name='JOURNAL_MANAGER').exists():
+                logger.warning(f"Permission DENIED: User has JOURNAL_MANAGER role (no editorial access)")
+                return False
         
         if hasattr(user, 'profile'):
             logger.info(f"User has profile: {user.profile.id}")

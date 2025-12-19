@@ -107,6 +107,7 @@ class Role(models.Model):
         ('AUTHOR', 'Author'),
         ('REVIEWER', 'Reviewer'),
         ('EDITOR', 'Editor'),
+        ('JOURNAL_MANAGER', 'Journal Manager'),
         ('ADMIN', 'Administrator'),
     ]
     

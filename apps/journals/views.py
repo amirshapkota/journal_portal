@@ -27,9 +27,10 @@ class JournalPermissions(permissions.BasePermission):
     """
     Custom permissions for journal management.
     - Anyone can view active journals
-    - Users with EDITOR role, staff, or admin can create journals
+    - Users with EDITOR or JOURNAL_MANAGER role, staff, or admin can create journals
     - Only journal staff can edit their journals
     - Editors (Editor-in-Chief, Managing Editor) can manage staff
+    - Journal Managers can manage journals and staff but not editorial activities
     """
     
     def has_permission(self, request, view):
@@ -40,7 +41,7 @@ class JournalPermissions(permissions.BasePermission):
         if view.action in ['add_staff', 'remove_staff', 'update_staff']:
             return request.user.is_authenticated
         
-        # Allow authenticated users with EDITOR role to create/modify journals
+        # Allow authenticated users with EDITOR or JOURNAL_MANAGER role to create/modify journals
         if not request.user.is_authenticated:
             return False
         
@@ -48,10 +49,10 @@ class JournalPermissions(permissions.BasePermission):
         if request.user.is_staff or request.user.is_superuser:
             return True
         
-        # Check if user has EDITOR role
+        # Check if user has EDITOR or JOURNAL_MANAGER role
         if hasattr(request.user, 'profile'):
             from apps.users.models import Role
-            return request.user.profile.roles.filter(name='EDITOR').exists()
+            return request.user.profile.roles.filter(name__in=['EDITOR', 'JOURNAL_MANAGER']).exists()
         
         return False
     
@@ -64,8 +65,14 @@ class JournalPermissions(permissions.BasePermission):
         if request.user.is_superuser or request.user.is_staff:
             return True
         
-        # Check if user is journal editor with management permissions
+        # Check if user is journal editor with management permissions OR has JOURNAL_MANAGER role
         if hasattr(request.user, 'profile'):
+            # Check if user has JOURNAL_MANAGER system role
+            from apps.users.models import Role
+            if request.user.profile.roles.filter(name='JOURNAL_MANAGER').exists():
+                return True
+            
+            # Check if user is journal staff with editor role
             return JournalStaff.objects.filter(
                 journal=obj,
                 profile=request.user.profile,
@@ -215,6 +222,10 @@ class JournalViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_403_FORBIDDEN
                 )
             
+            # Check if user has JOURNAL_MANAGER system role
+            from apps.users.models import Role
+            has_manager_role = request.user.profile.roles.filter(name='JOURNAL_MANAGER').exists()
+            
             # Check if user is Editor-in-Chief or Managing Editor
             is_editor = JournalStaff.objects.filter(
                 journal=journal,
@@ -223,9 +234,9 @@ class JournalViewSet(viewsets.ModelViewSet):
                 role__in=['EDITOR_IN_CHIEF', 'MANAGING_EDITOR']
             ).exists()
             
-            if not is_editor:
+            if not (is_editor or has_manager_role):
                 return Response(
-                    {'detail': 'Only Editor-in-Chief or Managing Editor can add staff members.'},
+                    {'detail': 'Only Editor-in-Chief, Managing Editor, or Journal Manager can add staff members.'},
                     status=status.HTTP_403_FORBIDDEN
                 )
         serializer = AddStaffMemberSerializer(
@@ -278,6 +289,10 @@ class JournalViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_403_FORBIDDEN
                 )
             
+            # Check if user has JOURNAL_MANAGER system role
+            from apps.users.models import Role
+            has_manager_role = request.user.profile.roles.filter(name='JOURNAL_MANAGER').exists()
+            
             is_editor = JournalStaff.objects.filter(
                 journal=journal,
                 profile=request.user.profile,
@@ -285,9 +300,9 @@ class JournalViewSet(viewsets.ModelViewSet):
                 role__in=['EDITOR_IN_CHIEF', 'MANAGING_EDITOR']
             ).exists()
             
-            if not is_editor:
+            if not (is_editor or has_manager_role):
                 return Response(
-                    {'detail': 'Only Editor-in-Chief or Managing Editor can remove staff members.'},
+                    {'detail': 'Only Editor-in-Chief, Managing Editor, or Journal Manager can remove staff members.'},
                     status=status.HTTP_403_FORBIDDEN
                 )
         
@@ -329,6 +344,10 @@ class JournalViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_403_FORBIDDEN
                 )
             
+            # Check if user has JOURNAL_MANAGER system role
+            from apps.users.models import Role
+            has_manager_role = request.user.profile.roles.filter(name='JOURNAL_MANAGER').exists()
+            
             is_editor = JournalStaff.objects.filter(
                 journal=journal,
                 profile=request.user.profile,
@@ -336,9 +355,9 @@ class JournalViewSet(viewsets.ModelViewSet):
                 role__in=['EDITOR_IN_CHIEF', 'MANAGING_EDITOR']
             ).exists()
             
-            if not is_editor:
+            if not (is_editor or has_manager_role):
                 return Response(
-                    {'detail': 'Only Editor-in-Chief or Managing Editor can update staff members.'},
+                    {'detail': 'Only Editor-in-Chief, Managing Editor, or Journal Manager can update staff members.'},
                     status=status.HTTP_403_FORBIDDEN
                 )
         

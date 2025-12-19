@@ -29,6 +29,7 @@ class SubmissionPermissions(permissions.BasePermission):
     - Authors can manage their own submissions
     - Journal staff can manage submissions to their journals
     - Admins can manage all submissions
+    - JOURNAL_MANAGER role cannot access submissions (editorial activities)
     """
     
     def has_permission(self, request, view):
@@ -40,6 +41,13 @@ class SubmissionPermissions(permissions.BasePermission):
         # Admin can do anything
         if user.is_superuser or user.is_staff:
             return True
+        
+        # Explicitly deny JOURNAL_MANAGER role from editorial activities
+        if hasattr(user, 'profile'):
+            from apps.users.models import Role
+            if user.profile.roles.filter(name='JOURNAL_MANAGER').exists():
+                # JOURNAL_MANAGER cannot access submissions/editorial activities
+                return False
         
         # Author permissions
         if hasattr(user, 'profile'):
