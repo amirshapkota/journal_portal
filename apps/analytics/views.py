@@ -615,6 +615,61 @@ class MyAnalyticsView(APIView):
                 ).count(),
             }
         
+        # Journal Manager statistics
+        journal_manager_stats = None
+        if profile.roles.filter(name='JOURNAL_MANAGER').exists():
+            from apps.journals.models import JournalStaff
+            
+            # Get journals where user is assigned as journal manager
+            managed_journals = JournalStaff.objects.filter(
+                profile=profile,
+                is_active=True,
+                permissions__is_journal_manager=True
+            ).select_related('journal')
+            
+            managed_journal_ids = managed_journals.values_list('journal_id', flat=True)
+            
+            # Get total staff count across all managed journals
+            total_staff = JournalStaff.objects.filter(
+                journal_id__in=managed_journal_ids,
+                is_active=True
+            ).exclude(
+                permissions__is_journal_manager=True  # Exclude other journal managers from count
+            ).count()
+            
+            # Get submission counts for managed journals
+            journal_submissions = Submission.objects.filter(
+                journal_id__in=managed_journal_ids
+            )
+            
+            # Get recent activity (last 30 days)
+            last_30_days = timezone.now() - timedelta(days=30)
+            recent_submissions = journal_submissions.filter(
+                created_at__gte=last_30_days
+            ).count()
+            
+            journal_manager_stats = {
+                'journals_managed': managed_journals.count(),
+                'total_staff_members': total_staff,
+                'total_submissions': journal_submissions.count(),
+                'recent_submissions_30d': recent_submissions,
+                'active_submissions': journal_submissions.filter(
+                    status__in=['SUBMITTED', 'UNDER_REVIEW', 'REVISION_REQUIRED']
+                ).count(),
+                'published_submissions': journal_submissions.filter(
+                    status='PUBLISHED'
+                ).count(),
+                'journals': [
+                    {
+                        'id': str(staff.journal.id),
+                        'title': staff.journal.title,
+                        'short_name': staff.journal.short_name,
+                        'is_active': staff.journal.is_active,
+                    }
+                    for staff in managed_journals
+                ],
+            }
+        
         return Response({
             'profile': {
                 'id': str(profile.id),
@@ -626,4 +681,5 @@ class MyAnalyticsView(APIView):
             'author_stats': author_stats,
             'reviewer_stats': reviewer_stats,
             'editor_stats': editor_stats,
+            'journal_manager_stats': journal_manager_stats,
         })
