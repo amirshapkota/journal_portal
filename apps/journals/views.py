@@ -383,6 +383,182 @@ class JournalViewSet(viewsets.ModelViewSet):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
     @extend_schema(
+        summary="Assign journal manager",
+        description="Assign a user with JOURNAL_MANAGER role to manage this journal. Requires Editor-in-Chief, Managing Editor, Journal Manager role, or admin privileges.",
+        request={
+            'application/json': {
+                'type': 'object',
+                'properties': {
+                    'profile_id': {'type': 'string', 'format': 'uuid', 'description': 'Profile ID of the user to assign as journal manager'}
+                },
+                'required': ['profile_id']
+            }
+        },
+        responses={201: JournalStaffSerializer}
+    )
+    @action(detail=True, methods=['post'], url_path='assign-journal-manager', permission_classes=[IsAuthenticated])
+    def assign_journal_manager(self, request, pk=None):
+        """Assign a journal manager to this journal."""
+        journal = self.get_object()
+        
+        # Check if user has permission to assign journal manager
+        if not (request.user.is_superuser or request.user.is_staff):
+            if not hasattr(request.user, 'profile'):
+                return Response(
+                    {'detail': 'You do not have permission to perform this action.'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+            # Check if user has JOURNAL_MANAGER system role
+            from apps.users.models import Role
+            has_manager_role = request.user.profile.roles.filter(name='JOURNAL_MANAGER').exists()
+            
+            # Check if user is Editor-in-Chief or Managing Editor
+            is_editor = JournalStaff.objects.filter(
+                journal=journal,
+                profile=request.user.profile,
+                is_active=True,
+                role__in=['EDITOR_IN_CHIEF', 'MANAGING_EDITOR']
+            ).exists()
+            
+            if not (is_editor or has_manager_role):
+                return Response(
+                    {'detail': 'Only Editor-in-Chief, Managing Editor, or Journal Manager can assign journal managers.'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        
+        # Get profile_id from request
+        profile_id = request.data.get('profile_id')
+        if not profile_id:
+            return Response(
+                {'error': 'profile_id is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Get the profile
+        from apps.users.models import Profile, Role
+        try:
+            profile = Profile.objects.get(id=profile_id)
+        except Profile.DoesNotExist:
+            return Response(
+                {'error': 'Profile does not exist'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Verify that the user has JOURNAL_MANAGER role
+        if not profile.roles.filter(name='JOURNAL_MANAGER').exists():
+            return Response(
+                {'error': 'User must have JOURNAL_MANAGER role to be assigned as journal manager'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Check if already assigned as journal manager for this journal
+        existing = JournalStaff.objects.filter(
+            journal=journal,
+            profile=profile,
+            role='MANAGING_EDITOR',  # Use MANAGING_EDITOR role for journal managers in JournalStaff
+            is_active=True
+        ).first()
+        
+        if existing:
+            return Response(
+                {'detail': 'User is already assigned as journal manager for this journal'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Create journal staff entry for the journal manager
+        staff_member = JournalStaff.objects.create(
+            journal=journal,
+            profile=profile,
+            role='MANAGING_EDITOR',  # Use MANAGING_EDITOR role for journal managers
+            permissions={'is_journal_manager': True}  # Mark as journal manager in permissions
+        )
+        
+        serializer = JournalStaffSerializer(staff_member)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    
+    @extend_schema(
+        summary="List journal managers",
+        description="Get all journal managers assigned to this journal.",
+        responses={200: JournalStaffSerializer(many=True)}
+    )
+    @action(detail=True, methods=['get'], url_path='journal-managers', permission_classes=[IsAuthenticated])
+    def list_journal_managers(self, request, pk=None):
+        """List all journal managers for this journal."""
+        journal = self.get_object()
+        
+        # Get all journal managers (staff with is_journal_manager permission flag)
+        managers = JournalStaff.objects.filter(
+            journal=journal,
+            permissions__is_journal_manager=True,
+            is_active=True
+        )
+        
+        serializer = JournalStaffSerializer(managers, many=True)
+        return Response(serializer.data)
+    
+    @extend_schema(
+        summary="Remove journal manager",
+        description="Remove a journal manager from this journal. Requires Editor-in-Chief, Managing Editor, Journal Manager role, or admin privileges.",
+        parameters=[
+            OpenApiParameter(
+                name='user_id',
+                type=OpenApiTypes.UUID,
+                location=OpenApiParameter.PATH,
+                description='Profile ID of the journal manager to remove'
+            )
+        ]
+    )
+    @action(detail=True, methods=['delete'], url_path='journal-managers/(?P<user_id>[^/.]+)', permission_classes=[IsAuthenticated])
+    def remove_journal_manager(self, request, pk=None, user_id=None):
+        """Remove a journal manager from this journal."""
+        journal = self.get_object()
+        
+        # Check if user has permission to remove journal manager
+        if not (request.user.is_superuser or request.user.is_staff):
+            if not hasattr(request.user, 'profile'):
+                return Response(
+                    {'detail': 'You do not have permission to perform this action.'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+            # Check if user has JOURNAL_MANAGER system role
+            from apps.users.models import Role
+            has_manager_role = request.user.profile.roles.filter(name='JOURNAL_MANAGER').exists()
+            
+            # Check if user is Editor-in-Chief or Managing Editor
+            is_editor = JournalStaff.objects.filter(
+                journal=journal,
+                profile=request.user.profile,
+                is_active=True,
+                role__in=['EDITOR_IN_CHIEF', 'MANAGING_EDITOR']
+            ).exists()
+            
+            if not (is_editor or has_manager_role):
+                return Response(
+                    {'detail': 'Only Editor-in-Chief, Managing Editor, or Journal Manager can remove journal managers.'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        
+        from apps.users.models import Profile
+        profile = get_object_or_404(Profile, id=user_id)
+        
+        # Find the journal manager staff entry
+        staff_member = get_object_or_404(
+            JournalStaff,
+            journal=journal,
+            profile=profile,
+            permissions__is_journal_manager=True,
+            is_active=True
+        )
+        
+        # Deactivate instead of delete for audit trail
+        staff_member.is_active = False
+        staff_member.save()
+        
+        return Response(status=status.HTTP_204_NO_CONTENT)
+    
+    @extend_schema(
         summary="Configure OJS connection",
         description="Configure OJS (Open Journal Systems) connection for this journal. Requires Editor-in-Chief or Managing Editor role.",
         request={
