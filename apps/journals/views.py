@@ -463,12 +463,10 @@ class JournalViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND
             )
         
-        # Verify that the user has JOURNAL_MANAGER role
+        # Automatically grant JOURNAL_MANAGER role if user doesn't have it
+        journal_manager_role = Role.objects.get(name='JOURNAL_MANAGER')
         if not profile.roles.filter(name='JOURNAL_MANAGER').exists():
-            return Response(
-                {'error': 'User must have JOURNAL_MANAGER role to be assigned as journal manager'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            profile.roles.add(journal_manager_role)
         
         # Check if already assigned as journal manager for this journal
         existing = JournalStaff.objects.filter(
