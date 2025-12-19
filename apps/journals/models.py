@@ -106,6 +106,7 @@ class JournalStaff(models.Model):
     STAFF_ROLE_CHOICES = [
         ('EDITOR_IN_CHIEF', 'Editor-in-Chief'),
         ('MANAGING_EDITOR', 'Managing Editor'),
+        ('JOURNAL_MANAGER', 'Journal Manager'),
         ('ASSOCIATE_EDITOR', 'Associate Editor'),
         ('GUEST_EDITOR', 'Guest Editor'),
         ('SECTION_EDITOR', 'Section Editor'),

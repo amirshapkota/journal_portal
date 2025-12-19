@@ -477,33 +477,31 @@ class JournalViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
         
-        # Check if user already has any staff entry for this journal
-        existing_staff = JournalStaff.objects.filter(
+        # Check if user already has a JOURNAL_MANAGER entry for this journal (active or inactive)
+        existing_journal_manager = JournalStaff.objects.filter(
             journal=journal,
             profile=profile,
-            is_active=True
+            role='JOURNAL_MANAGER'
         ).first()
         
-        if existing_staff:
-            # Check if already a journal manager
-            if existing_staff.permissions.get('is_journal_manager'):
+        if existing_journal_manager:
+            # Check if already active
+            if existing_journal_manager.is_active:
                 return Response(
                     {'detail': 'User is already assigned as journal manager for this journal'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
-            
-            # Update existing staff entry to make them journal manager
-            existing_staff.role = 'MANAGING_EDITOR'
-            existing_staff.permissions['is_journal_manager'] = True
-            existing_staff.save()
-            staff_member = existing_staff
+            # Reactivate existing entry
+            existing_journal_manager.is_active = True
+            existing_journal_manager.save()
+            staff_member = existing_journal_manager
         else:
             # Create new journal staff entry for the journal manager
             staff_member = JournalStaff.objects.create(
                 journal=journal,
                 profile=profile,
-                role='MANAGING_EDITOR',  # Use MANAGING_EDITOR role for journal managers
-                permissions={'is_journal_manager': True}  # Mark as journal manager in permissions
+                role='JOURNAL_MANAGER',
+                permissions={'is_journal_manager': True}
             )
         
         serializer = JournalStaffSerializer(staff_member)
@@ -519,10 +517,10 @@ class JournalViewSet(viewsets.ModelViewSet):
         """List all journal managers for this journal."""
         journal = self.get_object()
         
-        # Get all journal managers (staff with is_journal_manager permission flag)
+        # Get all journal managers
         managers = JournalStaff.objects.filter(
             journal=journal,
-            permissions__is_journal_manager=True,
+            role='JOURNAL_MANAGER',
             is_active=True
         )
         
@@ -580,7 +578,7 @@ class JournalViewSet(viewsets.ModelViewSet):
             JournalStaff,
             journal=journal,
             profile=profile,
-            permissions__is_journal_manager=True,
+            role='JOURNAL_MANAGER',
             is_active=True
         )
         
