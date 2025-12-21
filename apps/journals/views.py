@@ -432,6 +432,30 @@ class JournalViewSet(viewsets.ModelViewSet):
         )
 
         if serializer.is_valid():
+            # Check if role is being changed
+            new_role = serializer.validated_data.get('role')
+            if new_role and new_role != staff_member.role:
+                # Check if the new role already exists for this user in this journal
+                existing_new_role = JournalStaff.objects.filter(
+                    journal=journal,
+                    profile=profile,
+                    role=new_role
+                ).first()
+                
+                if existing_new_role:
+                    # New role already exists - deactivate current one and activate the existing one
+                    staff_member.is_active = False
+                    staff_member.save()
+                    
+                    existing_new_role.is_active = True
+                    # Update permissions if provided
+                    if 'permissions' in serializer.validated_data:
+                        existing_new_role.permissions = serializer.validated_data['permissions']
+                    existing_new_role.save()
+                    
+                    response_serializer = JournalStaffSerializer(existing_new_role)
+                    return Response(response_serializer.data)
+            
             serializer.save()
             return Response(serializer.data)
         else:
