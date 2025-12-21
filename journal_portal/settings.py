@@ -61,6 +61,7 @@ LOCAL_APPS = [
     'apps.notifications',
     'apps.ml',
     'apps.analytics',
+    'apps.achievements',
     'apps.common',
 ]
 

@@ -28,6 +28,7 @@ urlpatterns = [
     path('api/v1/ml/', include('apps.ml.urls')),
     path('api/v1/analytics/', include('apps.analytics.urls')),
     path('api/v1/notifications/', include('apps.notifications.urls')),
+    path('api/v1/achievements/', include('apps.achievements.urls')),
     path('api/v1/', include('apps.common.urls')),
     
     # DRF Browsable API (in development)
