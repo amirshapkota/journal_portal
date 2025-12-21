@@ -326,16 +326,21 @@ class JournalViewSet(viewsets.ModelViewSet):
         
         profile = get_object_or_404(Profile, id=user_id)
         
-        staff_member = get_object_or_404(
-            JournalStaff,
+        # Get all active staff entries for this user in this journal
+        staff_entries = JournalStaff.objects.filter(
             journal=journal,
             profile=profile,
             is_active=True
         )
         
-        # Deactivate instead of delete for audit trail
-        staff_member.is_active = False
-        staff_member.save()
+        if not staff_entries.exists():
+            return Response(
+                {'detail': 'User is not an active staff member of this journal.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Deactivate all staff roles for this user in this journal
+        staff_entries.update(is_active=False)
         
         return Response(status=status.HTTP_204_NO_CONTENT)
     
