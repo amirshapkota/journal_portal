@@ -386,41 +386,44 @@ class JournalViewSet(viewsets.ModelViewSet):
         
         profile = get_object_or_404(Profile, id=user_id)
 
-        # Get the role to update from request data, or find the primary role
-        target_role = request.data.get('role')
+        # Check if user is trying to specify which current role to update via query param
+        current_role = request.query_params.get('current_role')
         
-        if target_role:
-            # If role is specified, update that specific role entry
-            staff_member = get_object_or_404(
-                JournalStaff,
-                journal=journal,
-                profile=profile,
-                role=target_role,
-                is_active=True
+        # Get all active staff entries for this user
+        staff_entries = JournalStaff.objects.filter(
+            journal=journal,
+            profile=profile,
+            is_active=True
+        )
+        
+        if not staff_entries.exists():
+            return Response(
+                {'detail': 'User is not an active staff member of this journal.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # If current_role is specified, find that specific entry
+        if current_role:
+            try:
+                staff_member = staff_entries.get(role=current_role)
+            except JournalStaff.DoesNotExist:
+                return Response(
+                    {'error': f'User does not have role: {current_role}'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        elif staff_entries.count() > 1:
+            # Multiple roles exist, need to specify which one to update
+            return Response(
+                {
+                    'error': 'User has multiple roles. Please specify current_role in query parameters.',
+                    'roles': [entry.role for entry in staff_entries],
+                    'example': f'/staff/{user_id}/update/?current_role=EDITOR_IN_CHIEF'
+                },
+                status=status.HTTP_400_BAD_REQUEST
             )
         else:
-            # If no role specified, try to get a single active entry
-            staff_entries = JournalStaff.objects.filter(
-                journal=journal,
-                profile=profile,
-                is_active=True
-            )
-            
-            if staff_entries.count() > 1:
-                return Response(
-                    {
-                        'error': 'User has multiple roles. Please specify which role to update.',
-                        'roles': [entry.role for entry in staff_entries]
-                    },
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-            
-            staff_member = get_object_or_404(
-                JournalStaff,
-                journal=journal,
-                profile=profile,
-                is_active=True
-            )
+            # Only one role, use it
+            staff_member = staff_entries.first()
 
         serializer = JournalStaffSerializer(
             staff_member,
