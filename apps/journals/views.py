@@ -381,12 +381,41 @@ class JournalViewSet(viewsets.ModelViewSet):
         
         profile = get_object_or_404(Profile, id=user_id)
 
-        staff_member = get_object_or_404(
-            JournalStaff,
-            journal=journal,
-            profile=profile,
-            is_active=True
-        )
+        # Get the role to update from request data, or find the primary role
+        target_role = request.data.get('role')
+        
+        if target_role:
+            # If role is specified, update that specific role entry
+            staff_member = get_object_or_404(
+                JournalStaff,
+                journal=journal,
+                profile=profile,
+                role=target_role,
+                is_active=True
+            )
+        else:
+            # If no role specified, try to get a single active entry
+            staff_entries = JournalStaff.objects.filter(
+                journal=journal,
+                profile=profile,
+                is_active=True
+            )
+            
+            if staff_entries.count() > 1:
+                return Response(
+                    {
+                        'error': 'User has multiple roles. Please specify which role to update.',
+                        'roles': [entry.role for entry in staff_entries]
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            staff_member = get_object_or_404(
+                JournalStaff,
+                journal=journal,
+                profile=profile,
+                is_active=True
+            )
 
         serializer = JournalStaffSerializer(
             staff_member,
