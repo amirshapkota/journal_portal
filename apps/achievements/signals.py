@@ -17,6 +17,13 @@ def check_reviewer_badges(sender, instance, created, **kwargs):
     if instance.status != 'COMPLETED':
         return
     
+    # Only process if completed_at was recently set (within last 10 seconds)
+    # This prevents re-processing when updating other fields of completed assignments
+    if instance.completed_at:
+        time_since_completion = (timezone.now() - instance.completed_at).total_seconds()
+        if time_since_completion > 10:
+            return
+    
     reviewer_profile = instance.reviewer
     current_year = timezone.now().year
     
@@ -71,6 +78,10 @@ def check_reviewer_badges(sender, instance, created, **kwargs):
 def check_author_badges(sender, instance, created, **kwargs):
     """Check and award author badges when a submission is accepted/published."""
     if instance.status not in ['ACCEPTED', 'PUBLISHED']:
+        return
+    
+    # Skip if no corresponding author (e.g., OJS imports or null author cases)
+    if not instance.corresponding_author:
         return
     
     author_profile = instance.corresponding_author

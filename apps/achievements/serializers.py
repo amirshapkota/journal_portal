@@ -65,12 +65,40 @@ class LeaderboardSerializer(serializers.ModelSerializer):
     category_display = serializers.CharField(source='get_category_display', read_only=True)
     period_display = serializers.CharField(source='get_period_display', read_only=True)
     
+    # Add user field for frontend compatibility
+    user = serializers.SerializerMethodField()
+    
+    def get_user(self, obj):
+        """Get user data from profile."""
+        if obj.profile and obj.profile.user:
+            avatar_url = None
+            if hasattr(obj.profile, 'avatar') and obj.profile.avatar:
+                try:
+                    avatar_url = obj.profile.avatar.url
+                except (ValueError, AttributeError):
+                    avatar_url = None
+            
+            return {
+                'first_name': obj.profile.user.first_name,
+                'last_name': obj.profile.user.last_name,
+                'email': obj.profile.user.email,
+                'avatar': avatar_url,
+            }
+        return None
+    
+    # Add stats field from metrics
+    stats = serializers.SerializerMethodField()
+    
+    def get_stats(self, obj):
+        """Get stats from metrics field."""
+        return obj.metrics if obj.metrics else {}
+    
     class Meta:
         model = Leaderboard
         fields = (
-            'id', 'profile', 'category', 'category_display', 'period',
+            'id', 'profile', 'user', 'category', 'category_display', 'period',
             'period_display', 'journal', 'field', 'country', 'rank',
-            'score', 'metrics', 'period_start', 'period_end', 'calculated_at'
+            'score', 'metrics', 'stats', 'period_start', 'period_end', 'calculated_at'
         )
         read_only_fields = ('id', 'calculated_at')
 

@@ -57,6 +57,13 @@ class UserBadgeViewSet(viewsets.ReadOnlyModelViewSet):
     def my_badges(self, request):
         """Get authenticated user's badges."""
         badges = self.queryset.filter(profile=request.user.profile)
+        
+        # Apply pagination if available
+        page = self.paginate_queryset(badges)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        
         serializer = self.get_serializer(badges, many=True)
         return Response(serializer.data)
 
@@ -287,9 +294,18 @@ class LeaderboardViewSet(viewsets.ReadOnlyModelViewSet):
         if country:
             queryset = queryset.filter(country=country)
         
-        leaderboard = queryset.order_by('rank')[:limit]
-        serializer = self.get_serializer(leaderboard, many=True)
-        return Response(serializer.data)
+        leaderboard_entries = queryset.order_by('rank')[:limit]
+        serializer = self.get_serializer(leaderboard_entries, many=True)
+        
+        # Structure the response to match frontend expectations
+        response_data = {
+            'name': f'Top Reviewers - {period.replace("_", " ").title()}',
+            'description': 'Ranking of top reviewers based on performance metrics',
+            'period': period.lower(),
+            'data': serializer.data
+        }
+        
+        return Response(response_data)
 
 
 class CertificateViewSet(viewsets.ModelViewSet):

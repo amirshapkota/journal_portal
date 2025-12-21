@@ -186,6 +186,9 @@ REST_FRAMEWORK = {
         'rest_framework.parsers.MultiPartParser',
         'rest_framework.parsers.FormParser',
     ],
+    'DEFAULT_FILTER_BACKENDS': [
+        'django_filters.rest_framework.DjangoFilterBackend',
+    ],
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
     'DEFAULT_THROTTLE_CLASSES': [
         'rest_framework.throttling.AnonRateThrottle',
@@ -282,7 +285,29 @@ CELERY_TASK_ALWAYS_EAGER = True
 CELERY_TASK_EAGER_PROPAGATES = True
 
 # Celery Beat Schedule for Periodic Tasks
-CELERY_BEAT_SCHEDULE = {}
+CELERY_BEAT_SCHEDULE = {
+    'update-leaderboards-daily': {
+        'task': 'apps.achievements.tasks.update_leaderboards',
+        'schedule': 86400.0,  # Run every 24 hours (daily at midnight)
+        'options': {
+            'expires': 3600,  # Task expires after 1 hour if not executed
+        }
+    },
+    'generate-yearly-awards': {
+        'task': 'apps.achievements.tasks.generate_yearly_awards',
+        'schedule': 31536000.0,  # Run once per year (365 days)
+        'options': {
+            'expires': 86400,  # Task expires after 24 hours
+        }
+    },
+    'generate-monthly-awards': {
+        'task': 'apps.achievements.tasks.generate_monthly_awards',
+        'schedule': 2592000.0,  # Run once per month (~30 days)
+        'options': {
+            'expires': 86400,  # Task expires after 24 hours
+        }
+    },
+}
 
 # Cache Configuration
 CACHES = {
