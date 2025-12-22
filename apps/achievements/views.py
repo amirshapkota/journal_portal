@@ -410,3 +410,101 @@ class CertificateViewSet(viewsets.ModelViewSet):
                 'valid': False,
                 'message': 'Invalid verification code or certificate is not public'
             }, status=status.HTTP_404_NOT_FOUND)
+    
+    @extend_schema(
+        summary="Generate PDF for certificate",
+        description="Generate PDF file for a certificate.",
+        parameters=[
+            OpenApiParameter(
+                name='id',
+                type=OpenApiTypes.UUID,
+                location=OpenApiParameter.PATH,
+                description='Certificate ID'
+            )
+        ]
+    )
+    @action(detail=True, methods=['post'])
+    def generate_pdf(self, request, pk=None):
+        """Generate PDF for certificate."""
+        certificate = self.get_object()
+        
+        # Check if PDF already exists
+        if certificate.pdf_generated and certificate.file_url:
+            return Response({
+                'status': 'already_generated',
+                'message': 'PDF already exists',
+                'file_url': certificate.file_url
+            })
+        
+        # Generate PDF asynchronously
+        from .pdf_tasks import generate_certificate_pdf_task
+        task = generate_certificate_pdf_task.delay(str(certificate.id))
+        
+        return Response({
+            'status': 'generating',
+            'message': 'PDF generation started',
+            'task_id': task.id
+        }, status=status.HTTP_202_ACCEPTED)
+    
+    @extend_schema(
+        summary="Download certificate PDF",
+        description="Download the PDF file for a certificate.",
+        parameters=[
+            OpenApiParameter(
+                name='id',
+                type=OpenApiTypes.UUID,
+                location=OpenApiParameter.PATH,
+                description='Certificate ID'
+            )
+        ]
+    )
+    @action(detail=True, methods=['get'])
+    def download_pdf(self, request, pk=None):
+        """Download certificate PDF."""
+        from django.http import HttpResponse, FileResponse
+        from .pdf_generator import generate_certificate_pdf
+        
+        certificate = self.get_object()
+        
+        # If PDF exists in storage, redirect to it
+        if certificate.pdf_generated and certificate.file_url:
+            from django.shortcuts import redirect
+            return redirect(certificate.file_url)
+        
+        # Generate PDF on-the-fly
+        pdf_buffer = generate_certificate_pdf(certificate)
+        
+        # Return as file download
+        response = HttpResponse(pdf_buffer.read(), content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="certificate_{certificate.certificate_number}.pdf"'
+        
+        return response
+    
+    @extend_schema(
+        summary="Preview certificate PDF",
+        description="Preview the PDF file for a certificate in browser.",
+        parameters=[
+            OpenApiParameter(
+                name='id',
+                type=OpenApiTypes.UUID,
+                location=OpenApiParameter.PATH,
+                description='Certificate ID'
+            )
+        ]
+    )
+    @action(detail=True, methods=['get'], permission_classes=[permissions.AllowAny])
+    def preview_pdf(self, request, pk=None):
+        """Preview certificate PDF in browser."""
+        from django.http import HttpResponse
+        from .pdf_generator import generate_certificate_pdf
+        
+        certificate = self.get_object()
+        
+        # Generate PDF
+        pdf_buffer = generate_certificate_pdf(certificate)
+        
+        # Return for inline display
+        response = HttpResponse(pdf_buffer.read(), content_type='application/pdf')
+        response['Content-Disposition'] = f'inline; filename="certificate_{certificate.certificate_number}.pdf"'
+        
+        return response
