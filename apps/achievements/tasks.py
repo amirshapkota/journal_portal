@@ -10,6 +10,47 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _generate_certificate_for_award(award):
+    """
+    Helper function to generate certificate for an award.
+    """
+    from apps.achievements.models import Certificate
+    
+    # Check if certificate already exists
+    if Certificate.objects.filter(award=award).exists():
+        logger.info(f'Certificate already exists for award {award.id}')
+        return
+    
+    try:
+        certificate = Certificate.objects.create(
+            recipient=award.recipient,
+            certificate_type='AWARD',
+            title=award.title,
+            description=f'This certificate is awarded to {award.recipient.display_name} for {award.title}',
+            award=award,
+            journal=award.journal,
+            issued_date=date.today(),
+            custom_data={
+                'award_type': award.award_type,
+                'award_type_display': award.get_award_type_display(),
+                'year': award.year,
+                'citation': award.citation,
+                'metrics': award.metrics
+            }
+        )
+        
+        # Mark award as having certificate
+        award.certificate_generated = True
+        award.save(update_fields=['certificate_generated'])
+        
+        logger.info(f'Generated certificate {certificate.certificate_number} for award {award.id}')
+        return certificate
+        
+    except Exception as e:
+        logger.error(f'Failed to generate certificate for award {award.id}: {e}')
+        return None
+
+
 @shared_task
 def update_leaderboards():
     """
@@ -146,7 +187,7 @@ def generate_yearly_awards():
                     journal=journal,
                     defaults={
                         'title': f'Best Reviewer {previous_year}',
-                        'description': f'Outstanding contribution to peer review for {journal.name}',
+                        'description': f'Outstanding contribution to peer review for {journal.title}',
                         'recipient': profile,
                         'citation': f'Recognized for completing {reviewer_stats["reviews_count"]} reviews with excellence',
                         'metrics': {
@@ -157,7 +198,10 @@ def generate_yearly_awards():
                 
                 if created:
                     awards_created += 1
-                    logger.info(f'Created Best Reviewer award for {profile.user.email} at {journal.name}')
+                    logger.info(f'Created Best Reviewer award for {profile.user.email} at {journal.title}')
+                    
+                    # Auto-generate certificate for the award
+                    _generate_certificate_for_award(award)
         
         except Exception as e:
             logger.error(f'Error creating best reviewer award for {journal.name}: {e}')
@@ -184,7 +228,7 @@ def generate_yearly_awards():
                     journal=journal,
                     defaults={
                         'title': f'Researcher of the Year {previous_year}',
-                        'description': f'Most prolific researcher for {journal.name}',
+                        'description': f'Most prolific researcher for {journal.title}',
                         'recipient': profile,
                         'citation': f'Recognized for {author_stats["publications_count"]} publications',
                         'metrics': {
@@ -195,7 +239,10 @@ def generate_yearly_awards():
                 
                 if created:
                     awards_created += 1
-                    logger.info(f'Created Researcher of Year award for {profile.user.email} at {journal.name}')
+                    logger.info(f'Created Researcher of Year award for {profile.user.email} at {journal.title}')
+                    
+                    # Auto-generate certificate for the award
+                    _generate_certificate_for_award(award)
         
         except Exception as e:
             logger.error(f'Error creating researcher of year award for {journal.name}: {e}')
@@ -254,7 +301,7 @@ def generate_monthly_awards():
                     recipient=profile,
                     defaults={
                         'title': f'Excellence in Review - {last_month.strftime("%B %Y")}',
-                        'description': f'Outstanding review performance for {journal.name}',
+                        'description': f'Outstanding review performance for {journal.title}',
                         'citation': f'Completed {reviewer_stats["reviews_count"]} exceptional reviews',
                         'metrics': {
                             'reviews_completed': reviewer_stats['reviews_count'],
@@ -265,7 +312,10 @@ def generate_monthly_awards():
                 
                 if created:
                     awards_created += 1
-                    logger.info(f'Created Excellence Review award for {profile.user.email} at {journal.name}')
+                    logger.info(f'Created Excellence Review award for {profile.user.email} at {journal.title}')
+                    
+                    # Auto-generate certificate for the award
+                    _generate_certificate_for_award(award)
         
         except Exception as e:
             logger.error(f'Error creating excellence review award for {journal.name}: {e}')
