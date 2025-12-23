@@ -463,15 +463,26 @@ class CertificateViewSet(viewsets.ModelViewSet):
         """Download certificate PDF."""
         from django.http import HttpResponse, FileResponse
         from .pdf_generator import generate_certificate_pdf
+        import os
         
         certificate = self.get_object()
         
-        # If PDF exists in storage, redirect to it
+        # If PDF exists in storage, serve it directly
         if certificate.pdf_generated and certificate.file_url:
-            from django.shortcuts import redirect
-            return redirect(certificate.file_url)
+            # Extract file path from URL
+            file_path = certificate.file_url.replace('/media/', '')
+            full_path = os.path.join('media', file_path)
+            
+            # Check if file exists
+            if os.path.exists(full_path):
+                response = FileResponse(
+                    open(full_path, 'rb'),
+                    content_type='application/pdf'
+                )
+                response['Content-Disposition'] = f'attachment; filename="certificate_{certificate.certificate_number}.pdf"'
+                return response
         
-        # Generate PDF on-the-fly
+        # Generate PDF on-the-fly if file doesn't exist
         pdf_buffer = generate_certificate_pdf(certificate)
         
         # Return as file download
@@ -495,12 +506,28 @@ class CertificateViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['get'], permission_classes=[permissions.AllowAny])
     def preview_pdf(self, request, pk=None):
         """Preview certificate PDF in browser."""
-        from django.http import HttpResponse
+        from django.http import HttpResponse, FileResponse
         from .pdf_generator import generate_certificate_pdf
+        import os
         
         certificate = self.get_object()
         
-        # Generate PDF
+        # If PDF exists in storage, serve it directly
+        if certificate.pdf_generated and certificate.file_url:
+            # Extract file path from URL
+            file_path = certificate.file_url.replace('/media/', '')
+            full_path = os.path.join('media', file_path)
+            
+            # Check if file exists
+            if os.path.exists(full_path):
+                response = FileResponse(
+                    open(full_path, 'rb'),
+                    content_type='application/pdf'
+                )
+                response['Content-Disposition'] = f'inline; filename="certificate_{certificate.certificate_number}.pdf"'
+                return response
+        
+        # Generate PDF on-the-fly if file doesn't exist
         pdf_buffer = generate_certificate_pdf(certificate)
         
         # Return for inline display
