@@ -267,6 +267,36 @@ class JournalViewSet(viewsets.ModelViewSet):
             role = serializer.validated_data['role']
             permissions_data = serializer.validated_data.get('permissions', {})
             
+            # Check if staff member with this role already exists
+            existing_staff = JournalStaff.objects.filter(
+                journal=journal,
+                profile=profile,
+                role=role
+            ).first()
+            
+            if existing_staff:
+                # If exists and inactive, reactivate
+                if not existing_staff.is_active:
+                    existing_staff.is_active = True
+                    existing_staff.permissions = permissions_data
+                    existing_staff.end_date = None
+                    existing_staff.save()
+                    response_serializer = JournalStaffSerializer(existing_staff)
+                    return Response(
+                        response_serializer.data,
+                        status=status.HTTP_200_OK
+                    )
+                else:
+                    # Already exists and is active
+                    return Response(
+                        {
+                            'detail': f'{profile.display_name} already has the role of {role} in this journal.',
+                            'existing_staff': JournalStaffSerializer(existing_staff).data
+                        },
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+            
+            # Create new staff member
             staff_member = JournalStaff.objects.create(
                 journal=journal,
                 profile=profile,
