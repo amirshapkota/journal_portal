@@ -137,6 +137,8 @@ class ProfileSerializer(serializers.ModelSerializer):
     
     user_email = serializers.EmailField(source='user.email', read_only=True)
     user_name = serializers.SerializerMethodField()
+    first_name = serializers.CharField(source='user.first_name', required=False, allow_blank=True)
+    last_name = serializers.CharField(source='user.last_name', required=False, allow_blank=True)
     expertise_areas = serializers.SerializerMethodField()
     
     def get_expertise_areas(self, obj):
@@ -148,7 +150,7 @@ class ProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = Profile
         fields = (
-            'id', 'user_email', 'user_name', 'display_name', 'bio', 'avatar',
+            'id', 'user_email', 'user_name', 'first_name', 'last_name', 'display_name', 'bio', 'avatar',
             'orcid_id', 'affiliation_ror_id', 'affiliation_name', 'openalex_id',
             'verification_status', 'verification_meta', 'expertise_areas',
             'created_at', 'updated_at'
@@ -195,6 +197,16 @@ class ProfileSerializer(serializers.ModelSerializer):
         
         # Extract expertise_areas before updating other fields
         expertise_areas_data = validated_data.pop('expertise_areas', None)
+        
+        # Handle user fields (first_name, last_name)
+        user_data = validated_data.pop('user', None)
+        if user_data:
+            user = instance.user
+            if 'first_name' in user_data:
+                user.first_name = user_data['first_name']
+            if 'last_name' in user_data:
+                user.last_name = user_data['last_name']
+            user.save()
         
         # Update regular fields
         for attr, value in validated_data.items():
