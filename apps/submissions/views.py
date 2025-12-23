@@ -115,6 +115,9 @@ class SubmissionViewSet(viewsets.ModelViewSet):
             'review_assignments'
         )
         
+        # Exclude DRAFT submissions from the main list (drafts have their own endpoint)
+        queryset = queryset.exclude(status='DRAFT')
+        
         # Filter by journal if provided
         journal_id = self.request.query_params.get('journal')
         if journal_id:
