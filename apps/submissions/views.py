@@ -134,10 +134,17 @@ class SubmissionViewSet(viewsets.ModelViewSet):
         
         # Filter based on user's involvement
         if hasattr(user, 'profile'):
+            # Check if user wants to view as author or editor
+            view_as = self.request.query_params.get('view_as', 'all')
+            
             # User's own submissions or co-authored submissions
             user_submissions = Q(corresponding_author=user.profile) | Q(
                 author_contributions__profile=user.profile
             )
+            
+            # If explicitly viewing as author, only show their own submissions
+            if view_as == 'author':
+                return queryset.filter(user_submissions).distinct()
             
             # Submissions to journals where user is staff
             from apps.journals.models import JournalStaff
@@ -146,6 +153,12 @@ class SubmissionViewSet(viewsets.ModelViewSet):
                 is_active=True
             ).values_list('journal_id', flat=True)
             
+            # If explicitly viewing as editor, only show journal submissions
+            if view_as == 'editor':
+                journal_submissions = Q(journal_id__in=staff_journals)
+                return queryset.filter(journal_submissions).distinct()
+            
+            # Default: show both user's submissions and journal submissions
             journal_submissions = Q(journal_id__in=staff_journals)
             
             return queryset.filter(user_submissions | journal_submissions).distinct()
