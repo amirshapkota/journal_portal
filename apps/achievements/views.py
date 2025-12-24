@@ -306,6 +306,26 @@ class LeaderboardViewSet(viewsets.ReadOnlyModelViewSet):
         }
         
         return Response(response_data)
+    
+    @extend_schema(
+        summary="Update all leaderboards",
+        description="Manually trigger leaderboard recalculation (Admin only).",
+    )
+    @action(detail=False, methods=['post'], permission_classes=[permissions.IsAdminUser])
+    def update_leaderboards(self, request):
+        """Manually trigger leaderboard update (Admin only)."""
+        from apps.achievements.tasks import update_leaderboards
+        
+        try:
+            result = update_leaderboards()
+            return Response({
+                'message': 'Leaderboards updated successfully',
+                'result': result
+            }, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({
+                'error': f'Failed to update leaderboards: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class CertificateViewSet(viewsets.ModelViewSet):

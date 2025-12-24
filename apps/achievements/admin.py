@@ -81,6 +81,7 @@ class LeaderboardAdmin(admin.ModelAdmin):
     readonly_fields = ['calculated_at']
     raw_id_fields = ['profile', 'journal']
     ordering = ['category', 'period', 'rank']
+    actions = ['update_all_leaderboards']
     
     fieldsets = (
         ('Ranking Information', {
@@ -93,6 +94,22 @@ class LeaderboardAdmin(admin.ModelAdmin):
             'fields': ('metrics', 'calculated_at')
         }),
     )
+    
+    @admin.action(description='Update all leaderboards (recalculate rankings)')
+    def update_all_leaderboards(self, request, queryset):
+        """Admin action to manually trigger leaderboard update."""
+        from apps.achievements.tasks import update_leaderboards
+        from django.contrib import messages
+        
+        try:
+            result = update_leaderboards()
+            messages.success(
+                request,
+                f'Leaderboards updated successfully! Created {result["total"]} entries '
+                f'({result["reviewer_leaderboards"]} reviewers, {result["author_leaderboards"]} authors)'
+            )
+        except Exception as e:
+            messages.error(request, f'Failed to update leaderboards: {str(e)}')
 
 
 @admin.register(Certificate)
