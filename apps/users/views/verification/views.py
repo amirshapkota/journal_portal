@@ -12,7 +12,7 @@ from rest_framework import status, viewsets
 from rest_framework.decorators import action
 
 from apps.users.models import VerificationRequest, Profile
-from .verification_serializers import (
+from ...serializers.verification.serializers import (
     VerificationRequestSerializer,
     VerificationRequestCreateSerializer,
     VerificationRequestDetailSerializer,

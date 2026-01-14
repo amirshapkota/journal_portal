@@ -469,7 +469,7 @@ class CopyeditingAssignmentViewSet(viewsets.ModelViewSet):
     def participants(self, request, pk=None):
         """Get all participants (copyeditor, editor, author)."""
         assignment = self.get_object()
-        from apps.users.serializers import ProfileSerializer
+        from apps.users.serializers.serializers import ProfileSerializer
         
         participants = [
             {**ProfileSerializer(assignment.copyeditor).data, 'role': 'copyeditor'},
@@ -1211,7 +1211,7 @@ class ProductionAssignmentViewSet(viewsets.ModelViewSet):
     def participants(self, request, pk=None):
         """Get all participants (production assistant, editor, author)."""
         assignment = self.get_object()
-        from apps.users.serializers import ProfileSerializer
+        from apps.users.serializers.serializers import ProfileSerializer
         
         participants = [
             {**ProfileSerializer(assignment.production_assistant).data, 'role': 'production_assistant'},
@@ -1280,7 +1280,7 @@ class ProductionAssignmentViewSet(viewsets.ModelViewSet):
         # Add participant
         assignment.participants.add(profile)
         
-        from apps.users.serializers import ProfileSerializer
+        from apps.users.serializers.serializers import ProfileSerializer
         return Response(
             ProfileSerializer(profile).data,
             status=status.HTTP_201_CREATED

@@ -26,8 +26,8 @@ from django.db import transaction
 from django_ratelimit.decorators import ratelimit
 from django.utils.decorators import method_decorator
 from drf_spectacular.utils import extend_schema, extend_schema_view
-from .models import CustomUser, Profile, Role, VerificationRequest
-from .serializers import (
+from ..models import CustomUser, Profile, Role, VerificationRequest
+from ..serializers.serializers import (
     CustomTokenObtainPairSerializer,
     UserRegistrationSerializer,
     UserSerializer,

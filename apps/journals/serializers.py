@@ -6,7 +6,7 @@ Handles journal CRUD, staff management, and configuration.
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from .models import Journal, JournalStaff, Section, Category, ResearchType, Area
-from apps.users.serializers import ProfileSerializer
+from apps.users.serializers.serializers import ProfileSerializer
 
 User = get_user_model()
 

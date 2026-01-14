@@ -14,7 +14,7 @@ from ...models.production.models import (
     ProductionAssignment, ProductionFile, ProductionDiscussion,
     ProductionMessage, ProductionMessageAttachment, PublicationSchedule
 )
-from apps.users.serializers import ProfileSerializer
+from apps.users.serializers.serializers import ProfileSerializer
 
 User = get_user_model()
 

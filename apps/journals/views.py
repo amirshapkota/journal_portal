@@ -1082,7 +1082,7 @@ class JournalViewSet(viewsets.ModelViewSet):
         Editors can view and approve/reject verification requests for users imported from their journal.
         """
         from apps.users.models import VerificationRequest, CustomUser
-        from apps.users.verification_serializers import VerificationRequestDetailSerializer
+        from apps.users.serializers.verification.serializers import VerificationRequestDetailSerializer
         from django.utils import timezone
         
         journal = self.get_object()
@@ -1136,7 +1136,7 @@ class JournalViewSet(viewsets.ModelViewSet):
         Approve a verification request for a user imported from this journal.
         """
         from apps.users.models import VerificationRequest, CustomUser, Role
-        from apps.users.verification_serializers import VerificationReviewSerializer
+        from apps.users.serializers.verification.serializers import VerificationReviewSerializer
         from django.utils import timezone
         
         journal = self.get_object()
@@ -1266,7 +1266,7 @@ class JournalViewSet(viewsets.ModelViewSet):
         Reject a verification request for a user imported from this journal.
         """
         from apps.users.models import VerificationRequest, CustomUser
-        from apps.users.verification_serializers import VerificationReviewSerializer
+        from apps.users.serializers.verification.serializers import VerificationReviewSerializer
         from django.utils import timezone
         
         journal = self.get_object()

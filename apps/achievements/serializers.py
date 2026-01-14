@@ -3,7 +3,7 @@ Serializers for achievements app.
 """
 from rest_framework import serializers
 from .models import Badge, UserBadge, Award, Leaderboard, Certificate
-from apps.users.serializers import ProfileSerializer
+from apps.users.serializers.serializers import ProfileSerializer
 from apps.journals.serializers import JournalListSerializer
 
 

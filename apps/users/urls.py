@@ -7,8 +7,8 @@ with JWT token handling and comprehensive user account functionality.
 
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from . import views
-from . import verification_views
+from .views import views
+from .views.verification import views as verification_views
 
 # Create router for ViewSets
 router = DefaultRouter()
