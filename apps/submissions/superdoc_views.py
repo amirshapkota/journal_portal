@@ -13,8 +13,8 @@ from django.utils import timezone
 from django.http import FileResponse
 from drf_spectacular.utils import extend_schema, OpenApiResponse
 
-from .models import Submission, Document, AuthorContribution
-from .superdoc_serializers import SuperDocCreateSerializer, SuperDocMetadataSerializer
+from .models.models import Submission, Document, AuthorContribution
+from .serializers.superdoc.serializers import SuperDocCreateSerializer, SuperDocMetadataSerializer
 from apps.users.models import Profile
 from apps.reviews.models import ReviewAssignment
 
@@ -154,7 +154,7 @@ class SuperDocViewSet(viewsets.ViewSet):
             return Response([])
         
         # Get documents from user's submissions
-        from .models import AuthorContribution
+        from .models.models import AuthorContribution
         
         documents = Document.objects.filter(
             submission__corresponding_author=profile
@@ -388,7 +388,7 @@ class SuperDocViewSet(viewsets.ViewSet):
         change_summary = request.data.get('change_summary', '')
         
         # Import DocumentVersion model
-        from .models import DocumentVersion
+        from .models.models import DocumentVersion
         from django.core.files.base import ContentFile
         import hashlib
         import os
@@ -498,7 +498,7 @@ class SuperDocViewSet(viewsets.ViewSet):
                 status=status.HTTP_403_FORBIDDEN
             )
         
-        from .models import DocumentVersion
+        from .models.models import DocumentVersion
         
         versions = DocumentVersion.objects.filter(
             document=document
@@ -545,7 +545,7 @@ class SuperDocViewSet(viewsets.ViewSet):
         """
         Download a specific version of a document.
         """
-        from .models import DocumentVersion
+        from .models.models import DocumentVersion
         
         version = get_object_or_404(DocumentVersion, pk=version_id)
         document = version.document

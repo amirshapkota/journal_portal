@@ -4,7 +4,7 @@ Simple serializers for document creation and metadata.
 """
 
 from rest_framework import serializers
-from .models import Document, Submission
+from ...models.models import Document, Submission
 from apps.users.models import Profile
 
 

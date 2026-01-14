@@ -580,7 +580,7 @@ def send_editorial_decision_email(submission_id, decision_type, editor_comments,
         editor_comments: Editor's comments
         additional_context: Additional context variables (dict)
     """
-    from apps.submissions.models import Submission
+    from apps.submissions.models.models import Submission
     
     try:
         submission = Submission.objects.select_related('author__user').get(id=submission_id)
@@ -935,7 +935,7 @@ def send_revision_rejected_email(revision_round_id):
 @shared_task
 def send_copyediting_assigned_email(assignment_id):
     """Send email when copyediting is assigned."""
-    from apps.submissions.copyediting_models import CopyeditingAssignment
+    from apps.submissions.models.copyediting.models import CopyeditingAssignment
     
     try:
         assignment = CopyeditingAssignment.objects.select_related(
@@ -970,7 +970,7 @@ def send_copyediting_assigned_email(assignment_id):
 @shared_task
 def send_copyediting_started_email(assignment_id):
     """Send email to author when copyediting has started."""
-    from apps.submissions.copyediting_models import CopyeditingAssignment
+    from apps.submissions.models.copyediting.models import CopyeditingAssignment
     
     try:
         assignment = CopyeditingAssignment.objects.select_related(
@@ -1006,7 +1006,7 @@ def send_copyediting_started_email(assignment_id):
 @shared_task
 def send_copyediting_completed_email(assignment_id):
     """Send email to editor and author when copyediting is completed."""
-    from apps.submissions.copyediting_models import CopyeditingAssignment
+    from apps.submissions.models.copyediting.models import CopyeditingAssignment
     
     try:
         assignment = CopyeditingAssignment.objects.select_related(
@@ -1058,7 +1058,7 @@ def send_copyediting_completed_email(assignment_id):
 @shared_task
 def send_copyedited_file_ready_email(file_id):
     """Send email to author when copyedited file is ready for review."""
-    from apps.submissions.copyediting_models import CopyeditingFile
+    from apps.submissions.models.copyediting.models import CopyeditingFile
     
     try:
         file = CopyeditingFile.objects.select_related(
@@ -1096,7 +1096,7 @@ def send_copyedited_file_ready_email(file_id):
 @shared_task
 def send_production_assigned_email(assignment_id):
     """Send email when production is assigned."""
-    from apps.submissions.production_models import ProductionAssignment
+    from apps.submissions.models.production.models import ProductionAssignment
     
     try:
         assignment = ProductionAssignment.objects.select_related(
@@ -1131,7 +1131,7 @@ def send_production_assigned_email(assignment_id):
 @shared_task
 def send_production_started_email(assignment_id):
     """Send email to author when production has started."""
-    from apps.submissions.production_models import ProductionAssignment
+    from apps.submissions.models.production.models import ProductionAssignment
     
     try:
         assignment = ProductionAssignment.objects.select_related(
@@ -1167,7 +1167,7 @@ def send_production_started_email(assignment_id):
 @shared_task
 def send_production_completed_email(assignment_id):
     """Send email to editor and author when production is completed."""
-    from apps.submissions.production_models import ProductionAssignment
+    from apps.submissions.models.production.models import ProductionAssignment
     
     try:
         assignment = ProductionAssignment.objects.select_related(
@@ -1219,7 +1219,7 @@ def send_production_completed_email(assignment_id):
 @shared_task
 def send_galley_published_email(file_id):
     """Send email when galley file is published."""
-    from apps.submissions.production_models import ProductionFile
+    from apps.submissions.models.production.models import ProductionFile
     
     try:
         file = ProductionFile.objects.select_related(
@@ -1256,7 +1256,7 @@ def send_galley_published_email(file_id):
 @shared_task
 def send_publication_scheduled_email(schedule_id):
     """Send email when publication is scheduled."""
-    from apps.submissions.production_models import PublicationSchedule
+    from apps.submissions.models.production.models import PublicationSchedule
     
     try:
         schedule = PublicationSchedule.objects.select_related(
@@ -1297,7 +1297,7 @@ def send_publication_scheduled_email(schedule_id):
 @shared_task
 def send_publication_published_email(schedule_id):
     """Send email when article is published."""
-    from apps.submissions.production_models import PublicationSchedule
+    from apps.submissions.models.production.models import PublicationSchedule
     
     try:
         schedule = PublicationSchedule.objects.select_related(
@@ -1339,7 +1339,7 @@ def send_publication_published_email(schedule_id):
 @shared_task
 def send_publication_cancelled_email(schedule_id):
     """Send email when publication is cancelled."""
-    from apps.submissions.production_models import PublicationSchedule
+    from apps.submissions.models.production.models import PublicationSchedule
     
     try:
         schedule = PublicationSchedule.objects.select_related(

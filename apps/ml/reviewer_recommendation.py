@@ -11,7 +11,7 @@ from django.utils import timezone
 from datetime import timedelta
 
 from apps.users.models import Profile, Role
-from apps.submissions.models import Submission
+from apps.submissions.models.models import Submission
 from apps.reviews.models import ReviewAssignment, Review
 
 

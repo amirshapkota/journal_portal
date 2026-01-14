@@ -13,7 +13,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter
 
-from apps.submissions.models import Submission
+from apps.submissions.models.models import Submission
 from apps.reviews.models import Review, ReviewAssignment, EditorialDecision
 from apps.journals.models import Journal
 from apps.users.models import Profile, VerificationRequest

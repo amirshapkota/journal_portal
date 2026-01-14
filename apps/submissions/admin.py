@@ -1,10 +1,10 @@
 from django.contrib import admin
-from .models import Submission, AuthorContribution, Document, DocumentVersion, Comment
-from .copyediting_models import (
+from .models.models import Submission, AuthorContribution, Document, DocumentVersion, Comment
+from .models.copyediting.models import (
     CopyeditingAssignment, CopyeditingFile, CopyeditingDiscussion,
     CopyeditingMessage, CopyeditingMessageAttachment
 )
-from .production_models import (
+from .models.production.models import (
     ProductionAssignment, ProductionFile, ProductionDiscussion,
     ProductionMessage, ProductionMessageAttachment, PublicationSchedule
 )

@@ -9,7 +9,7 @@ from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExampl
 from drf_spectacular.types import OpenApiTypes
 from django.utils import timezone
 
-from apps.submissions.models import Submission
+from apps.submissions.models.models import Submission
 from apps.users.models import Profile
 from .reviewer_recommendation import ReviewerRecommendationEngine
 from .anomaly_detection import AnomalyDetectionEngine

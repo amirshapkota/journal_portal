@@ -7,7 +7,7 @@ from django.db.models import Count
 from django.utils import timezone
 
 from apps.reviews.models import ReviewAssignment
-from apps.submissions.models import Submission
+from apps.submissions.models.models import Submission
 from .models import Badge, UserBadge
 
 

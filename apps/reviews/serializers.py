@@ -9,7 +9,7 @@ from apps.reviews.models import (
     ReviewFormTemplate, ReviewAttachment, ReviewVersion
 )
 from apps.users.models import Profile
-from apps.submissions.models import Submission
+from apps.submissions.models.models import Submission
 
 CustomUser = get_user_model()
 
@@ -43,7 +43,7 @@ class ReviewAssignmentSerializer(serializers.ModelSerializer):
     
     def get_submission_details(self, obj):
         """Get full submission details for review page."""
-        from apps.submissions.serializers import SubmissionSerializer
+        from apps.submissions.serializers.serializers import SubmissionSerializer
         return SubmissionSerializer(obj.submission, context=self.context).data
     
     submission_details = serializers.SerializerMethodField()
@@ -895,7 +895,7 @@ class RevisionSubmissionSerializer(serializers.Serializer):
     
     def validate_revised_manuscript_id(self, value):
         """Validate revised manuscript exists."""
-        from apps.submissions.models import Document
+        from apps.submissions.models.models import Document
         
         try:
             document = Document.objects.get(id=value)
@@ -913,7 +913,7 @@ class RevisionSubmissionSerializer(serializers.Serializer):
         if not value:
             return value
         
-        from apps.submissions.models import Document
+        from apps.submissions.models.models import Document
         
         try:
             document = Document.objects.get(id=value)

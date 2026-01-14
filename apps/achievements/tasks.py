@@ -59,7 +59,7 @@ def update_leaderboards():
     """
     from apps.achievements.models import Leaderboard
     from apps.reviews.models import ReviewAssignment
-    from apps.submissions.models import Submission
+    from apps.submissions.models.models import Submission
     from apps.users.models import Profile
     
     logger.info('Starting automatic leaderboard update...')
@@ -155,7 +155,7 @@ def generate_yearly_awards():
     """
     from apps.achievements.models import Award
     from apps.reviews.models import ReviewAssignment
-    from apps.submissions.models import Submission
+    from apps.submissions.models.models import Submission
     from apps.users.models import Profile
     from apps.journals.models import Journal
     
@@ -264,7 +264,7 @@ def generate_monthly_awards():
     """
     from apps.achievements.models import Award
     from apps.reviews.models import ReviewAssignment
-    from apps.submissions.models import Submission
+    from apps.submissions.models.models import Submission
     from apps.users.models import Profile
     from apps.journals.models import Journal
     

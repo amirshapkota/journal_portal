@@ -5,7 +5,7 @@ Automatically logs submission-related activities.
 """
 from django.db.models.signals import post_save, pre_delete
 from django.dispatch import receiver
-from apps.submissions.models import Submission, Document, DocumentVersion
+from apps.submissions.models.models import Submission, Document, DocumentVersion
 from apps.common.utils.activity_logger import log_user_action, log_system_action
 import logging
 

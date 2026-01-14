@@ -17,7 +17,7 @@ from .serializers import (
     LeaderboardSerializer, CertificateSerializer
 )
 from apps.reviews.models import ReviewAssignment, Review
-from apps.submissions.models import Submission
+from apps.submissions.models.models import Submission
 
 
 class BadgeViewSet(viewsets.ModelViewSet):

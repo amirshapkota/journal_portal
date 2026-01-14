@@ -18,8 +18,8 @@ from drf_spectacular.utils import extend_schema, OpenApiParameter
 from drf_spectacular.types import OpenApiTypes
 from django_filters.rest_framework import DjangoFilterBackend
 
-from apps.submissions.models import Document, DocumentVersion
-from apps.submissions.serializers import DocumentSerializer, DocumentVersionSerializer
+from apps.submissions.models.models import Document, DocumentVersion
+from apps.submissions.serializers.serializers import DocumentSerializer, DocumentVersionSerializer
 from .models import ActivityLog
 from .serializers import ActivityLogSerializer
 from .storage import SecureFileStorage, FileTypeDetector

@@ -16,7 +16,7 @@ OJS 3.4 REST API Compliance:
 from django.utils import timezone
 from django.db import transaction
 from django.core.cache import cache
-from apps.submissions.models import Submission
+from apps.submissions.models.models import Submission
 from apps.integrations.models import OJSMapping
 from apps.integrations.utils import (
     ojs_list_submissions, ojs_create_submission, ojs_update_submission
@@ -659,7 +659,7 @@ class OJSSyncService:
             publication_id: Optional OJS publication ID for logging
         """
         from apps.users.models import CustomUser, Profile
-        from apps.submissions.models import AuthorContribution
+        from apps.submissions.models.models import AuthorContribution
         
         try:
             # Sort authors by sequence
@@ -797,7 +797,7 @@ class OJSSyncService:
         """
         import requests
         from django.core.files.base import ContentFile
-        from apps.submissions.models import Document
+        from apps.submissions.models.models import Document
         
         try:
             headers = {

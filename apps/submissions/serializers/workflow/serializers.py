@@ -6,11 +6,11 @@ Handles copyediting assignments, files, discussions, and production workflow.
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from django.utils import timezone
-from .copyediting_models import (
+from ...models.copyediting.models import (
     CopyeditingAssignment, CopyeditingFile, CopyeditingDiscussion,
     CopyeditingMessage, CopyeditingMessageAttachment
 )
-from .production_models import (
+from ...models.production.models import (
     ProductionAssignment, ProductionFile, ProductionDiscussion,
     ProductionMessage, ProductionMessageAttachment, PublicationSchedule
 )

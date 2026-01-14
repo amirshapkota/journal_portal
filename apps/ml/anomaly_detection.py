@@ -9,7 +9,7 @@ from django.db.models import Count, Avg, Q, F
 from collections import defaultdict
 import numpy as np
 
-from apps.submissions.models import Submission
+from apps.submissions.models.models import Submission
 from apps.reviews.models import ReviewAssignment, Review
 from apps.users.models import Profile
 from django.contrib.auth import get_user_model

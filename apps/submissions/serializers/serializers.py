@@ -5,7 +5,7 @@ Handles submission CRUD, author management, and document upload.
 
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
-from .models import Submission, AuthorContribution, Document, DocumentVersion, Comment
+from ..models.models import Submission, AuthorContribution, Document, DocumentVersion, Comment
 from apps.users.serializers import ProfileSerializer
 from apps.journals.serializers import JournalListSerializer
 

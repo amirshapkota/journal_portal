@@ -842,7 +842,7 @@ class UserViewSet(ListModelMixin, RetrieveModelMixin, UpdateModelMixin, DestroyM
             
             if profile:
                 # Count items before deletion
-                from apps.submissions.models import Submission, Document, AuthorContribution, Comment
+                from apps.submissions.models.models import Submission, Document, AuthorContribution, Comment
                 from apps.reviews.models import ReviewAssignment, Review, EditorialDecision
                 from apps.journals.models import JournalStaff
                 

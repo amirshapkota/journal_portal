@@ -35,7 +35,7 @@ from apps.reviews.serializers import (
     RevisionSubmissionSerializer,
 )
 from apps.users.models import Profile
-from apps.submissions.models import Submission
+from apps.submissions.models.models import Submission
 import logging
 
 logger = logging.getLogger(__name__)
@@ -1006,7 +1006,7 @@ class RevisionRoundViewSet(viewsets.ModelViewSet):
         RevisionRoundCreateSerializer,
         RevisionSubmissionSerializer,
     )
-    from apps.submissions.models import Document
+    from apps.submissions.models.models import Document
     
     queryset = RevisionRound.objects.all()
     permission_classes = [permissions.IsAuthenticated]

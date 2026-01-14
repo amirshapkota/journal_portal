@@ -11,11 +11,11 @@ from django.conf import settings
 from django.core.validators import MinValueValidator, MaxValueValidator
 
 # Import copyediting and production models
-from .copyediting_models import (
+from .copyediting.models import (
     CopyeditingAssignment, CopyeditingFile, CopyeditingDiscussion,
     CopyeditingMessage, CopyeditingMessageAttachment
 )
-from .production_models import (
+from .production.models import (
     ProductionAssignment, ProductionFile, ProductionDiscussion,
     ProductionMessage, ProductionMessageAttachment, PublicationSchedule
 )
