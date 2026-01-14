@@ -4,9 +4,9 @@ Handles submissions, documents, versions, copyediting, and production workflows.
 """
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import SubmissionViewSet
-from .superdoc_views import SuperDocViewSet
-from .workflow_views import (
+from .views.views import SubmissionViewSet
+from .views.superdoc.views import SuperDocViewSet
+from .views.workflow.views import (
     CopyeditingAssignmentViewSet,
     CopyeditingFileViewSet,
     CopyeditingDiscussionViewSet,

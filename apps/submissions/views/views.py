@@ -14,8 +14,8 @@ from django.db.models import Q
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 from drf_spectacular.types import OpenApiTypes
 
-from .models.models import Submission, AuthorContribution, Document, DocumentVersion, Comment
-from .serializers.serializers import (
+from ..models.models import Submission, AuthorContribution, Document, DocumentVersion, Comment
+from ..serializers.serializers import (
     SubmissionSerializer, SubmissionListSerializer, SubmissionStatusUpdateSerializer,
     AuthorContributionSerializer, AddAuthorSerializer, DocumentSerializer,
     DocumentUploadSerializer, DocumentVersionSerializer, CommentSerializer

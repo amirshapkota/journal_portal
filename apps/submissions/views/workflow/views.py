@@ -13,15 +13,15 @@ from django.db.models import Q
 from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter
 from drf_spectacular.types import OpenApiTypes
 
-from .models.copyediting.models import (
+from ...models.copyediting.models import (
     CopyeditingAssignment, CopyeditingFile, CopyeditingDiscussion,
     CopyeditingMessage, CopyeditingMessageAttachment
 )
-from .models.production.models import (
+from ...models.production.models import (
     ProductionAssignment, ProductionFile, ProductionDiscussion,
     ProductionMessage, ProductionMessageAttachment, PublicationSchedule
 )
-from .serializers.workflow.serializers import (
+from ...serializers.workflow.serializers import (
     CopyeditingAssignmentSerializer, CopyeditingAssignmentListSerializer,
     CopyeditingFileSerializer, CopyeditingDiscussionSerializer,
     CopyeditingDiscussionListSerializer, CopyeditingMessageSerializer,
@@ -30,7 +30,7 @@ from .serializers.workflow.serializers import (
     ProductionDiscussionListSerializer, ProductionMessageSerializer,
     PublicationScheduleSerializer
 )
-from .models.models import Submission
+from ...models.models import Submission
 
 
 class WorkflowPermissions(permissions.BasePermission):
