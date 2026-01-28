@@ -614,3 +614,247 @@ class ActivityLogViewSet(viewsets.ReadOnlyModelViewSet):
     def retrieve(self, request, *args, **kwargs):
         """Retrieve a specific activity log entry."""
         return super().retrieve(request, *args, **kwargs)
+
+
+# ============================================================================
+# PUBLIC PUBLICATIONS API
+# ============================================================================
+
+class PublicPublicationViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    Public API endpoint for published submissions.
+    Provides read-only access to published articles with full details.
+    
+    No authentication required - this is a public endpoint.
+    """
+    from apps.submissions.models.models import Submission
+    from .serializers import PublicationDetailSerializer
+    
+    queryset = Submission.objects.none()  # Will be overridden in get_queryset
+    serializer_class = PublicationDetailSerializer
+    permission_classes = [permissions.AllowAny]  # Public access
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    
+    # Filtering options
+    filterset_fields = {
+        'journal': ['exact'],
+        'journal__short_name': ['exact', 'icontains'],
+        'section': ['exact'],
+        'category': ['exact'],
+        'research_type': ['exact'],
+        'area': ['exact'],
+        'submitted_at': ['gte', 'lte', 'exact'],
+        'created_at': ['gte', 'lte'],
+        'doi': ['exact', 'icontains'],
+    }
+    
+    # Search fields
+    search_fields = [
+        'title',
+        'abstract',
+        'submission_number',
+        'doi',
+        'metadata_json__keywords',
+    ]
+    
+    # Ordering options
+    ordering_fields = ['submitted_at', 'created_at', 'updated_at', 'title']
+    ordering = ['-submitted_at']  # Default ordering: newest first
+    
+    def get_queryset(self):
+        """
+        Get only PUBLISHED submissions with all related data.
+        Optimizes query with select_related and prefetch_related.
+        """
+        from apps.submissions.models.models import Submission
+        
+        return Submission.objects.filter(
+            status='PUBLISHED'
+        ).select_related(
+            'journal',
+            'corresponding_author',
+            'corresponding_author__user',
+            'section',
+            'category',
+            'research_type',
+            'area'
+        ).prefetch_related(
+            'documents',
+            'author_contributions',
+            'author_contributions__profile',
+            'author_contributions__profile__user'
+        ).order_by('-submitted_at')
+    
+    @extend_schema(
+        summary="List all published articles",
+        description="""
+        Get a list of all published articles with complete details.
+        
+        This endpoint is public and does not require authentication.
+        
+        **Features:**
+        - Filter by journal, section, category, research type, area
+        - Search by title, abstract, keywords, DOI
+        - Order by submission date, creation date, or title
+        - Pagination support
+        
+        **Returns:**
+        - Complete publication details including:
+          - Article metadata (title, abstract, DOI)
+          - Journal information
+          - All authors with affiliations and ORCID
+          - Taxonomy classification
+          - Published documents
+        """,
+        parameters=[
+            OpenApiParameter(
+                name='journal',
+                type=OpenApiTypes.UUID,
+                location=OpenApiParameter.QUERY,
+                description='Filter by journal ID'
+            ),
+            OpenApiParameter(
+                name='journal__short_name',
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description='Filter by journal short name (exact or contains)'
+            ),
+            OpenApiParameter(
+                name='section',
+                type=OpenApiTypes.UUID,
+                location=OpenApiParameter.QUERY,
+                description='Filter by section ID'
+            ),
+            OpenApiParameter(
+                name='doi',
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description='Filter by DOI'
+            ),
+            OpenApiParameter(
+                name='submitted_at__gte',
+                type=OpenApiTypes.DATETIME,
+                location=OpenApiParameter.QUERY,
+                description='Filter articles submitted after this date'
+            ),
+            OpenApiParameter(
+                name='submitted_at__lte',
+                type=OpenApiTypes.DATETIME,
+                location=OpenApiParameter.QUERY,
+                description='Filter articles submitted before this date'
+            ),
+            OpenApiParameter(
+                name='search',
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description='Search in title, abstract, keywords, DOI, submission number'
+            ),
+            OpenApiParameter(
+                name='ordering',
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description='Order by: submitted_at, created_at, updated_at, title (prefix with - for descending)'
+            ),
+            OpenApiParameter(
+                name='page',
+                type=OpenApiTypes.INT,
+                location=OpenApiParameter.QUERY,
+                description='Page number for pagination'
+            ),
+            OpenApiParameter(
+                name='page_size',
+                type=OpenApiTypes.INT,
+                location=OpenApiParameter.QUERY,
+                description='Number of results per page'
+            ),
+        ]
+    )
+    def list(self, request, *args, **kwargs):
+        """List all published articles with filtering and search."""
+        return super().list(request, *args, **kwargs)
+    
+    @extend_schema(
+        summary="Retrieve a specific published article",
+        description="""
+        Get complete details of a specific published article by its ID.
+        
+        This endpoint is public and does not require authentication.
+        
+        **Returns:**
+        - Complete publication details
+        - Journal information
+        - All authors with full details
+        - Published documents
+        - Taxonomy classification
+        - Keywords and metadata
+        """
+    )
+    def retrieve(self, request, *args, **kwargs):
+        """Retrieve a specific published article."""
+        return super().retrieve(request, *args, **kwargs)
+    
+    @extend_schema(
+        summary="Download a published document",
+        description="Download a document file from a published article. Public access.",
+        parameters=[
+            OpenApiParameter(
+                name='document_id',
+                type=OpenApiTypes.UUID,
+                location=OpenApiParameter.PATH,
+                description="Document UUID"
+            ),
+        ]
+    )
+    @action(detail=False, methods=['get'], url_path='documents/(?P<document_id>[^/.]+)/download')
+    def download_document(self, request, document_id=None):
+        """
+        Download a published document file.
+        Public endpoint - no authentication required.
+        """
+        from apps.submissions.models.models import Document
+        
+        try:
+            # Get the document and verify it belongs to a published submission
+            document = Document.objects.select_related('submission').get(id=document_id)
+            
+            # Verify submission is published
+            if document.submission.status != 'PUBLISHED':
+                return Response(
+                    {'error': 'Document is not publicly available'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+            # Only allow public document types
+            public_doc_types = ['MANUSCRIPT', 'FINAL_VERSION']
+            if document.document_type not in public_doc_types:
+                return Response(
+                    {'error': 'This document type is not publicly available'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+            # Check if file exists
+            if not document.original_file or not default_storage.exists(document.original_file.name):
+                raise Http404("File not found")
+            
+            # Serve the file
+            try:
+                file_handle = document.original_file.open('rb')
+                
+                # Determine content type
+                import mimetypes
+                content_type, _ = mimetypes.guess_type(document.file_name)
+                if not content_type:
+                    content_type = 'application/octet-stream'
+                
+                response = FileResponse(file_handle)
+                response['Content-Type'] = content_type
+                response['Content-Length'] = document.file_size
+                response['Content-Disposition'] = f'attachment; filename="{document.file_name}"'
+                
+                return response
+                
+            except Exception as e:
+                raise Http404("File could not be accessed")
+            
+        except Document.DoesNotExist:
+            raise Http404("Document not found")
