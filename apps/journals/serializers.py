@@ -307,6 +307,8 @@ class JournalSettingsSerializer(serializers.ModelSerializer):
             value['coauthor_roles'] = []
         if 'author_guidelines' not in value:
             value['author_guidelines'] = []
+        if 'reviewer_guidelines' not in value:
+            value['reviewer_guidelines'] = []
         if 'submission_requirements' not in value:
             value['submission_requirements'] = []
         
@@ -332,6 +334,18 @@ class JournalSettingsSerializer(serializers.ModelSerializer):
                 if not isinstance(guideline, str):
                     raise serializers.ValidationError(
                         "All author_guidelines must be strings"
+                    )
+        
+        # Validate reviewer_guidelines is an array of strings
+        if 'reviewer_guidelines' in value:
+            if not isinstance(value['reviewer_guidelines'], list):
+                raise serializers.ValidationError(
+                    "reviewer_guidelines must be an array of strings"
+                )
+            for guideline in value['reviewer_guidelines']:
+                if not isinstance(guideline, str):
+                    raise serializers.ValidationError(
+                        "All reviewer_guidelines must be strings"
                     )
         
         # Validate submission_requirements is an array of strings
