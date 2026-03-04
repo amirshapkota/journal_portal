@@ -427,9 +427,11 @@ class SectionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Section
         fields = (
-            'id', 'journal', 'name', 'code', 'description',
-            'section_editor', 'section_editor_name', 'order',
-            'is_active', 'category_count', 'created_at', 'updated_at'
+            'id', 'journal', 'name', 'code', 'instructions_for_authors', 'instructions_for_reviewers',
+            'section_editor', 'section_editor_name', 
+            'abstract_word_limit', 'min_authors', 'max_authors', 'max_figures', 'max_tables', 'total_word_limit',
+            'author_policies', 'reviewer_policies',
+            'order', 'is_active', 'category_count', 'created_at', 'updated_at'
         )
         read_only_fields = ('id', 'created_at', 'updated_at')
     
@@ -445,6 +447,25 @@ class SectionSerializer(serializers.ModelSerializer):
                 "Code must contain only uppercase letters, numbers, and underscores."
             )
         return value.upper()
+    
+    def validate_min_authors(self, value):
+        """Ensure min_authors is at least 1."""
+        if value < 1:
+            raise serializers.ValidationError("Minimum authors must be at least 1.")
+        return value
+    
+    def validate(self, data):
+        """Cross-field validation."""
+        min_authors = data.get('min_authors', self.instance.min_authors if self.instance else 1)
+        max_authors = data.get('max_authors', self.instance.max_authors if self.instance else 0)
+        
+        # If max_authors is set (not 0), ensure it's >= min_authors
+        if max_authors > 0 and max_authors < min_authors:
+            raise serializers.ValidationError({
+                'max_authors': 'Maximum authors must be greater than or equal to minimum authors.'
+            })
+        
+        return data
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -457,7 +478,7 @@ class CategorySerializer(serializers.ModelSerializer):
         model = Category
         fields = (
             'id', 'section', 'section_name', 'name', 'code',
-            'description', 'order', 'is_active',
+            'instructions_for_authors', 'instructions_for_reviewers', 'order', 'is_active',
             'research_type_count', 'created_at', 'updated_at'
         )
         read_only_fields = ('id', 'created_at', 'updated_at')
@@ -486,7 +507,7 @@ class ResearchTypeSerializer(serializers.ModelSerializer):
         model = ResearchType
         fields = (
             'id', 'category', 'category_name', 'name', 'code',
-            'description', 'requirements', 'order', 'is_active',
+            'instructions_for_authors', 'instructions_for_reviewers', 'requirements', 'order', 'is_active',
             'area_count', 'created_at', 'updated_at'
         )
         read_only_fields = ('id', 'created_at', 'updated_at')
@@ -514,7 +535,7 @@ class AreaSerializer(serializers.ModelSerializer):
         model = Area
         fields = (
             'id', 'research_type', 'research_type_name', 'name',
-            'code', 'description', 'keywords', 'order', 'is_active',
+            'code', 'instructions_for_authors', 'instructions_for_reviewers', 'keywords', 'order', 'is_active',
             'created_at', 'updated_at'
         )
         read_only_fields = ('id', 'created_at', 'updated_at')

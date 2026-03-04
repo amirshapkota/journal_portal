@@ -168,7 +168,14 @@ class Section(models.Model):
     
     name = models.CharField(max_length=255, help_text="Section name")
     code = models.CharField(max_length=50, help_text="Short code for section")
-    description = models.TextField(blank=True)
+    instructions_for_authors = models.TextField(
+        blank=True,
+        help_text="Guidelines and instructions for authors submitting to this section"
+    )
+    instructions_for_reviewers = models.TextField(
+        blank=True,
+        help_text="Guidelines and instructions for reviewers evaluating submissions in this section"
+    )
     
     # Section editor assignment
     section_editor = models.ForeignKey(
@@ -178,6 +185,42 @@ class Section(models.Model):
         blank=True,
         related_name='managed_sections',
         help_text="Primary section editor"
+    )
+    
+    # Manuscript submission limits (0 = no limit)
+    abstract_word_limit = models.PositiveIntegerField(
+        default=0,
+        help_text="Maximum words allowed in abstract. 0 means no limit."
+    )
+    min_authors = models.PositiveIntegerField(
+        default=1,
+        help_text="Minimum number of authors required per submission"
+    )
+    max_authors = models.PositiveIntegerField(
+        default=0,
+        help_text="Maximum number of authors allowed per submission. 0 means no limit."
+    )
+    max_figures = models.PositiveIntegerField(
+        default=0,
+        help_text="Maximum number of figures allowed per submission. 0 means no limit."
+    )
+    max_tables = models.PositiveIntegerField(
+        default=0,
+        help_text="Maximum number of tables allowed per submission. 0 means no limit."
+    )
+    total_word_limit = models.PositiveIntegerField(
+        default=0,
+        help_text="Maximum total words including abstract, authorship, acknowledgements, and references. 0 means no limit."
+    )
+    
+    # Section-specific policies
+    author_policies = models.TextField(
+        blank=True,
+        help_text="Custom policies and rules for authors in this section"
+    )
+    reviewer_policies = models.TextField(
+        blank=True,
+        help_text="Custom policies and rules for reviewers in this section"
     )
     
     # Display order
@@ -214,7 +257,14 @@ class Category(models.Model):
     
     name = models.CharField(max_length=255, help_text="Category name")
     code = models.CharField(max_length=50, help_text="Short code for category")
-    description = models.TextField(blank=True)
+    instructions_for_authors = models.TextField(
+        blank=True,
+        help_text="Guidelines and instructions for authors submitting to this category"
+    )
+    instructions_for_reviewers = models.TextField(
+        blank=True,
+        help_text="Guidelines and instructions for reviewers evaluating submissions in this category"
+    )
     
     # Display order
     order = models.PositiveIntegerField(default=0, help_text="Display order")
@@ -251,7 +301,14 @@ class ResearchType(models.Model):
     
     name = models.CharField(max_length=255, help_text="Research type name")
     code = models.CharField(max_length=50, help_text="Short code for research type")
-    description = models.TextField(blank=True)
+    instructions_for_authors = models.TextField(
+        blank=True,
+        help_text="Guidelines and instructions for authors submitting this research type"
+    )
+    instructions_for_reviewers = models.TextField(
+        blank=True,
+        help_text="Guidelines and instructions for reviewers evaluating this research type"
+    )
     
     # Manuscript requirements specific to this research type
     requirements = models.JSONField(
@@ -293,7 +350,14 @@ class Area(models.Model):
     
     name = models.CharField(max_length=255, help_text="Area name")
     code = models.CharField(max_length=50, help_text="Short code for area")
-    description = models.TextField(blank=True)
+    instructions_for_authors = models.TextField(
+        blank=True,
+        help_text="Guidelines and instructions for authors submitting in this research area"
+    )
+    instructions_for_reviewers = models.TextField(
+        blank=True,
+        help_text="Guidelines and instructions for reviewers evaluating submissions in this research area"
+    )
     
     # Keywords for matching
     keywords = models.JSONField(

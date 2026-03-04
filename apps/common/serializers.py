@@ -362,7 +362,8 @@ class PublicationDetailSerializer(serializers.Serializer):
             return {
                 'code': obj.research_type.code,
                 'name': obj.research_type.name,
-                'description': obj.research_type.description if hasattr(obj.research_type, 'description') else '',
+                'instructions_for_authors': obj.research_type.instructions_for_authors if hasattr(obj.research_type, 'instructions_for_authors') else '',
+                'instructions_for_reviewers': obj.research_type.instructions_for_reviewers if hasattr(obj.research_type, 'instructions_for_reviewers') else '',
             }
         return None
     

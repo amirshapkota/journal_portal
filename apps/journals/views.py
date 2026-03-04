@@ -1465,7 +1465,7 @@ class SectionViewSet(viewsets.ModelViewSet):
     serializer_class = SectionSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
-    search_fields = ['name', 'code', 'description']
+    search_fields = ['name', 'code', 'instructions_for_authors', 'instructions_for_reviewers']
     ordering_fields = ['order', 'name', 'created_at']
     ordering = ['order', 'name']
     
@@ -1493,7 +1493,7 @@ class CategoryViewSet(viewsets.ModelViewSet):
     serializer_class = CategorySerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
-    search_fields = ['name', 'code', 'description']
+    search_fields = ['name', 'code', 'instructions_for_authors', 'instructions_for_reviewers']
     ordering_fields = ['order', 'name', 'created_at']
     ordering = ['order', 'name']
     
@@ -1526,7 +1526,7 @@ class ResearchTypeViewSet(viewsets.ModelViewSet):
     serializer_class = ResearchTypeSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
-    search_fields = ['name', 'code', 'description']
+    search_fields = ['name', 'code', 'instructions_for_authors', 'instructions_for_reviewers']
     ordering_fields = ['order', 'name', 'created_at']
     ordering = ['order', 'name']
     
@@ -1564,7 +1564,7 @@ class AreaViewSet(viewsets.ModelViewSet):
     serializer_class = AreaSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
-    search_fields = ['name', 'code', 'description', 'keywords']
+    search_fields = ['name', 'code', 'instructions_for_authors', 'instructions_for_reviewers', 'keywords']
     ordering_fields = ['order', 'name', 'created_at']
     ordering = ['order', 'name']
     

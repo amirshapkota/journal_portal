@@ -195,7 +195,8 @@ class SubmissionSerializer(serializers.ModelSerializer):
                 'id': str(obj.section.id),
                 'name': obj.section.name,
                 'code': obj.section.code,
-                'description': obj.section.description
+                'instructions_for_authors': obj.section.instructions_for_authors,
+                'instructions_for_reviewers': obj.section.instructions_for_reviewers
             }
             
             # Add category if it exists
@@ -204,7 +205,8 @@ class SubmissionSerializer(serializers.ModelSerializer):
                     'id': str(obj.category.id),
                     'name': obj.category.name,
                     'code': obj.category.code,
-                    'description': obj.category.description
+                    'instructions_for_authors': obj.category.instructions_for_authors,
+                    'instructions_for_reviewers': obj.category.instructions_for_reviewers
                 }
                 
                 # Add research_type if it exists
@@ -213,7 +215,8 @@ class SubmissionSerializer(serializers.ModelSerializer):
                         'id': str(obj.research_type.id),
                         'name': obj.research_type.name,
                         'code': obj.research_type.code,
-                        'description': obj.research_type.description
+                        'instructions_for_authors': obj.research_type.instructions_for_authors,
+                        'instructions_for_reviewers': obj.research_type.instructions_for_reviewers
                     }
                     
                     # Add area if it exists
@@ -222,7 +225,8 @@ class SubmissionSerializer(serializers.ModelSerializer):
                             'id': str(obj.area.id),
                             'name': obj.area.name,
                             'code': obj.area.code,
-                            'description': obj.area.description,
+                            'instructions_for_authors': obj.area.instructions_for_authors,
+                            'instructions_for_reviewers': obj.area.instructions_for_reviewers,
                             'keywords': obj.area.keywords
                         }
             
@@ -253,6 +257,82 @@ class SubmissionSerializer(serializers.ModelSerializer):
             return value
         except Journal.DoesNotExist:
             raise serializers.ValidationError("Journal does not exist.")
+    
+    def validate(self, attrs):
+        """
+        Validate submission data against section settings.
+        This includes word limits, author counts, figure/table limits, etc.
+        """
+        from apps.journals.models import Section
+        from ..validators import SubmissionSectionValidator
+        from django.core.exceptions import ValidationError as DjangoValidationError
+        
+        # Get section if provided
+        section_id = attrs.get('section_id')
+        section = None
+        
+        if section_id:
+            try:
+                section = Section.objects.get(id=section_id)
+            except Section.DoesNotExist:
+                pass  # Will be caught in create/update method
+        
+        # Only validate if section exists and has limits
+        if section:
+            errors = {}
+            
+            # Validate abstract word limit
+            abstract = attrs.get('abstract', '')
+            if abstract and section.abstract_word_limit > 0:
+                try:
+                    SubmissionSectionValidator.validate_abstract_word_limit(abstract, section)
+                except DjangoValidationError as e:
+                    errors['abstract'] = str(e)
+            
+            # Validate author count
+            # For new submissions, count is 1 (corresponding author) + co-authors from metadata
+            metadata = attrs.get('metadata_json', {})
+            co_authors = metadata.get('co_authors', []) if metadata else []
+            author_count = 1 + len(co_authors)
+            
+            try:
+                SubmissionSectionValidator.validate_author_count(author_count, section)
+            except DjangoValidationError as e:
+                errors['authors'] = str(e)
+            
+            # Validate figure count (if provided in metadata)
+            figure_count = metadata.get('figure_count', 0) if metadata else 0
+            if figure_count > 0:
+                try:
+                    SubmissionSectionValidator.validate_figure_count(figure_count, section)
+                except DjangoValidationError as e:
+                    errors['figures'] = str(e)
+            
+            # Validate table count (if provided in metadata)
+            table_count = metadata.get('table_count', 0) if metadata else 0
+            if table_count > 0:
+                try:
+                    SubmissionSectionValidator.validate_table_count(table_count, section)
+                except DjangoValidationError as e:
+                    errors['tables'] = str(e)
+            
+            # Validate total word count
+            if section.total_word_limit > 0:
+                try:
+                    submission_data = {
+                        'abstract': attrs.get('abstract', ''),
+                        'acknowledgements': attrs.get('acknowledgements', ''),
+                        'funding_statement': metadata.get('funding_statement', '') if metadata else '',
+                        'conflict_of_interest_statement': metadata.get('conflict_of_interest', '') if metadata else '',
+                    }
+                    SubmissionSectionValidator.validate_total_word_count(submission_data, section)
+                except DjangoValidationError as e:
+                    errors['total_words'] = str(e)
+            
+            if errors:
+                raise serializers.ValidationError(errors)
+        
+        return attrs
     
     def create(self, validated_data):
         """Create submission with corresponding author and taxonomy."""
@@ -509,7 +589,8 @@ class SubmissionListSerializer(serializers.ModelSerializer):
                 'id': str(obj.section.id),
                 'name': obj.section.name,
                 'code': obj.section.code,
-                'description': obj.section.description
+                'instructions_for_authors': obj.section.instructions_for_authors,
+                'instructions_for_reviewers': obj.section.instructions_for_reviewers
             }
             
             # Add category if it exists
@@ -518,7 +599,8 @@ class SubmissionListSerializer(serializers.ModelSerializer):
                     'id': str(obj.category.id),
                     'name': obj.category.name,
                     'code': obj.category.code,
-                    'description': obj.category.description
+                    'instructions_for_authors': obj.category.instructions_for_authors,
+                    'instructions_for_reviewers': obj.category.instructions_for_reviewers
                 }
                 
                 # Add research_type if it exists
@@ -527,7 +609,8 @@ class SubmissionListSerializer(serializers.ModelSerializer):
                         'id': str(obj.research_type.id),
                         'name': obj.research_type.name,
                         'code': obj.research_type.code,
-                        'description': obj.research_type.description
+                        'instructions_for_authors': obj.research_type.instructions_for_authors,
+                        'instructions_for_reviewers': obj.research_type.instructions_for_reviewers
                     }
                     
                     # Add area if it exists
@@ -536,7 +619,8 @@ class SubmissionListSerializer(serializers.ModelSerializer):
                             'id': str(obj.area.id),
                             'name': obj.area.name,
                             'code': obj.area.code,
-                            'description': obj.area.description,
+                            'instructions_for_authors': obj.area.instructions_for_authors,
+                            'instructions_for_reviewers': obj.area.instructions_for_reviewers,
                             'keywords': obj.area.keywords
                         }
             
