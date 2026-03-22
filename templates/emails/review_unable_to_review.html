@@ -1,0 +1,19 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Reviewer Unable to Review</title>
+  </head>
+  <body>
+    <p>Dear {{ recipient_name }},</p>
+    <p>
+      The reviewer has declined the review request for
+      <strong>{{ submission_title }}</strong> (ID: {{ submission_id }}).
+    </p>
+    <p>Role: {{ recipient_role }}</p>
+    <p>Reviewer: {{ reviewer_name }}</p>
+    <p>Reason: {{ decline_reason }}</p>
+    <p>Declined at: {{ declined_at }}</p>
+    <p>Editor: {{ editor_name }}</p>
+  </body>
+</html>

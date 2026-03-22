@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('journals', '0010_replace_description_with_instructions'),
+        ('journals', '0009_alter_journalstaff_role'),
     ]
 
     operations = [

@@ -1,0 +1,19 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Review Request Cancelled</title>
+  </head>
+  <body>
+    <p>Dear {{ recipient_name }},</p>
+    <p>
+      The review request for <strong>{{ submission_title }}</strong> (ID: {{
+      submission_id }}) has been cancelled.
+    </p>
+    <p>Role: {{ recipient_role }}</p>
+    <p>Reviewer: {{ reviewer_name }}</p>
+    <p>Cancelled by: {{ cancelled_by }}</p>
+    <p>Cancelled at: {{ cancelled_at }}</p>
+    <p>Reason: {{ reason }}</p>
+  </body>
+</html>

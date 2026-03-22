@@ -1,0 +1,22 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Editorial Decision Notice</title>
+  </head>
+  <body>
+    <p>Dear {{ recipient_name }},</p>
+    <p>
+      An editorial decision has been recorded for
+      <strong>{{ submission_title }}</strong>.
+    </p>
+    <p>Role: {{ recipient_role }}</p>
+    <p>Decision: {{ decision_type }}</p>
+    <p>Date: {{ decision_date }}</p>
+    <p>Editor: {{ editor_name }}</p>
+    <p>Summary: {{ decision_summary }}</p>
+    <p>
+      View submission: <a href="{{ submission_url }}">{{ submission_url }}</a>
+    </p>
+  </body>
+</html>

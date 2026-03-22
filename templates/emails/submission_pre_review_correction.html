@@ -1,0 +1,20 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Pre-Review Corrections Requested</title>
+  </head>
+  <body>
+    <p>Dear {{ author_name }},</p>
+    <p>
+      Before peer review, corrections are required for
+      <strong>{{ submission_title }}</strong> (ID: {{ submission_id }}).
+    </p>
+    <p>Requested by: {{ requested_by }}</p>
+    <p>Notes: {{ correction_notes }}</p>
+    <p>Deadline: {{ revision_deadline }}</p>
+    <p>
+      Open submission: <a href="{{ submission_url }}">{{ submission_url }}</a>
+    </p>
+  </body>
+</html>

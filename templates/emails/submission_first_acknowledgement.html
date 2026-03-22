@@ -1,0 +1,20 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Submission Received</title>
+  </head>
+  <body>
+    <p>Dear {{ author_name }},</p>
+    <p>
+      Your submission <strong>{{ submission_title }}</strong> (ID: {{
+      submission_id }}) has been received by {{ journal_name }}.
+    </p>
+    <p>Submitted at: {{ submitted_at }}</p>
+    <p>
+      You can track progress here:
+      <a href="{{ dashboard_url }}">Submission Dashboard</a>
+    </p>
+    <p>Handling editor: {{ editor_name }}</p>
+  </body>
+</html>

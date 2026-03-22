@@ -1,0 +1,18 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Peer Review Started</title>
+  </head>
+  <body>
+    <p>Dear {{ author_name }},</p>
+    <p>
+      Peer review has started for <strong>{{ submission_title }}</strong> (ID:
+      {{ submission_id }}).
+    </p>
+    <p>Started at: {{ review_started_at }}</p>
+    <p>Assigned reviewers: {{ assigned_reviewer_count }}</p>
+    <p>Editor: {{ editor_name }}</p>
+    <p>View details: <a href="{{ submission_url }}">{{ submission_url }}</a></p>
+  </body>
+</html>

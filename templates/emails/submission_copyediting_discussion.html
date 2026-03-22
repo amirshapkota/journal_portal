@@ -1,0 +1,20 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Copyediting Discussion Update</title>
+  </head>
+  <body>
+    <p>Dear {{ recipient_name }},</p>
+    <p>
+      There is a new message in the copyediting discussion for
+      <strong>{{ submission_title }}</strong>.
+    </p>
+    <p>Thread: {{ discussion_subject }}</p>
+    <p>From: {{ message_author }}</p>
+    <p>Message preview: {{ message_excerpt }}</p>
+    <p>
+      Open discussion: <a href="{{ discussion_url }}">{{ discussion_url }}</a>
+    </p>
+  </body>
+</html>

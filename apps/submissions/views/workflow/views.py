@@ -226,6 +226,30 @@ class CopyeditingAssignmentViewSet(viewsets.ModelViewSet):
             ).distinct()
         
         return queryset.none()
+
+    def perform_create(self, serializer):
+        """Create copyediting assignment and queue assignment notifications."""
+        assignment = serializer.save()
+
+        # Move submission into copyediting stage on assignment creation.
+        submission = assignment.submission
+        if submission.status in ['ACCEPTED', 'UNDER_REVIEW']:
+            submission.status = 'COPYEDITING'
+            submission.save()
+
+        from apps.notifications.tasks import (
+            send_copyediting_assigned_email,
+            send_copyediting_editorial_assignment_email,
+            send_copyediting_request_email,
+        )
+        try:
+            send_copyediting_assigned_email.delay(str(assignment.id))
+            send_copyediting_editorial_assignment_email.delay(str(assignment.id))
+            send_copyediting_request_email.delay(str(assignment.id))
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Failed to send copyediting assignment notifications: {e}")
     
     @extend_schema(
         summary="Start copyediting",
@@ -658,7 +682,7 @@ class CopyeditingFileViewSet(viewsets.ModelViewSet):
             ).distinct()
         
         return queryset.none()
-    
+
     @extend_schema(
         summary="Approve copyediting file",
         description="Approve a copyediting file for further processing. Updates file type to COPYEDITED."
@@ -1112,6 +1136,23 @@ class ProductionAssignmentViewSet(viewsets.ModelViewSet):
             ).distinct()
         
         return queryset.none()
+
+    def perform_create(self, serializer):
+        """Create production assignment and queue assignment notification."""
+        assignment = serializer.save()
+
+        submission = assignment.submission
+        if submission.status in ['COPYEDITING', 'ACCEPTED', 'PRODUCTION']:
+            submission.status = 'IN_PRODUCTION'
+            submission.save()
+
+        from apps.notifications.tasks import send_production_assigned_email
+        try:
+            send_production_assigned_email.delay(str(assignment.id))
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Failed to send production assignment notification: {e}")
     
     @extend_schema(
         summary="Start production",
@@ -1428,9 +1469,10 @@ class ProductionFileViewSet(viewsets.ModelViewSet):
         file_obj.save()
         
         # Send notification to author
-        from apps.notifications.tasks import send_galley_published_email
+        from apps.notifications.tasks import send_galley_published_email, send_submission_production_proofreading_email
         try:
             send_galley_published_email.delay(str(file_obj.id))
+            send_submission_production_proofreading_email.delay(str(file_obj.id))
         except Exception as e:
             import logging
             logger = logging.getLogger(__name__)

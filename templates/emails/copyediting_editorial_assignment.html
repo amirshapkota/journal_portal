@@ -1,0 +1,20 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Copyediting Editorial Assignment</title>
+  </head>
+  <body>
+    <p>Dear {{ editor_name }},</p>
+    <p>
+      A copyediting assignment has been created for
+      <strong>{{ submission_title }}</strong> (ID: {{ submission_id }}).
+    </p>
+    <p>Copyeditor: {{ copyeditor_name }}</p>
+    <p>Due date: {{ due_date }}</p>
+    <p>Assigned by: {{ assigned_by }}</p>
+    <p>
+      Open assignment: <a href="{{ assignment_url }}">{{ assignment_url }}</a>
+    </p>
+  </body>
+</html>

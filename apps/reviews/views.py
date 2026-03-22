@@ -101,8 +101,25 @@ class ReviewAssignmentViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         """Create review assignment with automatic email notification."""
         assignment = serializer.save()
-        
-        # TODO: Send review invitation email
+
+        from apps.notifications.tasks import (
+            send_review_invitation_email,
+            send_review_article_request_email,
+            send_review_editorial_assignment_email,
+            send_submission_review_started_email,
+            send_editorial_assignment_section_editor_email,
+            send_editorial_assignment_guest_editor_email,
+        )
+        try:
+            send_review_invitation_email.delay(str(assignment.id))
+            send_review_article_request_email.delay(str(assignment.id))
+            send_review_editorial_assignment_email.delay(str(assignment.id))
+            send_submission_review_started_email.delay(str(assignment.submission.id))
+            send_editorial_assignment_section_editor_email.delay(str(assignment.submission.id), str(assignment.assigned_by.id))
+            send_editorial_assignment_guest_editor_email.delay(str(assignment.submission.id), str(assignment.assigned_by.id))
+        except Exception as exc:
+            logger.warning(f"Failed to queue review assignment notifications: {exc}")
+
         logger.info(f"Review assignment created: {assignment.id}")
     
     @action(detail=False, methods=['get'])
@@ -212,8 +229,13 @@ class ReviewAssignmentViewSet(viewsets.ModelViewSet):
         assignment.status = 'ACCEPTED'
         assignment.accepted_at = timezone.now()
         assignment.save()
-        
-        # TODO: Send acceptance confirmation email
+
+        from apps.notifications.tasks import send_submission_review_started_email
+        try:
+            send_submission_review_started_email.delay(str(assignment.submission.id))
+        except Exception as exc:
+            logger.warning(f"Failed to queue review started notification: {exc}")
+
         logger.info(f"Review assignment accepted: {assignment.id}")
         
         serializer = self.get_serializer(assignment)
@@ -242,8 +264,13 @@ class ReviewAssignmentViewSet(viewsets.ModelViewSet):
         assignment.declined_at = timezone.now()
         assignment.decline_reason = serializer.validated_data.get('decline_reason', '')
         assignment.save()
-        
-        # TODO: Send decline notification email to editor
+
+        from apps.notifications.tasks import send_review_unable_to_review_email
+        try:
+            send_review_unable_to_review_email.delay(str(assignment.id))
+        except Exception as exc:
+            logger.warning(f"Failed to queue unable-to-review notification: {exc}")
+
         logger.info(f"Review assignment declined: {assignment.id}")
         
         return Response(self.get_serializer(assignment).data)
@@ -267,8 +294,17 @@ class ReviewAssignmentViewSet(viewsets.ModelViewSet):
         
         assignment.status = 'CANCELLED'
         assignment.save()
-        
-        # TODO: Send cancellation notification email
+
+        from apps.notifications.tasks import send_review_request_cancelled_email
+        try:
+            send_review_request_cancelled_email.delay(
+                str(assignment.id),
+                request.user.get_full_name() or request.user.email,
+                request.data.get('reason', '')
+            )
+        except Exception as exc:
+            logger.warning(f"Failed to queue review cancellation notification: {exc}")
+
         logger.info(f"Review assignment cancelled: {assignment.id}")
         
         return Response(self.get_serializer(assignment).data)
@@ -353,9 +389,13 @@ class ReviewViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         """Create review and update assignment status."""
         review = serializer.save()
-        
-        # TODO: Send review submission confirmation email
-        # TODO: Notify editor of new review
+
+        from apps.notifications.tasks import send_review_submitted_email
+        try:
+            send_review_submitted_email.delay(str(review.id))
+        except Exception as exc:
+            logger.warning(f"Failed to queue review submitted notification: {exc}")
+
         logger.info(f"Review submitted: {review.id}")
     
     @action(detail=False, methods=['get'])
@@ -859,7 +899,7 @@ class EditorialDecisionViewSet(viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         """Create editorial decision and trigger email notification."""
-        from apps.notifications.tasks import send_decision_letter_email
+        from apps.notifications.tasks import send_decision_letter_email, send_review_editor_decision_notice_email
         
         # Automatically set decided_by to current user's profile
         decision = serializer.save(decided_by=self.request.user.profile)
@@ -877,6 +917,7 @@ class EditorialDecisionViewSet(viewsets.ModelViewSet):
         # Send decision letter email to author
         try:
             send_decision_letter_email.delay(str(decision.id))
+            send_review_editor_decision_notice_email.delay(str(decision.id))
         except Exception as e:
             logger.warning(f"Failed to queue decision letter email: {e}")
         

@@ -1,0 +1,19 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Review Editorial Assignment</title>
+  </head>
+  <body>
+    <p>Dear {{ recipient_name }},</p>
+    <p>
+      This is an editorial assignment update for
+      <strong>{{ submission_title }}</strong> (ID: {{ submission_id }}).
+    </p>
+    <p>Role: {{ recipient_role }}</p>
+    <p>Reviewer: {{ reviewer_name }}</p>
+    <p>Due date: {{ due_date }}</p>
+    <p>Editor: {{ editor_name }}</p>
+    <p>Details: <a href="{{ review_url }}">{{ review_url }}</a></p>
+  </body>
+</html>

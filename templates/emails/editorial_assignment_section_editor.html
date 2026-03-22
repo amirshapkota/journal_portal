@@ -1,0 +1,21 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Section Editor Assignment</title>
+  </head>
+  <body>
+    <p>Dear {{ section_editor_name }},</p>
+    <p>
+      You have been assigned as Section Editor for
+      <strong>{{ submission_title }}</strong> (ID: {{ submission_id }}) in {{
+      journal_name }}.
+    </p>
+    <p>Section: {{ section_name }}</p>
+    <p>Assigned by: {{ assigned_by }}</p>
+    <p>Notes: {{ assignment_notes }}</p>
+    <p>
+      Open assignment: <a href="{{ assignment_url }}">{{ assignment_url }}</a>
+    </p>
+  </body>
+</html>

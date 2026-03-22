@@ -62,6 +62,84 @@ class Command(BaseCommand):
                 'description': 'Sent when user connects their ORCID iD',
                 'html_file': 'orcid_connected.html',
             },
+            # Submission workflow add-on templates
+            {
+                'template_type': 'SUBMISSION_FIRST_ACKNOWLEDGEMENT',
+                'name': 'Submission First Acknowledgement',
+                'subject': 'Submission Received - {{ submission_title }}',
+                'description': 'Sent to author and editor when a manuscript is first submitted',
+                'html_file': 'submission_first_acknowledgement.html',
+                'available_variables': [
+                    'author_name', 'submission_title', 'submission_id', 'journal_name',
+                    'submitted_at', 'dashboard_url', 'editor_name'
+                ],
+            },
+            {
+                'template_type': 'SUBMISSION_PRE_REVIEW_CORRECTION',
+                'name': 'Submission Pre-Review Correction',
+                'subject': 'Pre-Review Corrections Requested - {{ submission_title }}',
+                'description': 'Sent when editorial office requests corrections before peer review',
+                'html_file': 'submission_pre_review_correction.html',
+                'available_variables': [
+                    'author_name', 'submission_title', 'submission_id', 'journal_name',
+                    'requested_by', 'correction_notes', 'revision_deadline', 'submission_url'
+                ],
+            },
+            {
+                'template_type': 'SUBMISSION_REVIEW_STARTED',
+                'name': 'Submission Review Started',
+                'subject': 'Peer Review Started - {{ submission_title }}',
+                'description': 'Sent when peer review begins for a submission',
+                'html_file': 'submission_review_started.html',
+                'available_variables': [
+                    'author_name', 'submission_title', 'submission_id', 'journal_name',
+                    'review_started_at', 'assigned_reviewer_count', 'editor_name', 'submission_url'
+                ],
+            },
+            {
+                'template_type': 'SUBMISSION_COPYEDITING_DISCUSSION',
+                'name': 'Submission Copyediting Discussion',
+                'subject': 'Copyediting Discussion Update - {{ submission_title }}',
+                'description': 'Sent when a copyediting discussion message is posted',
+                'html_file': 'submission_copyediting_discussion.html',
+                'available_variables': [
+                    'recipient_name', 'submission_title', 'discussion_subject', 'message_excerpt',
+                    'message_author', 'discussion_url'
+                ],
+            },
+            {
+                'template_type': 'SUBMISSION_PRODUCTION_PROOFREADING',
+                'name': 'Submission Production Proofreading',
+                'subject': 'Proofreading Required - {{ submission_title }}',
+                'description': 'Sent when production output is ready for proofreading',
+                'html_file': 'submission_production_proofreading.html',
+                'available_variables': [
+                    'author_name', 'submission_title', 'submission_id', 'proof_file_label',
+                    'proof_url', 'proof_deadline', 'journal_name'
+                ],
+            },
+            {
+                'template_type': 'EDITORIAL_ASSIGNMENT_SECTION_EDITOR',
+                'name': 'Editorial Assignment (Section Editor)',
+                'subject': 'Section Editor Assignment - {{ submission_title }}',
+                'description': 'Sent when a section editor is assigned to a submission',
+                'html_file': 'editorial_assignment_section_editor.html',
+                'available_variables': [
+                    'section_editor_name', 'submission_title', 'submission_id', 'journal_name',
+                    'section_name', 'assigned_by', 'assignment_notes', 'assignment_url'
+                ],
+            },
+            {
+                'template_type': 'EDITORIAL_ASSIGNMENT_GUEST_EDITOR',
+                'name': 'Editorial Assignment (Guest Editor)',
+                'subject': 'Guest Editor Assignment - {{ submission_title }}',
+                'description': 'Sent when a guest editor is assigned to a submission',
+                'html_file': 'editorial_assignment_guest_editor.html',
+                'available_variables': [
+                    'guest_editor_name', 'submission_title', 'submission_id', 'journal_name',
+                    'assigned_by', 'assignment_notes', 'assignment_url'
+                ],
+            },
             # Phase 4: Review System Templates
             {
                 'template_type': 'REVIEW_INVITATION',
@@ -71,11 +149,66 @@ class Command(BaseCommand):
                 'html_file': 'review_invitation.html',
             },
             {
+                'template_type': 'REVIEW_EDITORIAL_ASSIGNMENT',
+                'name': 'Review Editorial Assignment',
+                'subject': 'Editorial Assignment Updated - {{ submission_title }}',
+                'description': 'Sent to editor/author/section editor when review assignment is created',
+                'html_file': 'review_editorial_assignment.html',
+                'available_variables': [
+                    'recipient_name', 'recipient_role', 'submission_title', 'submission_id',
+                    'reviewer_name', 'due_date', 'editor_name', 'review_url'
+                ],
+            },
+            {
+                'template_type': 'REVIEW_ARTICLE_REQUEST',
+                'name': 'Review Article Request',
+                'subject': 'Article Review Request - {{ submission_title }}',
+                'description': 'Sent as explicit article review request across review participants',
+                'html_file': 'review_article_request.html',
+                'available_variables': [
+                    'recipient_name', 'recipient_role', 'submission_title', 'submission_authors',
+                    'due_date', 'editor_name', 'accept_url', 'decline_url'
+                ],
+            },
+            {
                 'template_type': 'REVIEW_REMINDER',
                 'name': 'Review Deadline Reminder',
                 'subject': 'Reminder: Review Due Soon - {{ submission_title }}',
                 'description': 'Sent to remind reviewers of approaching deadlines',
                 'html_file': 'review_reminder.html',
+            },
+            {
+                'template_type': 'REVIEW_UNABLE_TO_REVIEW',
+                'name': 'Review Unable to Review',
+                'subject': 'Reviewer Unable to Review - {{ submission_title }}',
+                'description': 'Sent to editorial roles when reviewer declines invitation',
+                'html_file': 'review_unable_to_review.html',
+                'available_variables': [
+                    'recipient_name', 'recipient_role', 'submission_title', 'submission_id',
+                    'reviewer_name', 'decline_reason', 'declined_at', 'editor_name'
+                ],
+            },
+            {
+                'template_type': 'REVIEW_REQUEST_CANCELLED',
+                'name': 'Review Request Cancelled',
+                'subject': 'Review Request Cancelled - {{ submission_title }}',
+                'description': 'Sent when an editor cancels a review assignment',
+                'html_file': 'review_request_cancelled.html',
+                'available_variables': [
+                    'recipient_name', 'recipient_role', 'submission_title', 'submission_id',
+                    'reviewer_name', 'cancelled_by', 'cancelled_at', 'reason'
+                ],
+            },
+            {
+                'template_type': 'REVIEW_EDITOR_DECISION_NOTICE',
+                'name': 'Review Editor Decision Notice',
+                'subject': 'Editorial Decision Update - {{ submission_title }}',
+                'description': 'Sent to editor-side recipients when editorial decision is recorded',
+                'html_file': 'review_editor_decision_notice.html',
+                'available_variables': [
+                    'recipient_name', 'recipient_role', 'submission_title', 'decision_type',
+                    'decision_date', 'editor_name', 'decision_summary', 'submission_url'
+                ],
             },
             {
                 'template_type': 'REVIEW_SUBMITTED',
@@ -169,6 +302,28 @@ class Command(BaseCommand):
                 'subject': 'Copyediting Assignment - {{ submission_title }}',
                 'description': 'Sent when copyeditor is assigned to a manuscript',
                 'html_file': 'copyediting_assigned.html',
+            },
+            {
+                'template_type': 'COPYEDITING_EDITORIAL_ASSIGNMENT',
+                'name': 'Copyediting Editorial Assignment',
+                'subject': 'Copyediting Editorial Assignment - {{ submission_title }}',
+                'description': 'Sent to editor when copyediting assignment is created',
+                'html_file': 'copyediting_editorial_assignment.html',
+                'available_variables': [
+                    'editor_name', 'submission_title', 'submission_id', 'copyeditor_name',
+                    'due_date', 'assigned_by', 'assignment_url'
+                ],
+            },
+            {
+                'template_type': 'COPYEDITING_REQUEST',
+                'name': 'Copyediting Request',
+                'subject': 'Copyediting Request - {{ submission_title }}',
+                'description': 'Sent to author/copyeditor/editor when copyediting is requested',
+                'html_file': 'copyediting_request.html',
+                'available_variables': [
+                    'recipient_name', 'recipient_role', 'submission_title', 'submission_id',
+                    'copyeditor_name', 'due_date', 'instructions', 'assignment_url'
+                ],
             },
             {
                 'template_type': 'COPYEDITING_STARTED',
@@ -271,6 +426,7 @@ class Command(BaseCommand):
                     'html_body': html_body,
                     'text_body': '',  # Will be auto-generated from HTML
                     'description': template_data['description'],
+                    'available_variables': template_data.get('available_variables', []),
                     'is_active': True,
                 }
             )

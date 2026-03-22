@@ -1,0 +1,18 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Proofreading Required</title>
+  </head>
+  <body>
+    <p>Dear {{ author_name }},</p>
+    <p>
+      The production proof for <strong>{{ submission_title }}</strong> (ID: {{
+      submission_id }}) is ready.
+    </p>
+    <p>File: {{ proof_file_label }}</p>
+    <p>Deadline: {{ proof_deadline }}</p>
+    <p>Review proof: <a href="{{ proof_url }}">{{ proof_url }}</a></p>
+    <p>{{ journal_name }}</p>
+  </body>
+</html>

@@ -1,0 +1,20 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Article Review Request</title>
+  </head>
+  <body>
+    <p>Dear {{ recipient_name }},</p>
+    <p>
+      You have a review request regarding
+      <strong>{{ submission_title }}</strong>.
+    </p>
+    <p>Role: {{ recipient_role }}</p>
+    <p>Authors: {{ submission_authors }}</p>
+    <p>Due date: {{ due_date }}</p>
+    <p>Editor: {{ editor_name }}</p>
+    <p>Accept: <a href="{{ accept_url }}">{{ accept_url }}</a></p>
+    <p>Decline: <a href="{{ decline_url }}">{{ decline_url }}</a></p>
+  </body>
+</html>

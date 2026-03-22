@@ -347,6 +347,7 @@ class SubmissionViewSet(viewsets.ModelViewSet):
     def submit(self, request, pk=None):
         """Submit manuscript for review."""
         submission = self.get_object()
+        previous_status = submission.status
         
         # Allow submission from DRAFT or REVISION_REQUIRED status
         if submission.status not in ['DRAFT', 'REVISION_REQUIRED']:
@@ -383,6 +384,20 @@ class SubmissionViewSet(viewsets.ModelViewSet):
                 submission.submitted_at = timezone.now()
         
         submission.save()
+
+        # Queue submission workflow notifications.
+        from apps.notifications.tasks import (
+            send_submission_first_acknowledgement_email,
+            send_submission_review_started_email,
+        )
+        try:
+            if previous_status == 'DRAFT' and submission.status == 'SUBMITTED':
+                send_submission_first_acknowledgement_email.delay(str(submission.id))
+            if submission.status == 'UNDER_REVIEW':
+                send_submission_review_started_email.delay(str(submission.id))
+        except Exception:
+            # Notification errors should not block submission transition.
+            pass
         
         serializer = self.get_serializer(submission)
         return Response(serializer.data)
@@ -486,8 +501,26 @@ class SubmissionViewSet(viewsets.ModelViewSet):
         )
         
         if serializer.is_valid():
+            old_status = submission.status
             submission.status = serializer.validated_data['status']
             submission.save()
+
+            from apps.notifications.tasks import (
+                send_submission_pre_review_correction_email,
+                send_submission_review_started_email,
+            )
+            try:
+                if submission.status == 'REVISION_REQUIRED' and old_status in ['SUBMITTED', 'DRAFT']:
+                    send_submission_pre_review_correction_email.delay(
+                        str(submission.id),
+                        request.data.get('reason', ''),
+                        request.user.get_full_name() or request.user.email,
+                        request.data.get('deadline', 'TBD')
+                    )
+                if submission.status == 'UNDER_REVIEW':
+                    send_submission_review_started_email.delay(str(submission.id))
+            except Exception:
+                pass
             
             response_serializer = self.get_serializer(submission)
             return Response(response_serializer.data)

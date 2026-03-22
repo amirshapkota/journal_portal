@@ -1,0 +1,21 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Copyediting Request</title>
+  </head>
+  <body>
+    <p>Dear {{ recipient_name }},</p>
+    <p>
+      Copyediting has been requested for
+      <strong>{{ submission_title }}</strong> (ID: {{ submission_id }}).
+    </p>
+    <p>Role: {{ recipient_role }}</p>
+    <p>Copyeditor: {{ copyeditor_name }}</p>
+    <p>Due date: {{ due_date }}</p>
+    <p>Instructions: {{ instructions }}</p>
+    <p>
+      Open assignment: <a href="{{ assignment_url }}">{{ assignment_url }}</a>
+    </p>
+  </body>
+</html>

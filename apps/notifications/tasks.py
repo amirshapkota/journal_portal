@@ -12,6 +12,10 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _site_url():
+    return settings.SITE_URL if hasattr(settings, 'SITE_URL') else 'http://127.0.0.1:8000'
+
+
 @shared_task(bind=True, max_retries=3, default_retry_delay=300)
 def send_email_task(self, email_log_id):
     """
@@ -447,15 +451,15 @@ def send_review_invitation_email(assignment_id):
         
         context = {
             'reviewer_name': reviewer.get_full_name() or reviewer.email,
-            'journal_name': 'Journal Publication Portal',
+            'journal_name': submission.journal.title if getattr(submission, 'journal', None) else 'Journal Publication Portal',
             'submission_title': submission.title,
             'submission_authors': submission_authors,
             'submission_keywords': '',  # Keywords not stored in Submission model
             'submission_abstract': submission.abstract[:300] + '...' if len(submission.abstract) > 300 else submission.abstract,
             'due_date': assignment.due_date.strftime('%B %d, %Y') if assignment.due_date else 'TBD',
-            'accept_url': f"{settings.SITE_URL if hasattr(settings, 'SITE_URL') else 'http://127.0.0.1:8000'}/api/v1/reviews/assignments/{assignment.id}/accept/",
-            'decline_url': f"{settings.SITE_URL if hasattr(settings, 'SITE_URL') else 'http://127.0.0.1:8000'}/api/v1/reviews/assignments/{assignment.id}/decline/",
-            'editor_name': assignment.assigned_by.get_full_name() if assignment.assigned_by else 'Editorial Team',
+            'accept_url': f"{_site_url()}/api/v1/reviews/assignments/{assignment.id}/accept/",
+            'decline_url': f"{_site_url()}/api/v1/reviews/assignments/{assignment.id}/decline/",
+            'editor_name': assignment.assigned_by.user.get_full_name() if assignment.assigned_by else 'Editorial Team',
         }
         
         return send_template_email(
@@ -489,14 +493,14 @@ def send_review_reminder_email(assignment_id):
         
         context = {
             'reviewer_name': reviewer.get_full_name() or reviewer.email,
-            'journal_name': 'Journal Publication Portal',
+            'journal_name': submission.journal.title if getattr(submission, 'journal', None) else 'Journal Publication Portal',
             'submission_title': submission.title,
             'due_date': assignment.due_date.strftime('%B %d, %Y') if assignment.due_date else 'TBD',
             'days_remaining': max(0, days_remaining),
             'assigned_date': assignment.invited_at.strftime('%B %d, %Y'),
-            'review_url': f"{settings.SITE_URL if hasattr(settings, 'SITE_URL') else 'http://127.0.0.1:8000'}/api/v1/reviews/reviews/?assignment_id={assignment.id}",
-            'editor_name': assignment.assigned_by.get_full_name() if assignment.assigned_by else 'Editorial Team',
-            'editor_email': assignment.assigned_by.email if assignment.assigned_by else settings.DEFAULT_FROM_EMAIL,
+            'review_url': f"{_site_url()}/api/v1/reviews/reviews/?assignment_id={assignment.id}",
+            'editor_name': assignment.assigned_by.user.get_full_name() if assignment.assigned_by else 'Editorial Team',
+            'editor_email': assignment.assigned_by.user.email if assignment.assigned_by else settings.DEFAULT_FROM_EMAIL,
         }
         
         return send_template_email(
@@ -1370,4 +1374,539 @@ def send_publication_cancelled_email(schedule_id):
     
     except Exception as exc:
         logger.error(f"Error sending publication cancelled email: {exc}")
+        return {'status': 'error', 'message': str(exc)}
+
+
+# ============= ADD-ON WORKFLOW NOTIFICATION TASKS =============
+
+@shared_task
+def send_submission_first_acknowledgement_email(submission_id):
+    """Send first acknowledgement when a manuscript is submitted."""
+    from apps.submissions.models.models import Submission
+
+    try:
+        submission = Submission.objects.select_related(
+            'corresponding_author__user', 'journal'
+        ).get(id=submission_id)
+
+        if not submission.corresponding_author:
+            return {'status': 'skipped', 'reason': 'no_corresponding_author'}
+
+        author = submission.corresponding_author.user
+        editor_name = 'Editorial Team'
+
+        context = {
+            'author_name': author.get_full_name() or author.email,
+            'submission_title': submission.title,
+            'submission_id': str(submission.id),
+            'journal_name': submission.journal.title if submission.journal else 'Journal Publication Portal',
+            'submitted_at': submission.submitted_at.strftime('%B %d, %Y %I:%M %p') if submission.submitted_at else timezone.now().strftime('%B %d, %Y %I:%M %p'),
+            'dashboard_url': f"{_site_url()}/dashboard/submissions/",
+            'editor_name': editor_name,
+        }
+
+        result = send_template_email(
+            recipient=author.email,
+            template_type='SUBMISSION_FIRST_ACKNOWLEDGEMENT',
+            context=context,
+            user_id=str(author.id)
+        )
+
+        # Also notify current journal staff editors, if available.
+        try:
+            from apps.journals.models import JournalStaff
+
+            editor_roles = ['EDITOR_IN_CHIEF', 'MANAGING_EDITOR', 'ASSOCIATE_EDITOR']
+            staff_qs = JournalStaff.objects.select_related('profile__user').filter(
+                journal=submission.journal,
+                role__in=editor_roles,
+                is_active=True
+            )
+            for staff in staff_qs:
+                send_template_email(
+                    recipient=staff.profile.user.email,
+                    template_type='SUBMISSION_FIRST_ACKNOWLEDGEMENT',
+                    context={**context, 'author_name': staff.profile.user.get_full_name() or staff.profile.user.email},
+                    user_id=str(staff.profile.user.id)
+                )
+        except Exception as staff_exc:
+            logger.warning(f"Failed to send submission acknowledgement to editor staff: {staff_exc}")
+
+        return result
+    except Exception as exc:
+        logger.error(f"Error sending submission first acknowledgement email: {exc}")
+        return {'status': 'error', 'message': str(exc)}
+
+
+@shared_task
+def send_submission_pre_review_correction_email(submission_id, correction_notes='', requested_by='Editorial Team', revision_deadline='TBD'):
+    """Send pre-review correction request email to corresponding author."""
+    from apps.submissions.models.models import Submission
+
+    try:
+        submission = Submission.objects.select_related('corresponding_author__user', 'journal').get(id=submission_id)
+        if not submission.corresponding_author:
+            return {'status': 'skipped', 'reason': 'no_corresponding_author'}
+
+        author = submission.corresponding_author.user
+        context = {
+            'author_name': author.get_full_name() or author.email,
+            'submission_title': submission.title,
+            'submission_id': str(submission.id),
+            'journal_name': submission.journal.title if submission.journal else 'Journal Publication Portal',
+            'requested_by': requested_by,
+            'correction_notes': correction_notes or 'Please review editorial comments and update the manuscript.',
+            'revision_deadline': revision_deadline,
+            'submission_url': f"{_site_url()}/api/v1/submissions/{submission.id}/",
+        }
+        return send_template_email(
+            recipient=author.email,
+            template_type='SUBMISSION_PRE_REVIEW_CORRECTION',
+            context=context,
+            user_id=str(author.id)
+        )
+    except Exception as exc:
+        logger.error(f"Error sending submission pre-review correction email: {exc}")
+        return {'status': 'error', 'message': str(exc)}
+
+
+@shared_task
+def send_submission_review_started_email(submission_id):
+    """Notify corresponding author that review has started."""
+    from apps.submissions.models.models import Submission
+
+    try:
+        submission = Submission.objects.select_related('corresponding_author__user', 'journal').prefetch_related('review_assignments').get(id=submission_id)
+        if not submission.corresponding_author:
+            return {'status': 'skipped', 'reason': 'no_corresponding_author'}
+
+        author = submission.corresponding_author.user
+        assigned_count = submission.review_assignments.filter(status__in=['PENDING', 'ACCEPTED', 'COMPLETED']).count()
+        context = {
+            'author_name': author.get_full_name() or author.email,
+            'submission_title': submission.title,
+            'submission_id': str(submission.id),
+            'journal_name': submission.journal.title if submission.journal else 'Journal Publication Portal',
+            'review_started_at': timezone.now().strftime('%B %d, %Y %I:%M %p'),
+            'assigned_reviewer_count': assigned_count,
+            'editor_name': 'Editorial Team',
+            'submission_url': f"{_site_url()}/api/v1/submissions/{submission.id}/",
+        }
+        return send_template_email(
+            recipient=author.email,
+            template_type='SUBMISSION_REVIEW_STARTED',
+            context=context,
+            user_id=str(author.id)
+        )
+    except Exception as exc:
+        logger.error(f"Error sending submission review started email: {exc}")
+        return {'status': 'error', 'message': str(exc)}
+
+
+@shared_task
+def send_editorial_assignment_section_editor_email(submission_id, assigned_by_profile_id=None, assignment_notes=''):
+    """Notify section editor about editorial assignment."""
+    from apps.submissions.models.models import Submission
+
+    try:
+        submission = Submission.objects.select_related('section__section_editor__user', 'journal').get(id=submission_id)
+        section_editor = submission.section.section_editor if submission.section else None
+        if not section_editor:
+            return {'status': 'skipped', 'reason': 'no_section_editor'}
+
+        assigned_by = 'Editorial Team'
+        if assigned_by_profile_id:
+            from apps.users.models import Profile
+            try:
+                assigned_by = Profile.objects.select_related('user').get(id=assigned_by_profile_id).user.get_full_name() or 'Editorial Team'
+            except Exception:
+                pass
+
+        context = {
+            'section_editor_name': section_editor.user.get_full_name() or section_editor.user.email,
+            'submission_title': submission.title,
+            'submission_id': str(submission.id),
+            'journal_name': submission.journal.title if submission.journal else 'Journal Publication Portal',
+            'section_name': submission.section.name if submission.section else 'General',
+            'assigned_by': assigned_by,
+            'assignment_notes': assignment_notes or 'Please manage this submission through peer review.',
+            'assignment_url': f"{_site_url()}/api/v1/submissions/{submission.id}/",
+        }
+        return send_template_email(
+            recipient=section_editor.user.email,
+            template_type='EDITORIAL_ASSIGNMENT_SECTION_EDITOR',
+            context=context,
+            user_id=str(section_editor.user.id)
+        )
+    except Exception as exc:
+        logger.error(f"Error sending section editor assignment email: {exc}")
+        return {'status': 'error', 'message': str(exc)}
+
+
+@shared_task
+def send_editorial_assignment_guest_editor_email(submission_id, assigned_by_profile_id=None, assignment_notes=''):
+    """Notify a guest editor about editorial assignment when available."""
+    from apps.submissions.models.models import Submission
+    from apps.journals.models import JournalStaff
+
+    try:
+        submission = Submission.objects.select_related('journal').get(id=submission_id)
+        guest_staff = JournalStaff.objects.select_related('profile__user').filter(
+            journal=submission.journal,
+            role='GUEST_EDITOR',
+            is_active=True
+        ).first()
+        if not guest_staff:
+            return {'status': 'skipped', 'reason': 'no_guest_editor'}
+
+        assigned_by = 'Editorial Team'
+        if assigned_by_profile_id:
+            from apps.users.models import Profile
+            try:
+                assigned_by = Profile.objects.select_related('user').get(id=assigned_by_profile_id).user.get_full_name() or 'Editorial Team'
+            except Exception:
+                pass
+
+        context = {
+            'guest_editor_name': guest_staff.profile.user.get_full_name() or guest_staff.profile.user.email,
+            'submission_title': submission.title,
+            'submission_id': str(submission.id),
+            'journal_name': submission.journal.title if submission.journal else 'Journal Publication Portal',
+            'assigned_by': assigned_by,
+            'assignment_notes': assignment_notes or 'Please support editorial handling for this manuscript.',
+            'assignment_url': f"{_site_url()}/api/v1/submissions/{submission.id}/",
+        }
+        return send_template_email(
+            recipient=guest_staff.profile.user.email,
+            template_type='EDITORIAL_ASSIGNMENT_GUEST_EDITOR',
+            context=context,
+            user_id=str(guest_staff.profile.user.id)
+        )
+    except Exception as exc:
+        logger.error(f"Error sending guest editor assignment email: {exc}")
+        return {'status': 'error', 'message': str(exc)}
+
+
+@shared_task
+def send_review_editorial_assignment_email(assignment_id):
+    """Notify editorial-side recipients that a review assignment was created."""
+    from apps.reviews.models import ReviewAssignment
+
+    try:
+        assignment = ReviewAssignment.objects.select_related(
+            'reviewer__user', 'submission__corresponding_author__user', 'submission__section__section_editor__user', 'assigned_by__user'
+        ).get(id=assignment_id)
+
+        recipients = []
+        if assignment.assigned_by:
+            recipients.append((assignment.assigned_by.user, 'Editor'))
+        if assignment.submission.corresponding_author:
+            recipients.append((assignment.submission.corresponding_author.user, 'Author'))
+        if assignment.submission.section and assignment.submission.section.section_editor:
+            recipients.append((assignment.submission.section.section_editor.user, 'Section Editor'))
+
+        seen = set()
+        for user, role in recipients:
+            if not user or user.email in seen:
+                continue
+            seen.add(user.email)
+            send_template_email(
+                recipient=user.email,
+                template_type='REVIEW_EDITORIAL_ASSIGNMENT',
+                context={
+                    'recipient_name': user.get_full_name() or user.email,
+                    'recipient_role': role,
+                    'submission_title': assignment.submission.title,
+                    'submission_id': str(assignment.submission.id),
+                    'reviewer_name': assignment.reviewer.user.get_full_name() or assignment.reviewer.user.email,
+                    'due_date': assignment.due_date.strftime('%B %d, %Y') if assignment.due_date else 'TBD',
+                    'editor_name': assignment.assigned_by.user.get_full_name() if assignment.assigned_by else 'Editorial Team',
+                    'review_url': f"{_site_url()}/api/v1/reviews/assignments/{assignment.id}/",
+                },
+                user_id=str(user.id)
+            )
+
+        return {'status': 'sent', 'recipient_count': len(seen)}
+    except Exception as exc:
+        logger.error(f"Error sending review editorial assignment email: {exc}")
+        return {'status': 'error', 'message': str(exc)}
+
+
+@shared_task
+def send_review_article_request_email(assignment_id):
+    """Send article review request to the assigned reviewer."""
+    from apps.reviews.models import ReviewAssignment
+
+    try:
+        assignment = ReviewAssignment.objects.select_related(
+            'reviewer__user', 'submission', 'assigned_by__user'
+        ).get(id=assignment_id)
+        reviewer = assignment.reviewer.user
+
+        authors = []
+        submission = assignment.submission
+        if submission.corresponding_author:
+            authors.append(submission.corresponding_author.user.get_full_name() or submission.corresponding_author.user.email)
+        authors += [co.user.get_full_name() or co.user.email for co in submission.coauthors.all()]
+
+        return send_template_email(
+            recipient=reviewer.email,
+            template_type='REVIEW_ARTICLE_REQUEST',
+            context={
+                'recipient_name': reviewer.get_full_name() or reviewer.email,
+                'recipient_role': 'Reviewer',
+                'submission_title': submission.title,
+                'submission_authors': ', '.join(authors) if authors else 'Unknown Authors',
+                'due_date': assignment.due_date.strftime('%B %d, %Y') if assignment.due_date else 'TBD',
+                'editor_name': assignment.assigned_by.user.get_full_name() if assignment.assigned_by else 'Editorial Team',
+                'accept_url': f"{_site_url()}/api/v1/reviews/assignments/{assignment.id}/accept/",
+                'decline_url': f"{_site_url()}/api/v1/reviews/assignments/{assignment.id}/decline/",
+            },
+            user_id=str(reviewer.id)
+        )
+    except Exception as exc:
+        logger.error(f"Error sending review article request email: {exc}")
+        return {'status': 'error', 'message': str(exc)}
+
+
+@shared_task
+def send_review_unable_to_review_email(assignment_id):
+    """Notify section editor and assigning editor when reviewer declines."""
+    from apps.reviews.models import ReviewAssignment
+
+    try:
+        assignment = ReviewAssignment.objects.select_related(
+            'reviewer__user', 'submission__section__section_editor__user', 'assigned_by__user'
+        ).get(id=assignment_id)
+        recipients = []
+        if assignment.assigned_by:
+            recipients.append((assignment.assigned_by.user, 'Editor'))
+        if assignment.submission.section and assignment.submission.section.section_editor:
+            recipients.append((assignment.submission.section.section_editor.user, 'Section Editor'))
+
+        sent = set()
+        for user, role in recipients:
+            if not user or user.email in sent:
+                continue
+            sent.add(user.email)
+            send_template_email(
+                recipient=user.email,
+                template_type='REVIEW_UNABLE_TO_REVIEW',
+                context={
+                    'recipient_name': user.get_full_name() or user.email,
+                    'recipient_role': role,
+                    'submission_title': assignment.submission.title,
+                    'submission_id': str(assignment.submission.id),
+                    'reviewer_name': assignment.reviewer.user.get_full_name() or assignment.reviewer.user.email,
+                    'decline_reason': assignment.decline_reason or 'No reason provided.',
+                    'declined_at': assignment.declined_at.strftime('%B %d, %Y %I:%M %p') if assignment.declined_at else timezone.now().strftime('%B %d, %Y %I:%M %p'),
+                    'editor_name': assignment.assigned_by.user.get_full_name() if assignment.assigned_by else 'Editorial Team',
+                },
+                user_id=str(user.id)
+            )
+
+        return {'status': 'sent', 'recipient_count': len(sent)}
+    except Exception as exc:
+        logger.error(f"Error sending review unable-to-review email: {exc}")
+        return {'status': 'error', 'message': str(exc)}
+
+
+@shared_task
+def send_review_request_cancelled_email(assignment_id, cancelled_by='Editorial Team', reason=''):
+    """Notify section editor/author/editor when review request is cancelled."""
+    from apps.reviews.models import ReviewAssignment
+
+    try:
+        assignment = ReviewAssignment.objects.select_related(
+            'reviewer__user', 'submission__corresponding_author__user', 'submission__section__section_editor__user', 'assigned_by__user'
+        ).get(id=assignment_id)
+
+        recipients = []
+        if assignment.assigned_by:
+            recipients.append((assignment.assigned_by.user, 'Editor'))
+        if assignment.submission.corresponding_author:
+            recipients.append((assignment.submission.corresponding_author.user, 'Author'))
+        if assignment.submission.section and assignment.submission.section.section_editor:
+            recipients.append((assignment.submission.section.section_editor.user, 'Section Editor'))
+
+        sent = set()
+        for user, role in recipients:
+            if not user or user.email in sent:
+                continue
+            sent.add(user.email)
+            send_template_email(
+                recipient=user.email,
+                template_type='REVIEW_REQUEST_CANCELLED',
+                context={
+                    'recipient_name': user.get_full_name() or user.email,
+                    'recipient_role': role,
+                    'submission_title': assignment.submission.title,
+                    'submission_id': str(assignment.submission.id),
+                    'reviewer_name': assignment.reviewer.user.get_full_name() or assignment.reviewer.user.email,
+                    'cancelled_by': cancelled_by,
+                    'cancelled_at': timezone.now().strftime('%B %d, %Y %I:%M %p'),
+                    'reason': reason or 'Assignment was cancelled by editorial office.',
+                },
+                user_id=str(user.id)
+            )
+
+        return {'status': 'sent', 'recipient_count': len(sent)}
+    except Exception as exc:
+        logger.error(f"Error sending review request cancelled email: {exc}")
+        return {'status': 'error', 'message': str(exc)}
+
+
+@shared_task
+def send_review_editor_decision_notice_email(decision_id):
+    """Notify section editor/editor-side recipients when an editorial decision is made."""
+    from apps.reviews.models import EditorialDecision
+
+    try:
+        decision = EditorialDecision.objects.select_related(
+            'submission__section__section_editor__user', 'decided_by__user'
+        ).get(id=decision_id)
+
+        recipients = []
+        if decision.decided_by:
+            recipients.append((decision.decided_by.user, 'Editor'))
+        section_editor = decision.submission.section.section_editor if decision.submission.section else None
+        if section_editor:
+            recipients.append((section_editor.user, 'Section Editor'))
+
+        sent = set()
+        for user, role in recipients:
+            if not user or user.email in sent:
+                continue
+            sent.add(user.email)
+            send_template_email(
+                recipient=user.email,
+                template_type='REVIEW_EDITOR_DECISION_NOTICE',
+                context={
+                    'recipient_name': user.get_full_name() or user.email,
+                    'recipient_role': role,
+                    'submission_title': decision.submission.title,
+                    'decision_type': decision.get_decision_type_display(),
+                    'decision_date': decision.decision_date.strftime('%B %d, %Y'),
+                    'editor_name': decision.decided_by.user.get_full_name() if decision.decided_by else 'Editorial Team',
+                    'decision_summary': (decision.decision_letter or '')[:500],
+                    'submission_url': f"{_site_url()}/api/v1/submissions/{decision.submission.id}/",
+                },
+                user_id=str(user.id)
+            )
+
+        return {'status': 'sent', 'recipient_count': len(sent)}
+    except Exception as exc:
+        logger.error(f"Error sending review editor decision notice email: {exc}")
+        return {'status': 'error', 'message': str(exc)}
+
+
+@shared_task
+def send_copyediting_editorial_assignment_email(assignment_id):
+    """Notify editor-side recipient for copyediting assignment creation."""
+    from apps.submissions.models.copyediting.models import CopyeditingAssignment
+
+    try:
+        assignment = CopyeditingAssignment.objects.select_related(
+            'copyeditor__user', 'assigned_by__user', 'submission'
+        ).get(id=assignment_id)
+
+        if not assignment.assigned_by:
+            return {'status': 'skipped', 'reason': 'no_editor'}
+
+        editor_user = assignment.assigned_by.user
+        context = {
+            'editor_name': editor_user.get_full_name() or editor_user.email,
+            'submission_title': assignment.submission.title,
+            'submission_id': str(assignment.submission.id),
+            'copyeditor_name': assignment.copyeditor.user.get_full_name() if assignment.copyeditor else 'Unassigned',
+            'due_date': assignment.due_date.strftime('%B %d, %Y') if assignment.due_date else 'TBD',
+            'assigned_by': editor_user.get_full_name() or editor_user.email,
+            'assignment_url': f"{_site_url()}/api/v1/workflow/copyediting-assignments/{assignment.id}/",
+        }
+        return send_template_email(
+            recipient=editor_user.email,
+            template_type='COPYEDITING_EDITORIAL_ASSIGNMENT',
+            context=context,
+            user_id=str(editor_user.id)
+        )
+    except Exception as exc:
+        logger.error(f"Error sending copyediting editorial assignment email: {exc}")
+        return {'status': 'error', 'message': str(exc)}
+
+
+@shared_task
+def send_copyediting_request_email(assignment_id):
+    """Notify copyeditor, author, and editor when copyediting is requested."""
+    from apps.submissions.models.copyediting.models import CopyeditingAssignment
+
+    try:
+        assignment = CopyeditingAssignment.objects.select_related(
+            'copyeditor__user', 'assigned_by__user', 'submission__corresponding_author__user'
+        ).get(id=assignment_id)
+
+        recipients = []
+        if assignment.copyeditor:
+            recipients.append((assignment.copyeditor.user, 'Copyeditor'))
+        if assignment.submission.corresponding_author:
+            recipients.append((assignment.submission.corresponding_author.user, 'Author'))
+        if assignment.assigned_by:
+            recipients.append((assignment.assigned_by.user, 'Editor'))
+
+        sent = set()
+        for user, role in recipients:
+            if not user or user.email in sent:
+                continue
+            sent.add(user.email)
+            send_template_email(
+                recipient=user.email,
+                template_type='COPYEDITING_REQUEST',
+                context={
+                    'recipient_name': user.get_full_name() or user.email,
+                    'recipient_role': role,
+                    'submission_title': assignment.submission.title,
+                    'submission_id': str(assignment.submission.id),
+                    'copyeditor_name': assignment.copyeditor.user.get_full_name() if assignment.copyeditor else 'Unassigned',
+                    'due_date': assignment.due_date.strftime('%B %d, %Y') if assignment.due_date else 'TBD',
+                    'instructions': assignment.instructions or 'Please proceed with copyediting activities.',
+                    'assignment_url': f"{_site_url()}/api/v1/workflow/copyediting-assignments/{assignment.id}/",
+                },
+                user_id=str(user.id)
+            )
+
+        return {'status': 'sent', 'recipient_count': len(sent)}
+    except Exception as exc:
+        logger.error(f"Error sending copyediting request email: {exc}")
+        return {'status': 'error', 'message': str(exc)}
+
+
+@shared_task
+def send_submission_production_proofreading_email(file_id):
+    """Notify author that production proof is ready for proofreading."""
+    from apps.submissions.models.production.models import ProductionFile
+
+    try:
+        file_obj = ProductionFile.objects.select_related(
+            'submission__corresponding_author__user', 'submission__journal'
+        ).get(id=file_id)
+        submission = file_obj.submission
+        if not submission.corresponding_author:
+            return {'status': 'skipped', 'reason': 'no_corresponding_author'}
+
+        author = submission.corresponding_author.user
+        return send_template_email(
+            recipient=author.email,
+            template_type='SUBMISSION_PRODUCTION_PROOFREADING',
+            context={
+                'author_name': author.get_full_name() or author.email,
+                'submission_title': submission.title,
+                'submission_id': str(submission.id),
+                'proof_file_label': file_obj.label or file_obj.original_filename,
+                'proof_url': f"{_site_url()}/api/v1/workflow/production-files/{file_obj.id}/download/",
+                'proof_deadline': 'Please review at your earliest convenience.',
+                'journal_name': submission.journal.title if submission.journal else 'Journal Publication Portal',
+            },
+            user_id=str(author.id)
+        )
+    except Exception as exc:
+        logger.error(f"Error sending submission production proofreading email: {exc}")
         return {'status': 'error', 'message': str(exc)}
